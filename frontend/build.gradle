@@ -1,0 +1,110 @@
+plugins { id 'application' }
+
+def jmeVersion = '3.8.1-stable'
+dependencies {
+    implementation project(':shared')
+    implementation "org.jmonkeyengine:jme3-core:${jmeVersion}"
+    implementation "org.jmonkeyengine:jme3-desktop:${jmeVersion}"
+    implementation "org.jmonkeyengine:jme3-lwjgl3:${jmeVersion}"
+    implementation "org.jmonkeyengine:jme3-effects:${jmeVersion}"
+}
+
+application {
+    mainClass = 'com.battleship.frontend.app.BattleshipApplication'
+    applicationDefaultJvmArgs = ['--enable-native-access=ALL-UNNAMED']
+}
+
+tasks.register('checkBoardCoordinates', JavaExec) {
+    group = 'verification'
+    dependsOn testClasses
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'com.battleship.frontend.game.BoardCoordinatesChecks'
+}
+tasks.named('check') { dependsOn 'checkBoardCoordinates' }
+tasks.named('test') { failOnNoDiscoveredTests = false } // Checks use JavaExec, without a test framework.
+
+tasks.register('checkGameplayRendering', JavaExec) {
+    group = 'verification'
+    description = 'Checks local placement and battle through the real 3D scene (requires OpenGL).'
+    dependsOn testClasses
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'com.battleship.frontend.game.GameplayRenderChecks'
+    workingDir rootProject.projectDir
+    jvmArgs '--enable-native-access=ALL-UNNAMED'
+}
+
+tasks.register('checkMainMenu', JavaExec) {
+    group = 'verification'
+    description = 'Checks the real main menu, local game navigation and Exit (requires OpenGL).'
+    dependsOn testClasses
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'com.battleship.frontend.game.MainMenuFlowChecks'
+    workingDir rootProject.projectDir
+    jvmArgs '--enable-native-access=ALL-UNNAMED'
+    mustRunAfter 'checkGameplayRendering'
+}
+
+tasks.register('checkPvpRooms', JavaExec) {
+    group = 'verification'
+    description = 'Runs two desktop TCP clients against a server on localhost:2209.'
+    dependsOn testClasses
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'com.battleship.frontend.game.PvpRoomRenderChecks'
+    workingDir rootProject.projectDir
+    mustRunAfter 'checkGameplayRendering', 'checkMainMenu'
+}
+
+def hostOs = System.getProperty('os.name').toLowerCase(Locale.ROOT)
+tasks.named('run', JavaExec) {
+    if (hostOs.contains('mac')) jvmArgs '-XstartOnFirstThread'
+    systemProperty 'battleship.host', providers.gradleProperty('serverHost').getOrElse('localhost')
+    systemProperty 'battleship.port', providers.gradleProperty('serverPort').getOrElse('2209')
+    systemProperty 'battleship.player', providers.gradleProperty('playerName').getOrElse('Captain')
+}
+
+tasks.named('startScripts') {
+    doLast {
+        def script = unixScript.getText('UTF-8')
+        def options = script.readLines().find { it.startsWith('DEFAULT_JVM_OPTS=') }
+        unixScript.setText(script.replace(options, options + '''
+if [ "$darwin" = "true" ]; then
+    DEFAULT_JVM_OPTS="$DEFAULT_JVM_OPTS -XstartOnFirstThread"
+fi'''), 'UTF-8')
+    }
+}
+
+if (hostOs.contains('windows')) {
+    def gameRuntime = layout.buildDirectory.dir('game-runtime')
+    def gameJdk = javaToolchains.launcherFor { languageVersion = JavaLanguageVersion.of(25) }
+    tasks.register('createGameRuntime', Exec) {
+        group = 'application'
+        description = 'Creates a private Java runtime for the Windows GPU launcher.'
+        onlyIf { !gameRuntime.get().file('bin/java.exe').asFile.isFile() }
+        doFirst {
+            commandLine gameJdk.get().metadata.installationPath.file('bin/jlink.exe').asFile.absolutePath,
+                    '--add-modules', 'java.se,jdk.unsupported', '--strip-debug',
+                    '--no-header-files', '--no-man-pages', '--output', gameRuntime.get().asFile.absolutePath
+        }
+    }
+    ['runAuto': 'Auto', 'runIntegrated': 'Integrated'].each { taskName, preference ->
+        tasks.register(taskName, Exec) {
+            group = 'application'
+            description = "Runs with the ${preference} GPU preference scoped to this game runtime."
+            dependsOn 'installDist', 'createGameRuntime'
+            doFirst {
+                commandLine 'powershell.exe', '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File',
+                        file('scripts/run-game.ps1').absolutePath,
+                        '-RuntimeDirectory', gameRuntime.get().asFile.absolutePath,
+                        '-LibraryDirectory', layout.buildDirectory.dir('install/frontend/lib').get().asFile.absolutePath,
+                        '-GpuPreference', preference,
+                        '-ServerHost', providers.gradleProperty('serverHost').getOrElse('localhost'),
+                        '-ServerPort', providers.gradleProperty('serverPort').getOrElse('2209'),
+                        '-PlayerName', providers.gradleProperty('playerName').getOrElse('Captain')
+            }
+        }
+    }
+    tasks.named('run') {
+        dependsOn 'runAuto'
+        enabled = false // The Windows launcher runs the private runtime instead of system Java.
+    }
+}

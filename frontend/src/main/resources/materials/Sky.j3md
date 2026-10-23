@@ -1,0 +1,12 @@
+MaterialDef FantasySky {
+    MaterialParameters {
+        Texture2D SkyMap
+    }
+    Technique {
+        VertexShader GLSL150: materials/Sky.vert
+        FragmentShader GLSL150: materials/Sky.frag
+        WorldParameters {
+            WorldViewProjectionMatrix
+        }
+    }
+}

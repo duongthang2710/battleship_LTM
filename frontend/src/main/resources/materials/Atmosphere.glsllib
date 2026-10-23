@@ -1,0 +1,9 @@
+vec3 horizonColor() {
+    return vec3(0.0025, 0.0075, 0.027);
+}
+
+float seaHaze(vec3 position, vec3 cameraPosition) {
+    float distanceToEye = length(position - cameraPosition);
+    float lowMist = exp(-max(position.y, 0.0) * 0.045);
+    return 1.0 - exp(-max(distanceToEye - 65.0, 0.0) * (0.0017 + 0.0020 * lowMist));
+}

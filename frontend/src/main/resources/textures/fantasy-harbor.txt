@@ -1,0 +1,20 @@
+Original environment asset generated with the built-in ImageGen tool.
+Reference: docs/design.png, upper-left atmosphere only; no design pixels copied.
+Prompt:
+Create one new original panoramic fantasy seascape background asset for a premium
+Java 3D naval board game. The provided image is VISUAL REFERENCE ONLY: use only the
+atmosphere of its large upper-left panel, do not reproduce its collage, ships,
+lettering, or framing. Ultra-wide 3:1 panorama. A magnificent distant ivory and
+gold gothic island palace city stretches along the far horizon, slender needle
+towers and arched bridges, scattered warm illuminated windows; atmospheric deep
+azure ocean foreground, glimmering small wavelets, luminous blue violet celestial
+sky, elegant moon behind clouds, sparse stars and subtle magical violet mist on
+the right. Composition: horizon at roughly 58% of image height, palace skyline in
+middle third horizontally, large open sky across top, dark blue ocean across
+bottom third, no close foreground objects. Lavish collector edition fantasy
+realism, cinematic painterly 3D environment, clean believable geometry, soft
+moonlit depth and warm gold highlights, controlled illumination, deep blue plus
+pale gold plus subtle purple. No ships, no people, no game board, no UI, no frames,
+no text, no watermark. This is an environment backdrop, not a screenshot or a
+montage. The ocean at the very bottom should smoothly become uniform dark navy
+#081B32 for blending with rendered ocean.

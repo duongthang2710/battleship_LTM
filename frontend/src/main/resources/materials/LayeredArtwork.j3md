@@ -1,0 +1,20 @@
+MaterialDef LayeredArtwork {
+    MaterialParameters {
+        Texture2D ColorMap
+        Vector4 Crop
+        Float Brightness
+        Float Sharpness
+        Float FogStrength
+        Float Opacity
+        Float EdgeFade
+    }
+    Technique {
+        VertexShader GLSL150: materials/WorldArtwork.vert
+        FragmentShader GLSL150: materials/LayeredArtwork.frag
+        WorldParameters {
+            WorldViewProjectionMatrix
+            WorldMatrix
+            CameraPosition
+        }
+    }
+}

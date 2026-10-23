@@ -1,0 +1,18 @@
+{
+  "tool": "built-in image_gen",
+  "prompt": "Use case: precise-object-edit. Input image is the castle to preserve stylistically. Redraw this SAME faction castle in a STRICT STRAIGHT-ON FRONTAL view. Zero horizontal camera angle, zero yaw, no three-quarter view, no diagonal bridge or diagonal facade. The central gate, stairway/bridge, main hall and tallest spire must all align exactly on the vertical center axis. Symmetrical frontal wings and matching tower sizes on left/right; lighting may differ naturally. Camera faces perpendicular to the main front wall, from the sea at ground/low eye level, perspective corrected with parallel upright verticals, no top-down/isometric view. Preserve realistic stone/metal detail, faction colors, elegant fantasy architecture, restrained window lights, full rocky base and waterfalls. Sharp realistic architectural 3D render. Entire castle and base fit inside square canvas with 3 percent transparent margins all around, including the tallest spire. TRUE transparent background, clean alpha without colored fringes. No background, sky, mountains, sea, fog, glow aura, text, other buildings. Output ONE full coherent frontal castle master, not a sheet or collage.",
+  "inputs": [
+    "../radiant-realistic.png",
+    "../abyssal-realistic.png"
+  ],
+  "masters": [
+    "radiant-front-master.png",
+    "abyssal-front-master.png"
+  ],
+  "layers": [
+    "rear",
+    "body",
+    "foreground"
+  ],
+  "split": "Same-size registered PNG mattes cut from each frontal master; 4-pixel overlap at internal boundaries."
+}

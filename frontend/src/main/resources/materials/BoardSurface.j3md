@@ -1,0 +1,14 @@
+MaterialDef CrystallineBoard {
+    MaterialParameters {
+        Float Time
+    }
+    Technique {
+        VertexShader GLSL150: materials/BoardSurface.vert
+        FragmentShader GLSL150: materials/BoardSurface.frag
+        WorldParameters {
+            WorldViewProjectionMatrix
+            WorldMatrix
+            CameraPosition
+        }
+    }
+}

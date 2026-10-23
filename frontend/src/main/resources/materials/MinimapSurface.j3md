@@ -1,0 +1,11 @@
+MaterialDef MinimapEnamel {
+    MaterialParameters {
+    }
+    Technique {
+        VertexShader GLSL150: materials/MinimapSurface.vert
+        FragmentShader GLSL150: materials/MinimapSurface.frag
+        WorldParameters {
+            WorldViewProjectionMatrix
+        }
+    }
+}

@@ -1,0 +1,92 @@
+package com.battleship.backend.server;
+
+import com.battleship.shared.protocol.ConnectRequest;
+import com.battleship.shared.protocol.ConnectResponse;
+import com.battleship.shared.room.RoomError;
+import com.battleship.shared.protocol.Message;
+import com.battleship.shared.protocol.MessageCodec;
+import com.battleship.shared.protocol.MessageType;
+import java.io.BufferedInputStream;
+import java.io.BufferedOutputStream;
+import java.io.DataInputStream;
+import java.io.DataOutputStream;
+import java.io.IOException;
+import java.net.Socket;
+import java.util.logging.Logger;
+import java.util.concurrent.ArrayBlockingQueue;
+
+public final class ClientHandler implements Runnable, AutoCloseable {
+    private static final Logger LOG = Logger.getLogger(ClientHandler.class.getName());
+    private final Socket socket;
+    private final ConnectionManager connections;
+    private final ClientSession session = new ClientSession();
+    private final ArrayBlockingQueue<Message> outgoing = new ArrayBlockingQueue<>(128);
+    private volatile Thread writer;
+
+    public ClientHandler(Socket socket, ConnectionManager connections) {
+        this.socket = socket;
+        this.connections = connections;
+    }
+
+    public String id() { return session.id(); }
+
+    @Override
+    public void run() {
+        try (socket;
+             var input = new DataInputStream(new BufferedInputStream(socket.getInputStream()));
+             var stream = new DataOutputStream(new BufferedOutputStream(socket.getOutputStream()))) {
+            writer = Thread.ofVirtual().name("server-writer-" + id()).start(() -> {
+                try {
+                    while (!socket.isClosed()) MessageCodec.write(stream, outgoing.take());
+                } catch (IOException | InterruptedException exception) { close(); }
+            });
+            Message message;
+            while ((message = MessageCodec.read(input)) != null) {
+                if (message.type() == MessageType.DISCONNECT) break;
+                if (session.player() == null && message.type() != MessageType.CONNECT) {
+                    throw new IOException("CONNECT must be the first message");
+                }
+                switch (message.type()) {
+                    case CONNECT -> {
+                        if (session.player() != null) throw new IOException("Already connected");
+                        ConnectRequest request = message.payloadAs(ConnectRequest.class);
+                        String name = request.playerName();
+                        if (name == null || name.isBlank() || name.length() > 32) {
+                            throw new IOException("Player name must contain 1-32 characters");
+                        }
+                        session.connect(name.strip());
+                        send(Message.reply(MessageType.CONNECT_OK,
+                                message.requestId(), new ConnectResponse(session.player())));
+                        LOG.info("CONNECT_OK player=" + session.player().playerName() + " id=" + id());
+                    }
+                    case PING -> {
+                        send(Message.reply(MessageType.PONG, message.requestId(), null));
+                        LOG.fine("PONG " + id());
+                    }
+                    case CREATE_ROOM, JOIN_ROOM, LEAVE_ROOM, READY, NOT_READY, SUBMIT_FLEET, ATTACK ->
+                            connections.rooms().handle(session.player(), message);
+                    default -> send(Message.reply(MessageType.ERROR, message.requestId(),
+                            new RoomError("INVALID_REQUEST", "Unsupported client message: " + message.type())));
+                }
+            }
+        } catch (IOException | RuntimeException exception) {
+            if (!socket.isClosed()) LOG.info("Connection ended " + id() + ": " + exception.getMessage());
+        } finally {
+            close();
+            connections.remove(id());
+        }
+    }
+
+    public void send(Message message) {
+        // Never block another room/client on a slow socket. Disconnect an overloaded peer.
+        if (!socket.isClosed() && !outgoing.offer(message)) close();
+    }
+
+    @Override
+    public void close() {
+        Thread activeWriter = writer;
+        if (activeWriter != null) activeWriter.interrupt();
+        try { socket.close(); }
+        catch (IOException exception) { LOG.fine(exception.getMessage()); }
+    }
+}

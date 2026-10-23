@@ -1,0 +1,37 @@
+MaterialDef Ocean {
+    MaterialParameters {
+        Float Time
+        Float WaveAmplitude
+        Float Basin
+        Texture2D SkyMap
+        Texture2D ReflectionMap
+        Matrix4 ReflectionViewProjection
+        Vector3 RadiantLight
+        Vector3 AbyssalLight
+        Vector4 Wake0
+        Vector4 Wake1
+        Vector4 Wake2
+        Vector4 Wake3
+        Vector4 Wake4
+        Vector4 Wake5
+        Vector4 Wake6
+        Vector4 Wake7
+        Vector4 Wake8
+        Vector4 Wake9
+        Vector4 Wake10
+        Vector4 Wake11
+    }
+    Technique {
+        VertexShader GLSL150: materials/Ocean.vert
+        FragmentShader GLSL150: materials/Ocean.frag
+        WorldParameters {
+            WorldViewProjectionMatrix
+            WorldMatrix
+            CameraPosition
+        }
+        Defines {
+            OCEAN_SKY : SkyMap
+            OCEAN_REFLECTION : ReflectionMap
+        }
+    }
+}

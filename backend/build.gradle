@@ -1,0 +1,12 @@
+plugins { id 'application' }
+dependencies { implementation project(':shared') }
+application { mainClass = 'com.battleship.backend.server.ServerMain' }
+
+tasks.register('checkTcpMatch', JavaExec) {
+    group = 'verification'
+    dependsOn testClasses
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'com.battleship.backend.match.TcpMatchChecks'
+}
+tasks.named('check') { dependsOn 'checkTcpMatch' }
+tasks.named('test') { failOnNoDiscoveredTests = false }

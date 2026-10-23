@@ -1,0 +1,16 @@
+{
+  "tool": "built-in image_gen",
+  "prompt": "Use case: precise-object-edit / game component extraction. Input castle is the visual and material reference. Produce a square 2x2 TRANSPARENT component atlas of FOUR DIFFERENT COMPLETE architectural parts that can be placed on separate world-space depth planes to assemble this castle. Not four full castles. Strict frontal view, zero yaw, central symmetry, corrected upright verticals, consistent lighting and scale language. Exactly four equal square cells, each asset entirely inside its cell with 8 percent transparent clearance, no labels or dividers. TOP LEFT: only the REAR SKYLINE, a cluster of three slender ornate soaring spire towers with complete supporting masonry down to a flat base; no foreground gate or central palace. TOP RIGHT: the MAIN PALACE, a broad noble central hall with full facade, a medium-height steep roof, recessed windows and central entrance, COMPLETE down to the base; no tall rear spires, no front bridge. BOTTOM LEFT: ONE COMPLETE SIDE WING/WATCHTOWER, a medium-height round ornate tower joined to a short wing of defensive walls, intact full silhouette and solid base; no other castle parts. BOTTOM RIGHT: the LOW FRONT GATEHOUSE AND TERRACE, a wide low gateway flanked by small guard turrets, a frontal bridge/stairs and broad rocky shoreline footing with small waterfalls; no palace or rear spires. Every part must be fully painted including surfaces formerly hidden behind other parts, NOT a cropped fragment with missing cut-off walls. All bases visible, clean natural alpha silhouette. Preserve this faction's realistic stone/metal colors, roof materials, elegant Gothic/celestial style and subtle window lights. Crisp premium realistic 3D architectural render, natural contact shadows. No background mountains, sea plane, sky, fog, wide aura, text, people, ships. Do not repeat the same complete castle in multiple cells.",
+  "assets": [
+    "radiant-parts.png",
+    "abyssal-parts.png"
+  ],
+  "cells": [
+    "rear_spires",
+    "main_palace",
+    "side_wing",
+    "front_gate_and_shore_terrace"
+  ],
+  "world_layers": 5,
+  "depth_span_in_castle_heights": 0.44
+}

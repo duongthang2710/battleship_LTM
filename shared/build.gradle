@@ -1,0 +1,9 @@
+dependencies { api 'com.google.code.gson:gson:2.13.2' }
+
+tasks.register('gameChecks', JavaExec) {
+    dependsOn tasks.named('testClasses')
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'com.battleship.shared.game.GameEngineChecks'
+}
+tasks.named('check') { dependsOn tasks.named('gameChecks') }
+tasks.named('test') { failOnNoDiscoveredTests = false } // Game rules checks run through JavaExec.

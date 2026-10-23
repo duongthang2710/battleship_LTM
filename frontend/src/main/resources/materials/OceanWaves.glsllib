@@ -1,0 +1,26 @@
+vec3 boardWaves(vec2 p, float t) {
+    float a = dot(p, vec2(0.65, 0.28)) + t * 0.45;
+    float b = dot(p, vec2(-0.24, 0.90)) - t * 0.32;
+    return vec3(sin(a) + 0.35 * sin(b),
+                0.65 * cos(a) - 0.084 * cos(b),
+                0.28 * cos(a) + 0.315 * cos(b));
+}
+
+vec3 oceanWaves(vec2 p, float t) {
+    vec2 k1 = vec2(0.73, -0.68) * 0.42;
+    vec2 k2 = vec2(0.28, 0.96) * 0.72;
+    vec2 k3 = vec2(-0.90, 0.44) * 1.12;
+    vec2 k4 = vec2(0.91, 0.41) * 1.91;
+    float warpPhase = dot(p, vec2(0.18, 0.11)) + t * 0.18;
+    float a = dot(p, k1) + t * 0.50 + 0.18 * sin(warpPhase);
+    float b = dot(p, k2) - t * 0.78 + 1.4;
+    float c = dot(p, k3) + t * 0.93 + 2.7;
+    float d = dot(p, k4) - t * 1.30 + 0.6;
+    vec2 gradient = (k1 + 0.18 * cos(warpPhase) * vec2(0.18, 0.11)) * cos(a)
+                  + 0.48 * k2 * cos(b) + 0.22 * k3 * cos(c) + 0.09 * k4 * cos(d);
+    return vec3(sin(a) + 0.48 * sin(b) + 0.22 * sin(c) + 0.09 * sin(d), gradient);
+}
+
+float oceanFade(vec2 p) {
+    return 1.0 - smoothstep(140.0, 700.0, length(p));
+}

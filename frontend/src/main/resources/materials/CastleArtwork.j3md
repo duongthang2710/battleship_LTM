@@ -1,0 +1,17 @@
+MaterialDef CastleArtwork {
+    MaterialParameters {
+        Texture2D ColorMap
+        Vector4 Crop
+        Float Opacity
+        Float Brightness
+    }
+    Technique {
+        VertexShader GLSL150: materials/WorldArtwork.vert
+        FragmentShader GLSL150: materials/CastleArtwork.frag
+        WorldParameters {
+            WorldViewProjectionMatrix
+            WorldMatrix
+            CameraPosition
+        }
+    }
+}
