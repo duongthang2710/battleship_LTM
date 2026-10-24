@@ -62,6 +62,7 @@ public final class TcpMatchChecks {
                 require(sa.revision() == 3 && sa.revision() == sb.revision() && sa.enemyBoard().ships().isEmpty()
                         && sb.enemyBoard().ships().isEmpty(), "Only accepted fleets change revision; enemy fleets stay hidden");
                 require(sa.currentPlayerId().equals(a.id), "Player 1 starts regardless of color or submission order");
+                a.send(MessageType.REMATCH_REQUEST, null); a.read(MessageType.ERROR);
                 b.send(MessageType.ATTACK, new AttackRequest(new Coordinate(9, 9))); b.read(MessageType.ERROR);
                 a.send(MessageType.ATTACK, new AttackRequest(new Coordinate(-1, 0))); a.read(MessageType.ERROR);
                 a.send(MessageType.ATTACK, new AttackRequest(new Coordinate(0, 0)));
@@ -82,11 +83,61 @@ public final class TcpMatchChecks {
                 }
                 require(sa.winnerId().equals(a.id), "Player 1 wins complete alternating match");
                 a.send(MessageType.ATTACK, new AttackRequest(new Coordinate(9, 9))); a.read(MessageType.ERROR);
-                b.close();
-                require(a.read(MessageType.PLAYER_LEFT).payloadAs(RoomSnapshot.class).players().size() == 1, "Disconnect clears match");
-                System.out.println("PASS TCP match: Player 1 first, fleet rejection reasons/retry, waiting, privacy, authoritative attacks/game over, disconnect. Join notification: " + joinedMs + " ms (localhost).");
+                rematchRounds(a, b, code);
+                System.out.println("PASS TCP match: placement/privacy, turns/game over, three consecutive games, rematch wait/decline/reset, menu cancellation. Join notification: " + joinedMs + " ms (localhost).");
             }
         }
+    }
+
+    private static void rematchRounds(Peer a, Peer b, String code) throws IOException {
+        a.send(MessageType.REMATCH_REQUEST, null);
+        RematchState waiting = a.read(MessageType.REMATCH_UPDATED).payloadAs(RematchState.class);
+        b.read(MessageType.REMATCH_UPDATED);
+        require(waiting.acceptedPlayerIds().equals(List.of(a.id)), "One consent stays at finished match");
+        a.send(MessageType.PING, null); a.read(MessageType.PONG);
+        b.send(MessageType.REMATCH_DECLINE, null);
+        RematchState declined = a.read(MessageType.REMATCH_UPDATED).payloadAs(RematchState.class);
+        b.read(MessageType.REMATCH_UPDATED);
+        require(declined.declined() && declined.acceptedPlayerIds().isEmpty(), "Decline clears both consents");
+        b.send(MessageType.PING, null); b.read(MessageType.PONG);
+        for (int round = 0; round < 2; round++) {
+            a.send(MessageType.REMATCH_REQUEST, null);
+            a.read(MessageType.REMATCH_UPDATED); b.read(MessageType.REMATCH_UPDATED);
+            b.send(MessageType.REMATCH_REQUEST, null);
+            a.read(MessageType.REMATCH_UPDATED); b.read(MessageType.REMATCH_UPDATED);
+            require(a.read(MessageType.START_PLACEMENT).payloadAs(RoomSnapshot.class).roomCode().equals(code)
+                    && b.read(MessageType.START_PLACEMENT).payloadAs(RoomSnapshot.class).players().size() == 2,
+                    "Both agree: same room starts placement again");
+            a.send(MessageType.SUBMIT_FLEET, fleet());
+            MatchSnapshot fresh = a.read(MessageType.FLEET_ACCEPTED).payloadAs(MatchSnapshot.class);
+            MatchSnapshot other = b.read(MessageType.FLEET_ACCEPTED).payloadAs(MatchSnapshot.class);
+            require(fresh.phase() == GamePhase.PLACEMENT && fresh.winnerId() == null && fresh.lastAttack() == null
+                    && fresh.turnNumber() == 0 && fresh.timer().remainingMillis() == 0 && !fresh.timedOut()
+                    && fresh.ownBoard().shots().isEmpty() && other.ownBoard().ships().isEmpty()
+                    && other.ownBoard().shots().isEmpty() && other.enemyBoard().ships().isEmpty(),
+                    "Fresh placement contains no old fleet, shots, winner or deadline");
+            b.send(MessageType.SUBMIT_FLEET, fleet());
+            fresh = a.read(MessageType.START_BATTLE).payloadAs(MatchSnapshot.class);
+            b.read(MessageType.START_BATTLE);
+            require(fresh.turnNumber() == 1 && fresh.timer().remainingMillis() > 59_000, "New battle starts a fresh 60-second turn");
+            List<Coordinate> cells = fleet().ships().stream().flatMap(ship -> ship.ship().occupiedCells().stream()).toList();
+            for (int shot = 0; shot < cells.size() * 2 - 1; shot++) {
+                Peer attacker = shot % 2 == 0 ? a : b;
+                attacker.send(MessageType.ATTACK, new AttackRequest(cells.get(shot / 2)));
+                fresh = a.read(MessageType.MATCH_UPDATED).payloadAs(MatchSnapshot.class);
+                b.read(MessageType.MATCH_UPDATED);
+            }
+            require(fresh.phase() == GamePhase.GAME_OVER && fresh.winnerId().equals(a.id), "Consecutive round ends correctly");
+        }
+        a.send(MessageType.REMATCH_REQUEST, null);
+        a.read(MessageType.REMATCH_UPDATED); b.read(MessageType.REMATCH_UPDATED);
+        b.send(MessageType.LEAVE_ROOM, null); b.read(MessageType.ROOM_LEFT);
+        RematchState cancelled = a.read(MessageType.REMATCH_UPDATED).payloadAs(RematchState.class);
+        require(!cancelled.available() && cancelled.acceptedPlayerIds().isEmpty(), "Menu leave cancels pending rematch");
+        require(a.read(MessageType.PLAYER_LEFT).payloadAs(RoomSnapshot.class).players().size() == 1, "Survivor retains the room");
+        a.send(MessageType.REMATCH_REQUEST, null); a.read(MessageType.ERROR);
+        a.send(MessageType.LEAVE_ROOM, null); a.read(MessageType.ROOM_LEFT);
+        a.send(MessageType.PING, null); a.read(MessageType.PONG);
     }
 
     private static void rejectFleet(Peer actor, Peer other, Object payload, String reason) throws IOException {

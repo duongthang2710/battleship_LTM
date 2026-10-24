@@ -6,6 +6,7 @@ import com.battleship.shared.room.JoinRoomRequest;
 import com.battleship.shared.room.RoomError;
 import com.battleship.shared.room.RoomPhase;
 import com.battleship.shared.room.RoomSnapshot;
+import com.battleship.shared.room.RematchState;
 import com.battleship.shared.protocol.Message;
 import com.battleship.shared.protocol.MessageType;
 import com.battleship.shared.match.MatchSnapshot;
@@ -40,6 +41,9 @@ public final class PvpController implements AutoCloseable {
     private boolean leaving;
     private String status = "Disconnected";
     private MatchSnapshot match;
+    private RematchState rematch;
+    private String rematchStatus = "";
+    private boolean menuAfterLeave;
     private TurnTimer turnTimer;
     private long clockReceivedAt;
     private long sentAt;
@@ -65,6 +69,32 @@ public final class PvpController implements AutoCloseable {
     public String status() { return status; }
     public MatchSnapshot match() { return match; }
     public boolean pending() { return pendingRequest != null; }
+    public RematchState rematch() { return rematch; }
+    public String rematchStatus() { return rematchStatus; }
+    public boolean returningToMenu() { return menuAfterLeave; }
+
+    public void requestRematch() {
+        if (match != null && match.phase() == com.battleship.shared.game.GamePhase.GAME_OVER
+                && send(MessageType.REMATCH_REQUEST, null)) rematchStatus = "Requesting a rematch...";
+    }
+
+    public void declineRematch() {
+        if (match != null && match.phase() == com.battleship.shared.game.GamePhase.GAME_OVER
+                && send(MessageType.REMATCH_DECLINE, null)) rematchStatus = "Declining rematch...";
+    }
+
+    public void returnToMainMenu() {
+        menuAfterLeave = true;
+        rematchStatus = "Returning to main menu...";
+        leaveForMenu();
+    }
+
+    private void leaveForMenu() {
+        if (!menuAfterLeave || leaving || pendingRequest != null) return;
+        if (room == null) { menuAfterLeave = false; mainMenu.run(); return; }
+        leaving = true;
+        send(MessageType.LEAVE_ROOM, null);
+    }
 
     public long remainingTurnMillis() {
         if (match == null || match.phase() != com.battleship.shared.game.GamePhase.BATTLE || turnTimer == null) return 0;
@@ -91,6 +121,7 @@ public final class PvpController implements AutoCloseable {
 
     public void update() {
         connection.update();
+        leaveForMenu();
         if (pendingRequest != null && System.nanoTime() - sentAt > java.util.concurrent.TimeUnit.SECONDS.toNanos(15)) {
             disconnect();
             setStatus("Server did not respond. Reconnect to continue.");
@@ -132,6 +163,8 @@ public final class PvpController implements AutoCloseable {
         connection.disconnect();
         room = null;
         match = null;
+        rematch = null;
+        menuAfterLeave = false;
         clientId = null;
         pendingRequest = null;
         afterConnect = null;
@@ -192,6 +225,11 @@ public final class PvpController implements AutoCloseable {
         switch (message.type()) {
             case ROOM_CREATED, ROOM_JOINED, PLAYER_JOINED, ROOM_UPDATED, PLAYER_LEFT -> {
                 room = message.payloadAs(RoomSnapshot.class);
+                if (message.type() == MessageType.PLAYER_LEFT && match != null
+                        && match.phase() == com.battleship.shared.game.GamePhase.GAME_OVER) {
+                    rematchStatus = "Opponent left. Rematch cancelled.";
+                    return;
+                }
                 joining = false;
                 panel.showRoom(room, clientId);
                 setStatus(room.players().size() < 2 ? "Waiting for another admiral." : "Both admirals must be ready.");
@@ -205,21 +243,41 @@ public final class PvpController implements AutoCloseable {
             case ROOM_LEFT -> {
                 room = null;
                 match = null;
+                rematch = null;
                 leaving = false;
+                if (menuAfterLeave) {
+                    menuAfterLeave = false;
+                    mainMenu.run();
+                    return;
+                }
                 panel.showChoice();
                 setStatus("Room left. Create or join another room.");
                 showWaiting.run();
             }
             case START_PLACEMENT -> {
-                if (leaving) return;
+                if (leaving || menuAfterLeave) return;
                 room = message.payloadAs(RoomSnapshot.class);
                 match = null;
+                turnTimer = null;
+                rematch = null;
+                rematchStatus = "";
                 pendingRequest = null;
                 panel.setBusy(false);
                 if (room.phase() == RoomPhase.PLACEMENT && room.players().stream().anyMatch(player -> player.clientId().equals(clientId))) {
                     LOG.info("START_PLACEMENT code=" + room.roomCode() + " player=" + playerName);
                     startPlacement.accept(room);
                 }
+            }
+            case REMATCH_UPDATED -> {
+                if (room == null || leaving || menuAfterLeave || match == null
+                        || match.phase() != com.battleship.shared.game.GamePhase.GAME_OVER) return;
+                RematchState next = message.payloadAs(RematchState.class);
+                if (!next.roomCode().equals(room.roomCode())) return;
+                rematch = next;
+                rematchStatus = !next.available() ? "Opponent left. Rematch cancelled."
+                        : next.declined() ? "Rematch declined."
+                        : next.acceptedPlayerIds().contains(clientId) ? "Waiting for opponent..."
+                        : "Opponent requests a rematch.";
             }
             case FLEET_ACCEPTED, START_BATTLE, MATCH_UPDATED -> {
                 if (leaving || room == null) return;
@@ -240,7 +298,9 @@ public final class PvpController implements AutoCloseable {
             }
             case ERROR -> {
                 leaving = false;
+                menuAfterLeave = false;
                 RoomError error = message.payloadAs(RoomError.class);
+                rematchStatus = error.message();
                 setStatus(error.message());
                 matchErrors.accept(error.message());
                 LOG.info("Room request rejected: " + error.code());
@@ -256,6 +316,9 @@ public final class PvpController implements AutoCloseable {
         connection.close();
         room = null;
         match = null;
+        rematch = null;
+        rematchStatus = "";
+        menuAfterLeave = false;
         pendingRequest = null;
         afterConnect = null;
         clientId = null;

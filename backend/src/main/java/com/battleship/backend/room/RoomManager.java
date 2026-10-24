@@ -69,6 +69,7 @@ public final class RoomManager implements AutoCloseable {
             }
             case READY, NOT_READY -> ready(player, message);
             case SUBMIT_FLEET, ATTACK -> matchCommand(player, message);
+            case REMATCH_REQUEST, REMATCH_DECLINE -> rematch(player, message);
             default -> error(player, message, "INVALID_REQUEST", "Unsupported room command.");
         }
     }
@@ -146,14 +147,44 @@ public final class RoomManager implements AutoCloseable {
                 ? Message.reply(MessageType.ROOM_UPDATED, message.requestId(), waiting)
                 : Message.request(MessageType.ROOM_UPDATED, waiting)));
         if (room.players.size() == 2 && room.players.values().stream().allMatch(RoomPlayer::ready)) {
-            room.phase = RoomPhase.PLACEMENT;
             String whiteId = room.players.keySet().stream().skip(random.nextInt(2)).findFirst().orElseThrow();
             room.players.replaceAll((id, member) -> new RoomPlayer(id, member.playerName(), true,
                     id.equals(whiteId) ? Side.WHITE : Side.BLACK));
-            room.match = new MatchService(room.snapshot().players());
-            broadcast(room, MessageType.START_PLACEMENT);
-            LOG.info("START_PLACEMENT code=" + room.code);
+            startPlacement(room);
         }
+    }
+
+    private void startPlacement(Room room) {
+        room.phase = RoomPhase.PLACEMENT;
+        room.rematchRequests.clear();
+        room.rematchDeclined = false;
+        // A fresh match also discards the old deadline, shot history and winner.
+        room.match = new MatchService(room.snapshot().players());
+        broadcast(room, MessageType.START_PLACEMENT);
+        LOG.info("START_PLACEMENT code=" + room.code);
+    }
+
+    private void rematch(PlayerIdentity player, Message message) {
+        Room room = rooms.get(memberships.get(player.clientId()));
+        if (room == null || !room.rematchState().available()) {
+            error(player, message, "REMATCH_UNAVAILABLE", "Rematch requires two players and a finished match.");
+            return;
+        }
+        if (message.type() == MessageType.REMATCH_DECLINE) {
+            room.rematchRequests.clear();
+            room.rematchDeclined = true;
+        } else {
+            room.rematchDeclined = false;
+            room.rematchRequests.add(player.clientId());
+        }
+        publishRematch(room, player.clientId(), message.requestId());
+        if (room.rematchRequests.size() == 2) startPlacement(room);
+    }
+
+    private void publishRematch(Room room, String actorId, String requestId) {
+        var state = room.rematchState();
+        for (String id : room.players.keySet()) connections.send(id, Message.reply(MessageType.REMATCH_UPDATED,
+                id.equals(actorId) ? requestId : java.util.UUID.randomUUID().toString(), state));
     }
 
     private void matchCommand(PlayerIdentity player, Message message) {
@@ -197,10 +228,16 @@ public final class RoomManager implements AutoCloseable {
         String code = memberships.remove(clientId);
         if (code == null) return;
         Room room = rooms.get(code);
+        boolean finished = room.match != null && room.match.phase() == GamePhase.GAME_OVER;
         room.players.remove(clientId);
         if (requestId != null) connections.send(clientId, Message.reply(MessageType.ROOM_LEFT, requestId, null));
         if (room.players.isEmpty()) {
             rooms.remove(code);
+        } else if (finished) {
+            room.rematchRequests.clear();
+            room.rematchDeclined = true;
+            publishRematch(room, null, null);
+            broadcast(room, MessageType.PLAYER_LEFT);
         } else {
             room.phase = RoomPhase.WAITING;
             room.match = null;

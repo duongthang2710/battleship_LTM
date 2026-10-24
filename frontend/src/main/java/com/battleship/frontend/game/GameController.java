@@ -163,6 +163,15 @@ public final class GameController {
 
     public void update(Vector2f cursor) {
         updateTurnClock();
+        if (networkPlacement && state().phase() == GamePhase.GAME_OVER) {
+            var rematch = network.rematch();
+            boolean available = network.room() != null && network.room().players().size() == 2
+                    && (rematch == null || rematch.available());
+            boolean busy = network.pending() || network.returningToMenu();
+            gameOver.setRematchStatus(network.rematchStatus(), available && !busy
+                            && (rematch == null || !rematch.acceptedPlayerIds().contains(network.clientId())),
+                    available && !busy && rematch != null && !rematch.acceptedPlayerIds().isEmpty());
+        }
         if (!effects.isBusy()) minimap.update(state().player().board());
         if (draggedShip != null) { dragShip(cursor); return; }
         hover = overHud(cursor) ? null : picker.pick(cursor).orElse(null);
@@ -181,7 +190,11 @@ public final class GameController {
 
     public void primaryClick(Vector2f cursor) {
         if (effects.isBusy() || draggedShip != null) return;
-        if (gameOver.mainMenuAt(cursor)) { returnToMenu.run(); return; }
+        if (gameOver.mainMenuAt(cursor)) {
+            if (networkPlacement) network.returnToMainMenu(); else returnToMenu.run();
+            return;
+        }
+        if (gameOver.declineAt(cursor)) { network.declineRematch(); return; }
         if (gameOver.restartAt(cursor)) { perform(PlacementHud.Action.RESTART); return; }
         var action = controls.actionAt(cursor);
         if (action.isPresent()) { perform(action.get()); return; }
@@ -280,7 +293,11 @@ public final class GameController {
     public void perform(PlacementHud.Action action) {
         if (networkPlacement && action == PlacementHud.Action.LEAVE_ROOM) { cancelShipDrag(); leaveRoom.run(); return; }
         if (effects.isBusy()) return;
-        if (networkPlacement && action == PlacementHud.Action.RESTART) { leaveRoom.run(); return; }
+        if (networkPlacement && (action == PlacementHud.Action.RESTART
+                || (action == PlacementHud.Action.READY && state().phase() == GamePhase.GAME_OVER))) {
+            if (state().phase() == GamePhase.GAME_OVER) network.requestRematch();
+            return;
+        }
         if (networkPlacement && action == PlacementHud.Action.READY) {
             if (placementLocked()) {
                 message = submitted ? "Fleet locked. Waiting for opponent." : "Submitting fleet...";

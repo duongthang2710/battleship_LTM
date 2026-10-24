@@ -63,7 +63,7 @@ public final class ClientHandler implements Runnable, AutoCloseable {
                         send(Message.reply(MessageType.PONG, message.requestId(), null));
                         LOG.fine("PONG " + id());
                     }
-                    case CREATE_ROOM, JOIN_ROOM, LEAVE_ROOM, READY, NOT_READY, SUBMIT_FLEET, ATTACK ->
+                    case CREATE_ROOM, JOIN_ROOM, LEAVE_ROOM, READY, NOT_READY, SUBMIT_FLEET, ATTACK, REMATCH_REQUEST, REMATCH_DECLINE ->
                             connections.rooms().handle(session.player(), message);
                     default -> send(Message.reply(MessageType.ERROR, message.requestId(),
                             new RoomError("INVALID_REQUEST", "Unsupported client message: " + message.type())));

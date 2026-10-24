@@ -20,6 +20,13 @@ và Destroyer (2 ô). Tàu không được chồng lấn hoặc nằm ngoài bà
 Các nút PVE / VS AI, Friends, Profile và Settings hiện chỉ có giao diện,
 chưa thực hiện chức năng. Chưa có database, tài khoản, chat hay khôi phục trận sau mất kết nối.
 
+Kết thúc trận hiển thị Victory/Defeat theo từng người. **PLAY AGAIN** trong PvP
+gửi yêu cầu đến server: một người đồng ý thì chờ trên màn kết quả, cả hai đồng ý
+thì cùng về xếp tàu trong phòng hiện tại. Ván mới xóa đội hình, lịch sử bắn,
+thắng/thua và timer cũ. **DECLINE** hủy yêu cầu đang chờ, giữ kết quả trận.
+**MAIN MENU** rời phòng và về menu; nếu đối thủ còn ở màn kết quả, họ nhận
+thông báo hủy chơi lại và vẫn giữ kết quả đó. Local Game có thể PLAY AGAIN ngay.
+
 ## Cấu trúc dự án
 
 ```text
@@ -125,6 +132,7 @@ một message thành nhiều đoạn hoặc gộp nhiều message trong một l�
 | Phòng | `CREATE_ROOM`, `JOIN_ROOM`, `ROOM_CREATED`, `ROOM_JOINED`, `PLAYER_JOINED`, `ROOM_UPDATED` |
 | Sẵn sàng/rời phòng | `READY`, `NOT_READY`, `START_PLACEMENT`, `LEAVE_ROOM`, `ROOM_LEFT`, `PLAYER_LEFT` |
 | Trận đấu | `SUBMIT_FLEET`, `FLEET_ACCEPTED`, `START_BATTLE`, `ATTACK`, `MATCH_UPDATED`, `TURN_TIMER` |
+| Chơi lại | `REMATCH_REQUEST`, `REMATCH_DECLINE`, `REMATCH_UPDATED` |
 | Lệnh bị từ chối | `ERROR` |
 
 Gửi/nhận socket chạy ở thread riêng. Client chuyển sự kiện về render thread để
@@ -136,7 +144,8 @@ khoảng mỗi giây. Client chỉ nội suy thời gian còn lại để hiển
 thắng/thua. Timeout và lệnh bắn được xử lý dưới cùng khóa; phát bắn được xử lý
 tại hoặc sau deadline bị từ chối. Không có timer riêng tồn đọng từ lượt cũ.
 Heartbeat `PING/PONG` duy trì kết nối. Khi một người rời hoặc mất kết nối,
-trận bị hủy và người còn lại trở về phòng chờ với Ready được reset.
+trận đang chơi bị hủy và người còn lại trở về phòng chờ với Ready được reset.
+Nếu trận đã kết thúc, kết quả được giữ nguyên và yêu cầu chơi lại bị hủy.
 
 ## Chạy sau khi clone
 

@@ -12,6 +12,9 @@ import com.battleship.shared.game.GamePhase;
 import com.battleship.shared.game.Coordinate;
 import com.battleship.shared.game.Board;
 import com.battleship.shared.game.Side;
+import com.battleship.shared.game.ShipType;
+import com.battleship.shared.game.Ship;
+import com.battleship.shared.game.ShipOrientation;
 import com.jme3.app.FlyCamAppState;
 import com.jme3.app.SimpleApplication;
 import com.jme3.input.InputManager;
@@ -50,6 +53,7 @@ public final class PvpRoomRenderChecks extends SimpleApplication {
     private com.jme3.scene.Node board;
     private long fleetWaitStarted;
     private long finalTurnStarted;
+    private int replayShots;
 
     private PvpRoomRenderChecks(String role, Path journal) { this.role = role; this.journal = journal; }
 
@@ -93,7 +97,7 @@ public final class PvpRoomRenderChecks extends SimpleApplication {
                 Thread.sleep(100);
             }
             require(clients[0].exitValue() == 0 && clients[1].exitValue() == 0, "Both desktop clients completed");
-            System.out.println("PASS: two desktop TCP clients; placement/battle, 60-second clock, reset after shots, real timeout with Victory/Defeat, post-timeout rejection, existing room cleanup.");
+            System.out.println("PASS: two desktop TCP clients; timeout result, rematch wait/decline, fresh placement, second complete battle with reversed results, menu cancellation and both main menus.");
         } finally {
             for (Process client : clients) if (client != null && client.isAlive()) client.destroyForcibly();
             for (String role : new String[] {"A", "B"}) {
@@ -126,10 +130,12 @@ public final class PvpRoomRenderChecks extends SimpleApplication {
     }
 
     @Override public void simpleUpdate(float delta) {
+        // Native minimized windows may report zero size; synthetic input still uses 1440x900.
+        if (cam.getWidth() == 0 || cam.getHeight() == 0) cam.resize(1440, 900, true);
         scene.update(delta, cam);
         screens.update(delta, inputManager.getCursorPosition());
         if (++frames < 20) return;
-        require(System.nanoTime() - started < TimeUnit.SECONDS.toNanos(150), "Client " + role + " timed out at stage " + stage);
+        require(System.nanoTime() - started < TimeUnit.SECONDS.toNanos(210), "Client " + role + " timed out at stage " + stage);
         try {
             if (stage == 0) {
                 click(screens.mainMenu().buttonCenter(MainMenu.Action.PVP));
@@ -218,32 +224,54 @@ public final class PvpRoomRenderChecks extends SimpleApplication {
                     require(screens.pvp().match().revision() == 6, "Late shot cannot change final result");
                     capture = "pvp-timeout-defeat.png";
                     Files.writeString(journal.resolve("a-timeout-checked"), "ok");
-                    stage = 8;
+                    stage = 80;
                 }
             }
-            case 8 -> {
-                if (room != null && room.players().size() == 1 && !screens.networkPlacement()) {
-                    require(!room.players().getFirst().ready() && screens.roomPanel().visible(), "Disconnect resets survivor to waiting/not-ready");
-                    Files.writeString(journal.resolve("a-saw-disconnect"), "ok"); stage = 9;
+            case 80 -> { click(new Vector2f(618, 386)); stage = 81; }
+            case 81 -> {
+                if (screens.pvp().rematch() != null && screens.pvp().rematch().acceptedPlayerIds().contains(screens.pvp().clientId())) {
+                    require(screens.game().state().phase() == GamePhase.GAME_OVER && textShown(guiNode, "Waiting for opponent..."),
+                            "One Play Again keeps the result and displays waiting");
+                    Files.writeString(journal.resolve("a-rematch-requested"), "ok"); stage = 82;
                 }
             }
-            case 9 -> {
-                if (twoPlayers()) { action(PvpRoomPanel.Action.LEAVE_ROOM); stage = 10; }
+            case 82 -> {
+                if (screens.pvp().rematch() != null && screens.pvp().rematch().declined()) {
+                    require(screens.game().state().winnerId().equals(screens.game().state().enemy().id())
+                            && textShown(guiNode, "DEFEAT"), "Decline preserves old outcome");
+                    Files.writeString(journal.resolve("a-saw-decline"), "ok");
+                    click(new Vector2f(618, 386)); stage = 83;
+                }
             }
-            case 10 -> {
-                if (room == null) { Files.writeString(journal.resolve("a-left"), "ok"); stage = 11; }
+            case 83 -> {
+                if (screens.game().state().phase() == GamePhase.PLACEMENT) {
+                    prepareReplay(); stage = 84;
+                }
             }
-            case 11 -> {
-                if (Files.exists(journal.resolve("b-left"))) { join(code); stage = 12; }
+            case 84 -> {
+                if (playReplay()) {
+                    require(textShown(guiNode, "VICTORY"), "Second round replaces defeat with victory");
+                    click(new Vector2f(618, 386)); stage = 85;
+                }
             }
-            case 12 -> {
-                if (screens.pvp().status().equals("Room not found.")) {
-                    require(screens.pvp().connected() && room == null, "Deleted-room error preserves connection");
-                    action(PvpRoomPanel.Action.BACK);
-                    action(PvpRoomPanel.Action.DISCONNECT);
-                    require(!screens.pvp().connected(), "Disconnect button closes connection");
-                    System.out.println("PASS Client A: room membership, Ready/Not Ready, placement, peer disconnect, leave, room deletion.");
-                    stop(); stage = 13;
+            case 85 -> {
+                if (screens.pvp().rematch() != null && screens.pvp().rematch().acceptedPlayerIds().contains(screens.pvp().clientId())) {
+                    Files.writeString(journal.resolve("a-menu-rematch"), "ok"); stage = 86;
+                }
+            }
+            case 86 -> {
+                if (room != null && room.players().size() == 1) {
+                    require(screens.game().state().phase() == GamePhase.GAME_OVER && textShown(guiNode, "VICTORY")
+                            && !screens.pvp().rematch().available(), "Peer menu cancels rematch and preserves survivor result/room");
+                    capture = "pvp-rematch-cancelled.png";
+                    click(new Vector2f(821, 386)); stage = 87;
+                }
+            }
+            case 87 -> {
+                if (screens.mainMenu().visible()) {
+                    require(room == null && !screens.game().attackAnimating(), "Main Menu clears local match presentation");
+                    System.out.println("PASS Client A: rematch waiting/decline, clean second round, victory, peer menu cancellation and own menu.");
+                    stop(); stage = 88;
                 }
             }
             default -> { }
@@ -309,29 +337,75 @@ public final class PvpRoomRenderChecks extends SimpleApplication {
                             "Opponent receives same timeout and victory");
                     require(textShown(guiNode, "VICTORY"), "Existing victory overlay is visible");
                     capture = "pvp-timeout-victory.png";
-                    if (Files.exists(journal.resolve("a-timeout-checked"))) stage = 5;
+                    if (Files.exists(journal.resolve("a-rematch-requested"))) {
+                        click(new Vector2f(570, 414)); stage = 43;
+                    }
                 }
             }
-            case 5 -> { screens.pvp().disconnect(); stage = 6; }
-            case 6 -> {
-                if (Files.exists(journal.resolve("a-saw-disconnect"))) { action(PvpRoomPanel.Action.CONNECT); stage = 7; }
-            }
-            case 7 -> { if (screens.roomPanel().enabled(PvpRoomPanel.Action.SHOW_JOIN)) { join(code); stage = 8; } }
-            case 8 -> {
-                if (room != null && room.players().size() == 1 && Files.exists(journal.resolve("a-left"))) {
-                    require(!room.players().getFirst().ready(), "Leave resets readiness");
-                    action(PvpRoomPanel.Action.LEAVE_ROOM); stage = 9;
+            case 43 -> {
+                if (Files.exists(journal.resolve("a-saw-decline")) && screens.pvp().rematch() != null
+                        && screens.pvp().rematch().acceptedPlayerIds().size() == 1) {
+                    require(textShown(guiNode, "VICTORY"), "Declining does not replace victory");
+                    click(new Vector2f(618, 386)); stage = 44;
                 }
             }
-            case 9 -> {
-                if (room == null) {
-                    Files.writeString(journal.resolve("b-left"), "ok");
-                    System.out.println("PASS Client B: typed room code, both players, shared ready state, START_PLACEMENT, reconnect and leave.");
-                    stop(); stage = 10;
+            case 44 -> {
+                if (screens.game().state().phase() == GamePhase.PLACEMENT) {
+                    prepareReplay(); stage = 45;
+                }
+            }
+            case 45 -> {
+                if (playReplay()) {
+                    require(textShown(guiNode, "DEFEAT"), "Second round replaces victory with defeat");
+                    stage = 46;
+                }
+            }
+            case 46 -> {
+                if (Files.exists(journal.resolve("a-menu-rematch"))) { click(new Vector2f(821, 386)); stage = 47; }
+            }
+            case 47 -> {
+                if (screens.mainMenu().visible()) {
+                    require(room == null, "Main Menu leaves only this player from the room");
+                    System.out.println("PASS Client B: decline, accept new request, clean second round, defeat, Main Menu.");
+                    stop(); stage = 48;
                 }
             }
             default -> { }
         }
+    }
+
+    private void prepareReplay() {
+        var state = screens.game().state();
+        require(screens.pvp().room().roomCode().equals(code) && state.player().board().ships().isEmpty()
+                && state.player().board().attackedCells().isEmpty() && state.enemy().board().attackedCells().isEmpty()
+                && state.winnerId() == null && state.lastAttack() == null && state.turnNumber() == 0
+                && screens.pvp().remainingTurnMillis() == 0, "Rematch clears fleet/shots/winner/turn/deadline in same room");
+        for (int i = 0; i < ShipType.values().length; i++) {
+            screens.game().perform(PlacementHud.Action.values()[i]);
+            pointAt(new Coordinate(i * 2, 0));
+        }
+        require(screens.game().state().canReady(), "Ships can be placed again through existing 3D input");
+        screens.game().perform(PlacementHud.Action.READY);
+    }
+
+    private boolean playReplay() {
+        // Advance only presentation effects; server deadlines still use real monotonic time.
+        if (screens.game().attackAnimating()) screens.game().update(3, new Vector2f(-1, -1));
+        var state = screens.game().state();
+        if (state.phase() == GamePhase.GAME_OVER) return true;
+        if (state.phase() != GamePhase.BATTLE || screens.pvp().pending() || !state.currentPlayerId().equals(state.player().id())) return false;
+        if (!screens.game().enemyView()) screens.game().perform(PlacementHud.Action.TOGGLE_BOARD);
+        var cells = java.util.stream.IntStream.range(0, ShipType.values().length)
+                .mapToObj(i -> new Ship(ShipType.values()[i], new Coordinate(i * 2, 0), ShipOrientation.HORIZONTAL))
+                .flatMap(ship -> ship.occupiedCells().stream()).toList();
+        pointAt(cells.get(replayShots++));
+        require(screens.pvp().pending(), "Replay click sends an authoritative TCP shot");
+        return false;
+    }
+
+    private void pointAt(Coordinate cell) {
+        var screen = cam.getScreenCoordinates(new BoardCoordinates(board).worldCenter(cell, 0.185f));
+        screens.game().primaryClick(new Vector2f(screen.x, screen.y));
     }
 
     private boolean twoPlayers() {

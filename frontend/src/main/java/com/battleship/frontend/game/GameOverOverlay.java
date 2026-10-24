@@ -34,6 +34,10 @@ public final class GameOverOverlay {
     private BitmapText title;
     private BitmapText winner;
     private BitmapText restartLabel;
+    private BitmapText rematchStatus;
+    private BitmapText declineLabel;
+    private boolean playEnabled = true;
+    private boolean declineEnabled;
     private float scale = 1;
     private float left;
     private float bottom;
@@ -52,8 +56,19 @@ public final class GameOverOverlay {
     public Node root() { return root; }
 
     public void setNetworkMode(boolean value) {
-        restartLabel.setText(value ? "Leave Room" : "Restart");
+        restartLabel.setText("PLAY AGAIN");
         restartLabel.setLocalTranslation(BUTTON_X + (BUTTON_WIDTH - restartLabel.getLineWidth()) / 2, BUTTON_Y + 24, 42);
+        setRematchStatus("", true, false);
+    }
+
+    public void setRematchStatus(String status, boolean canPlay, boolean canDecline) {
+        playEnabled = canPlay;
+        declineEnabled = canDecline;
+        restartLabel.setColor(Materials.rgb(canPlay ? IVORY : 0x8793A9));
+        if (rematchStatus == null) return;
+        rematchStatus.setText(status.length() > 48 ? status.substring(0, 45) + "..." : status);
+        center(rematchStatus, 80);
+        declineLabel.setCullHint(canDecline ? CullHint.Inherit : CullHint.Always);
     }
 
     public void resize(int width, int height) {
@@ -87,7 +102,11 @@ public final class GameOverOverlay {
     }
 
     public boolean restartAt(Vector2f screen) {
-        return visible && inside(screen, BUTTON_X, BUTTON_Y, BUTTON_WIDTH, BUTTON_HEIGHT);
+        return visible && playEnabled && inside(screen, BUTTON_X, BUTTON_Y, BUTTON_WIDTH, BUTTON_HEIGHT);
+    }
+
+    public boolean declineAt(Vector2f screen) {
+        return visible && declineEnabled && inside(screen, BUTTON_X, 66, 66, 18);
     }
 
     public boolean mainMenuAt(Vector2f screen) {
@@ -118,8 +137,12 @@ public final class GameOverOverlay {
         panel(MENU_BUTTON_X, BUTTON_Y, BUTTON_WIDTH, BUTTON_HEIGHT,
                 new ColorRGBA(0.025f, 0.055f, 0.095f, 1), 40);
         frame(MENU_BUTTON_X, BUTTON_Y, BUTTON_WIDTH, BUTTON_HEIGHT);
-        BitmapText menu = text(body, "Main Menu", 13, BUTTON_Y + 24, IVORY);
+        BitmapText menu = text(body, "MAIN MENU", 13, BUTTON_Y + 24, IVORY);
         menu.setLocalTranslation(MENU_BUTTON_X + (BUTTON_WIDTH - menu.getLineWidth()) / 2, BUTTON_Y + 24, 42);
+        rematchStatus = text(body, "", 10, 80, IVORY);
+        declineLabel = text(body, "DECLINE", 10, 80, GOLD);
+        declineLabel.setLocalTranslation(BUTTON_X, 80, 42);
+        declineLabel.setCullHint(CullHint.Always);
     }
 
     private void frame(float x, float y, float width, float height) {
