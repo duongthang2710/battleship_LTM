@@ -19,6 +19,7 @@ public final class BattleHud {
     private static final int IVORY = 0xF4EAD1;
     private final Node root = new Node("Battle HUD");
     private final Node layout = new Node("HUD layout");
+    private final Node turnClock = new Node("Turn countdown");
     private final Materials materials;
     private final BitmapFont display;
     private final BitmapFont body;
@@ -39,6 +40,10 @@ public final class BattleHud {
     private float uiScale = 1;
     private float logicalWidth;
     private float logicalHeight;
+    private BitmapText clockPlayer;
+    private BitmapText clockTime;
+    private String clockOwner = "";
+    private int clockSeconds = -1;
 
     public BattleHud(AssetManager assets, String playerName) {
         this.playerName = playerName;
@@ -76,6 +81,7 @@ public final class BattleHud {
         ornatePanel(w - 374, 43, 338, 69);
         controlsText = text(body, controlHints, 10, w - 355, 92, IVORY);
         connectionText = text(body, connectionStatus, 11, w - 355, 65, GOLD);
+        buildClock(w, h);
     }
 
     public boolean contains(Vector2f screen) {
@@ -84,7 +90,53 @@ public final class BattleHud {
         return inside(x, y, 36, logicalHeight - 130, 350, 94)
                 || inside(x, y, logicalWidth - 427, logicalHeight - 119, 391, 83)
                 || inside(x, y, 36, 43, 294, 85)
+                || (turnClock.getCullHint() != com.jme3.scene.Spatial.CullHint.Always
+                    && inside(x, y, logicalWidth / 2 - 132, logicalHeight - 116, 264, 80))
                 || inside(x, y, logicalWidth - 374, 43, 338, 69);
+    }
+
+    private void buildClock(float width, float height) {
+        turnClock.detachAllChildren();
+        turnClock.setLocalTranslation(width / 2 - 132, height - 116, 4);
+        layout.attachChild(turnClock);
+        float[][] rectangles = {{0, 0, 264, 80}, {10, 0, 244, 1}, {10, 79, 244, 1},
+                {0, 10, 1, 60}, {263, 10, 1, 60}};
+        for (int i = 0; i < rectangles.length; i++) {
+            float[] rect = rectangles[i];
+            Geometry quad = new Geometry("Turn clock panel", new Quad(rect[2], rect[3]));
+            Material material = materials.flat(i == 0 ? new ColorRGBA(0.003f, 0.007f, 0.021f, 0.90f) : Materials.rgb(GOLD));
+            material.getAdditionalRenderState().setBlendMode(BlendMode.Alpha);
+            quad.setMaterial(material);
+            quad.setQueueBucket(Bucket.Gui);
+            quad.setLocalTranslation(rect[0], rect[1], i == 0 ? 0 : 1);
+            turnClock.attachChild(quad);
+        }
+        clockPlayer = new BitmapText(body);
+        clockPlayer.setSize(11);
+        clockPlayer.setColor(Materials.rgb(GOLD));
+        turnClock.attachChild(clockPlayer);
+        clockTime = new BitmapText(display);
+        clockTime.setSize(39);
+        turnClock.attachChild(clockTime);
+        clockSeconds = -1;
+        hideTurnClock();
+    }
+
+    public void hideTurnClock() { turnClock.setCullHint(com.jme3.scene.Spatial.CullHint.Always); }
+
+    public void setTurnClock(String player, long remainingMillis) {
+        if (clockTime == null) return;
+        turnClock.setCullHint(com.jme3.scene.Spatial.CullHint.Inherit);
+        int seconds = (int) Math.min(60, (Math.max(0, remainingMillis) + 999) / 1000);
+        if (seconds == clockSeconds && player.equals(clockOwner)) return;
+        clockOwner = player;
+        clockSeconds = seconds;
+        String name = player.length() > 24 ? player.substring(0, 23) + "." : player;
+        clockPlayer.setText("TURN: " + name);
+        clockPlayer.setLocalTranslation((264 - clockPlayer.getLineWidth()) / 2, 64, 2);
+        clockTime.setText(String.format(java.util.Locale.ROOT, "%02d:%02d", seconds / 60, seconds % 60));
+        clockTime.setColor(Materials.rgb(seconds <= 10 ? 0xF5A38E : IVORY));
+        clockTime.setLocalTranslation((264 - clockTime.getLineWidth()) / 2, 45, 2);
     }
 
     private boolean inside(float x, float y, float left, float bottom, float width, float height) {

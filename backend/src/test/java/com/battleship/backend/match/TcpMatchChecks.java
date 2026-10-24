@@ -14,6 +14,7 @@ import com.google.gson.JsonParser;
 /** One real TCP match checks authority, privacy, first turn and ordered notifications. */
 public final class TcpMatchChecks {
     public static void main(String[] args) throws Exception {
+        MatchTimerChecks.run();
         playerOneStartsWithEitherColor();
         try (TcpServer server = new TcpServer(0)) {
             Thread.ofVirtual().start(() -> { try { server.start(); } catch (IOException e) { throw new UncheckedIOException(e); } });
@@ -131,7 +132,9 @@ public final class TcpMatchChecks {
         }
         void send(MessageType type, Object payload) throws IOException { MessageCodec.write(output, Message.request(type, payload)); }
         Message read(MessageType type) throws IOException {
-            Message message = MessageCodec.read(input);
+            Message message;
+            do { message = MessageCodec.read(input); }
+            while (message != null && message.type() == MessageType.TURN_TIMER);
             require(message != null && message.type() == type, "Expected " + type + ", received " + message);
             return message;
         }

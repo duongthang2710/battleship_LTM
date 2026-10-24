@@ -51,6 +51,7 @@ tasks.register('checkPvpRooms', JavaExec) {
     classpath = sourceSets.test.runtimeClasspath
     mainClass = 'com.battleship.frontend.game.PvpRoomRenderChecks'
     workingDir rootProject.projectDir
+    systemProperty 'battleship.port', providers.gradleProperty('serverPort').getOrElse('2209')
     mustRunAfter 'checkGameplayRendering', 'checkMainMenu'
 }
 

@@ -221,6 +221,14 @@ public final class GameEngine {
         return result;
     }
 
+    public boolean timeoutCurrentTurn() {
+        if (state.phase() != GamePhase.BATTLE) return false;
+        String winner = state.currentPlayerId().equals(state.player().id()) ? state.enemy().id() : state.player().id();
+        state = new GameState(GamePhase.GAME_OVER, state.player(), state.enemy(), state.currentPlayerId(),
+                winner, null, state.placement(), state.ready(), state.turnNumber());
+        return true;
+    }
+
     public void restart() {
         Player player = state.player().withBoard(new Board());
         Player enemy = state.enemy().withBoard(new Board());

@@ -32,6 +32,7 @@ public final class ConnectionManager implements AutoCloseable {
 
     @Override
     public void close() {
+        rooms.close();
         clients.values().forEach(ClientHandler::close);
         clients.clear();
     }

@@ -9,6 +9,7 @@ import com.battleship.shared.room.RoomSnapshot;
 import com.battleship.shared.protocol.Message;
 import com.battleship.shared.protocol.MessageType;
 import com.battleship.shared.match.MatchSnapshot;
+import com.battleship.shared.match.TurnTimer;
 import com.battleship.shared.match.FleetSubmission;
 import com.battleship.shared.match.ShipPlacement;
 import com.battleship.shared.match.AttackRequest;
@@ -39,6 +40,8 @@ public final class PvpController implements AutoCloseable {
     private boolean leaving;
     private String status = "Disconnected";
     private MatchSnapshot match;
+    private TurnTimer turnTimer;
+    private long clockReceivedAt;
     private long sentAt;
 
     public PvpController(PvpRoomPanel panel, String playerName, Consumer<RoomSnapshot> startPlacement,
@@ -62,6 +65,12 @@ public final class PvpController implements AutoCloseable {
     public String status() { return status; }
     public MatchSnapshot match() { return match; }
     public boolean pending() { return pendingRequest != null; }
+
+    public long remainingTurnMillis() {
+        if (match == null || match.phase() != com.battleship.shared.game.GamePhase.BATTLE || turnTimer == null) return 0;
+        long elapsed = java.util.concurrent.TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - clockReceivedAt);
+        return Math.max(0, turnTimer.remainingMillis() - elapsed);
+    }
 
     public boolean submitFleet(Board board) {
         return send(MessageType.SUBMIT_FLEET, new FleetSubmission(board.ships().stream().map(ShipPlacement::from).toList()));
@@ -217,7 +226,17 @@ public final class PvpController implements AutoCloseable {
                 MatchSnapshot next = message.payloadAs(MatchSnapshot.class);
                 if (!next.playerId().equals(clientId) || (match != null && next.revision() <= match.revision())) return;
                 match = next;
+                turnTimer = next.timer();
+                clockReceivedAt = System.nanoTime();
                 matchUpdates.accept(next);
+            }
+            case TURN_TIMER -> {
+                if (leaving || room == null || match == null || match.phase() != com.battleship.shared.game.GamePhase.BATTLE) return;
+                TurnTimer timer = message.payloadAs(TurnTimer.class);
+                if (timer.matchRevision() != match.revision() || timer.turnNumber() != match.turnNumber()
+                        || !timer.currentPlayerId().equals(match.currentPlayerId())) return;
+                turnTimer = timer;
+                clockReceivedAt = System.nanoTime();
             }
             case ERROR -> {
                 leaving = false;

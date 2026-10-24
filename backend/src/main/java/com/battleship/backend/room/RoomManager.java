@@ -19,18 +19,41 @@ import java.util.HashMap;
 import java.util.Locale;
 import java.util.Map;
 import java.util.logging.Logger;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 
-public final class RoomManager {
+public final class RoomManager implements AutoCloseable {
     private static final Logger LOG = Logger.getLogger(RoomManager.class.getName());
     private static final String CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
     private final SecureRandom random = new SecureRandom();
     private final Map<String, Room> rooms = new HashMap<>();
     private final Map<String, String> memberships = new HashMap<>();
     private final ConnectionManager connections;
+    private final ScheduledExecutorService clock = Executors.newSingleThreadScheduledExecutor(
+            Thread.ofPlatform().daemon(true).name("match-clock").factory());
 
     public RoomManager(ConnectionManager connections) {
         this.connections = connections;
+        clock.scheduleAtFixedRate(this::updateClocks, 200, 200, TimeUnit.MILLISECONDS);
     }
+
+    private synchronized void updateClocks() {
+        for (Room room : rooms.values()) {
+            if (room.match == null) continue;
+            if (room.match.expireTurn()) {
+                publishMatch(room, MessageType.MATCH_UPDATED, null, null);
+            } else {
+                var timer = room.match.clockUpdate();
+                if (timer != null) {
+                    Message update = Message.request(MessageType.TURN_TIMER, timer);
+                    room.players.keySet().forEach(id -> connections.send(id, update));
+                }
+            }
+        }
+    }
+
+    @Override public void close() { clock.shutdownNow(); }
 
     // Keep mutations and notifications ordered even when both clients act together.
     public synchronized void handle(PlayerIdentity player, Message message) {
@@ -146,22 +169,28 @@ public final class RoomManager {
                 event = room.match.phase() == GamePhase.BATTLE ? MessageType.START_BATTLE : MessageType.FLEET_ACCEPTED;
             } else {
                 AttackRequest request = message.payloadAs(AttackRequest.class);
+                GamePhase before = room.match.phase();
                 var result = room.match.attack(player.clientId(), request == null ? null : request.coordinate());
                 if (!result.accepted()) {
+                    if (before == GamePhase.BATTLE && room.match.phase() == GamePhase.GAME_OVER)
+                        publishMatch(room, MessageType.MATCH_UPDATED, null, null);
                     error(player, message, result.type().name(), "Attack rejected: " + result.type());
                     return;
                 }
                 event = MessageType.MATCH_UPDATED;
             }
-            for (String id : room.players.keySet()) connections.send(id, Message.reply(event,
-                    id.equals(player.clientId()) ? message.requestId() : java.util.UUID.randomUUID().toString(),
-                    room.match.snapshot(id)));
+            publishMatch(room, event, player.clientId(), message.requestId());
         } catch (com.google.gson.JsonParseException exception) {
             error(player, message, "INVALID_MATCH_COMMAND", "Malformed match data.");
         } catch (IllegalArgumentException | IllegalStateException exception) {
             error(player, message, message.type() == MessageType.SUBMIT_FLEET ? "INVALID_FLEET" : "INVALID_MATCH_COMMAND",
                     exception.getMessage());
         }
+    }
+
+    private void publishMatch(Room room, MessageType event, String actorId, String requestId) {
+        for (String id : room.players.keySet()) connections.send(id, Message.reply(event,
+                id.equals(actorId) ? requestId : java.util.UUID.randomUUID().toString(), room.match.snapshot(id)));
     }
 
     private void leave(String clientId, String requestId) {

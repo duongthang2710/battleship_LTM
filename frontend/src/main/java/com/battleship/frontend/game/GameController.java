@@ -81,6 +81,7 @@ public final class GameController {
         network = null;
         networkState = null;
         submitted = false;
+        hud.hideTurnClock();
         ownSide = Side.WHITE;
         hud.setPlayerSide(null);
         minimap.setSide(null);
@@ -124,6 +125,12 @@ public final class GameController {
                 snapshot.turnNumber());
         AttackResult attack = snapshot.lastAttack();
         effects.clear();
+        if (snapshot.timedOut()) {
+            message = "Turn time expired.";
+            refresh();
+            gameOver.show(state());
+            return;
+        }
         enemyView = attack == null || attack.attackerId().equals(snapshot.playerId());
         message = attack == null ? "Battle started. Player 1 goes first." : attack.type() + " at " + cellName(attack.coordinate());
         refresh();
@@ -155,6 +162,7 @@ public final class GameController {
     }
 
     public void update(Vector2f cursor) {
+        updateTurnClock();
         if (!effects.isBusy()) minimap.update(state().player().board());
         if (draggedShip != null) { dragShip(cursor); return; }
         hover = overHud(cursor) ? null : picker.pick(cursor).orElse(null);
@@ -407,6 +415,7 @@ public final class GameController {
     }
 
     private void refreshHud() {
+        updateTurnClock();
         minimap.update(state().player().board());
         controls.setNetworkLocked(placementLocked());
         controls.update(state(), message, enemyView);
@@ -417,7 +426,8 @@ public final class GameController {
             hud.setGameStatus(submitted ? "Waiting for opponent" : "Deploy your fleet", state().player().board().ships().size()
                     + "/5 ships - " + (networkPlacement ? ownSide + " fleet" : "cyan valid / red blocked"));
         } else if (state().phase() == GamePhase.GAME_OVER) {
-            hud.setGameStatus("Game over", state().winnerId().equals(state().player().id()) ? "Your fleet wins." : "Enemy fleet wins.");
+            hud.setGameStatus(networkPlacement && network.match() != null && network.match().timedOut() ? "Time expired" : "Game over",
+                    state().winnerId().equals(state().player().id()) ? "Your fleet wins." : "Enemy fleet wins.");
         } else {
             boolean ourTurn = state().currentPlayerId().equals(state().player().id());
             hud.setGameStatus(networkPlacement ? (ourTurn ? "Your turn / " + ownSide : "Opponent turn / " + ownSide.opponent())
@@ -425,5 +435,12 @@ public final class GameController {
                     "Turn " + state().turnNumber() + (networkPlacement ? " / server synchronized"
                             : ourTurn ? " - fire at Abyssal waters." : " - fire at Radiant waters."));
         }
+    }
+
+    private void updateTurnClock() {
+        if (networkPlacement && state().phase() == GamePhase.BATTLE) {
+            String owner = state().currentPlayerId().equals(state().player().id()) ? state().player().name() : state().enemy().name();
+            hud.setTurnClock(owner, network.remainingTurnMillis());
+        } else hud.hideTurnClock();
     }
 }

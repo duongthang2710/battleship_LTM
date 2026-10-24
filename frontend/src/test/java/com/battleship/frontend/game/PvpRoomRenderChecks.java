@@ -49,6 +49,7 @@ public final class PvpRoomRenderChecks extends SimpleApplication {
     private int captureFrames;
     private com.jme3.scene.Node board;
     private long fleetWaitStarted;
+    private long finalTurnStarted;
 
     private PvpRoomRenderChecks(String role, Path journal) { this.role = role; this.journal = journal; }
 
@@ -80,7 +81,8 @@ public final class PvpRoomRenderChecks extends SimpleApplication {
                 String role = i == 0 ? "A" : "B";
                 clients[i] = new ProcessBuilder(java, "--enable-native-access=ALL-UNNAMED",
                         "-Dorg.lwjgl.system.SharedLibraryExtractPath=" + journal.resolve(role + "-natives"), "-cp",
-                        System.getProperty("java.class.path"), PvpRoomRenderChecks.class.getName(), role, journal.toString())
+                        System.getProperty("java.class.path"), "-Dbattleship.port=" + System.getProperty("battleship.port", "2209"),
+                        PvpRoomRenderChecks.class.getName(), role, journal.toString())
                         .redirectErrorStream(true).redirectOutput(journal.resolve(role + ".log").toFile()).start();
             }
             long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(240);
@@ -91,7 +93,7 @@ public final class PvpRoomRenderChecks extends SimpleApplication {
                 Thread.sleep(100);
             }
             require(clients[0].exitValue() == 0 && clients[1].exitValue() == 0, "Both desktop clients completed");
-            System.out.println("PASS: two desktop TCP clients; room/Ready, editable placement, rejected fleet/retry, waiting/locked fleet, private START_BATTLE with Player 1 first, two synchronized attacks, disconnect/reconnect.");
+            System.out.println("PASS: two desktop TCP clients; placement/battle, 60-second clock, reset after shots, real timeout with Victory/Defeat, post-timeout rejection, existing room cleanup.");
         } finally {
             for (Process client : clients) if (client != null && client.isAlive()) client.destroyForcibly();
             for (String role : new String[] {"A", "B"}) {
@@ -190,8 +192,34 @@ public final class PvpRoomRenderChecks extends SimpleApplication {
                         && Files.exists(journal.resolve("b-fired")) && screens.game().state().turnNumber() == 3) {
                     require(screens.pvp().match().revision() == 5, "Both clients processed two server attacks");
                     Files.writeString(journal.resolve("a-saw-both-attacks"), "ok");
-                    stage = 8;
+                    require(screens.pvp().remainingTurnMillis() > 57_000, "Valid second shot reset turn clock to 60 seconds");
+                    finalTurnStarted = System.nanoTime();
+                    capture = "pvp-turn-timer.png";
+                    stage = 72;
                 } else fireWhenOurTurn();
+            }
+            case 72 -> {
+                if (screens.game().state().phase() == GamePhase.GAME_OVER) {
+                    require(screens.pvp().match().timedOut() && screens.pvp().match().revision() == 6
+                            && screens.game().state().winnerId().equals(screens.game().state().enemy().id()),
+                            "Idle Player 1 loses exactly once to server timeout");
+                    require(System.nanoTime() - finalTurnStarted >= TimeUnit.SECONDS.toNanos(57), "Real 60-second turn elapsed");
+                    require(textShown(guiNode, "DEFEAT"), "Existing defeat overlay is visible");
+                    require(screens.pvp().attack(new Coordinate(7, 7)), "Probe server guard after timeout");
+                    stage = 73;
+                } else {
+                    require(screens.pvp().remainingTurnMillis() <= 60_000, "Clock never exceeds limit");
+                    if (System.nanoTime() - finalTurnStarted > TimeUnit.SECONDS.toNanos(3))
+                        require(!screens.game().attackAnimating(), "Timer events do not replay attack animation");
+                }
+            }
+            case 73 -> {
+                if (!screens.pvp().pending() && screens.pvp().status().contains("GAME_FINISHED")) {
+                    require(screens.pvp().match().revision() == 6, "Late shot cannot change final result");
+                    capture = "pvp-timeout-defeat.png";
+                    Files.writeString(journal.resolve("a-timeout-checked"), "ok");
+                    stage = 8;
+                }
             }
             case 8 -> {
                 if (room != null && room.players().size() == 1 && !screens.networkPlacement()) {
@@ -271,8 +299,18 @@ public final class PvpRoomRenderChecks extends SimpleApplication {
             }
             case 40 -> { if (battle()) { Files.writeString(journal.resolve("b-battle"), "ok"); stage = 41; } }
             case 41 -> {
-                if (Files.exists(journal.resolve("a-saw-both-attacks"))) { stage = 5; }
+                if (Files.exists(journal.resolve("a-saw-both-attacks"))) { stage = 42; }
                 else if (Files.exists(journal.resolve("a-battle"))) fireWhenOurTurn();
+            }
+            case 42 -> {
+                if (screens.game().state().phase() == GamePhase.GAME_OVER) {
+                    require(screens.pvp().match().timedOut() && screens.pvp().match().revision() == 6
+                            && screens.game().state().winnerId().equals(screens.game().state().player().id()),
+                            "Opponent receives same timeout and victory");
+                    require(textShown(guiNode, "VICTORY"), "Existing victory overlay is visible");
+                    capture = "pvp-timeout-victory.png";
+                    if (Files.exists(journal.resolve("a-timeout-checked"))) stage = 5;
+                }
             }
             case 5 -> { screens.pvp().disconnect(); stage = 6; }
             case 6 -> {
@@ -326,6 +364,9 @@ public final class PvpRoomRenderChecks extends SimpleApplication {
         require(match.enemyBoard().ships().isEmpty(), "No enemy placement leaked");
         String firstId = screens.pvp().room().players().getFirst().clientId();
         require(match.currentPlayerId().equals(firstId) && match.turnNumber() == 1, "Player 1 starts on both clients");
+        require(match.timer().remainingMillis() > 59_000 && match.timer().remainingMillis() <= 60_000,
+                "Both clients receive initial 60-second deadline");
+        require(textShown(guiNode, "01:00") && textShown(guiNode, "TURN: Admiral A"), "Visible countdown names the current player");
         return true;
     }
 

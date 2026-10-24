@@ -91,6 +91,9 @@ kích thước hay danh sách ô do client tự khai báo. Người Ready trư�
 đội hình đã xác nhận bị khóa. Player 1 là người ở vị trí đầu tiên trong phòng chờ.
 Mỗi lượt bắn hợp lệ
 được giải quyết trên server, sau đó đổi lượt kể cả khi bắn trúng.
+Mỗi lượt PvP có **60 giây**, bắt đầu khi trận vào Battle và đặt lại sau mỗi phát
+bắn hợp lệ. Bắn sai hoặc bắn trùng không đổi lượt, không đặt lại thời gian.
+Hết giờ, người đang có lượt thua; server gửi kết quả cho cả hai client.
 Mỗi người nhận snapshot riêng: toàn bộ board của mình, các ô đã bắn trên board
 đối thủ và tàu đối thủ đã chìm; vị trí tàu chưa lộ không được gửi sang client.
 
@@ -121,13 +124,17 @@ một message thành nhiều đoạn hoặc gộp nhiều message trong một l�
 | Kết nối | `CONNECT`, `CONNECT_OK`, `PING`, `PONG`, `DISCONNECT` |
 | Phòng | `CREATE_ROOM`, `JOIN_ROOM`, `ROOM_CREATED`, `ROOM_JOINED`, `PLAYER_JOINED`, `ROOM_UPDATED` |
 | Sẵn sàng/rời phòng | `READY`, `NOT_READY`, `START_PLACEMENT`, `LEAVE_ROOM`, `ROOM_LEFT`, `PLAYER_LEFT` |
-| Trận đấu | `SUBMIT_FLEET`, `FLEET_ACCEPTED`, `START_BATTLE`, `ATTACK`, `MATCH_UPDATED` |
+| Trận đấu | `SUBMIT_FLEET`, `FLEET_ACCEPTED`, `START_BATTLE`, `ATTACK`, `MATCH_UPDATED`, `TURN_TIMER` |
 | Lệnh bị từ chối | `ERROR` |
 
 Gửi/nhận socket chạy ở thread riêng. Client chuyển sự kiện về render thread để
 cập nhật UI an toàn, vẫn cập nhật khi cửa sổ mất focus. Server có hàng đợi gửi
 giới hạn cho từng kết nối để socket chậm không chặn việc xử lý phòng.
 Snapshot trận có `revision`; client bỏ qua bản lặp hoặc cũ.
+Server dùng `System.nanoTime()` để quyết định hết giờ, đồng thời gửi `TURN_TIMER`
+khoảng mỗi giây. Client chỉ nội suy thời gian còn lại để hiển thị, không tự xử
+thắng/thua. Timeout và lệnh bắn được xử lý dưới cùng khóa; phát bắn được xử lý
+tại hoặc sau deadline bị từ chối. Không có timer riêng tồn đọng từ lượt cũ.
 Heartbeat `PING/PONG` duy trì kết nối. Khi một người rời hoặc mất kết nối,
 trận bị hủy và người còn lại trở về phòng chờ với Ready được reset.
 
