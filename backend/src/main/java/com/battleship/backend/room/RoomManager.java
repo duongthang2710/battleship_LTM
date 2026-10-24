@@ -156,8 +156,11 @@ public final class RoomManager {
             for (String id : room.players.keySet()) connections.send(id, Message.reply(event,
                     id.equals(player.clientId()) ? message.requestId() : java.util.UUID.randomUUID().toString(),
                     room.match.snapshot(id)));
-        } catch (IllegalArgumentException | IllegalStateException | NullPointerException exception) {
-            error(player, message, "INVALID_MATCH_COMMAND", "Invalid fleet or match phase.");
+        } catch (com.google.gson.JsonParseException exception) {
+            error(player, message, "INVALID_MATCH_COMMAND", "Malformed match data.");
+        } catch (IllegalArgumentException | IllegalStateException exception) {
+            error(player, message, message.type() == MessageType.SUBMIT_FLEET ? "INVALID_FLEET" : "INVALID_MATCH_COMMAND",
+                    exception.getMessage());
         }
     }
 

@@ -103,7 +103,7 @@ public final class GameController {
         gameOver.setNetworkMode(true);
         controls.setNetworkPlacement(true);
         hud.setOpponentName(opponent);
-        hud.setConnectionStatus("PVP " + roomCode + " / " + side + " / White moves first");
+        hud.setConnectionStatus("PVP " + roomCode + " / " + side + " / Player 1 starts");
         message = side + " fleet. Place ships, then Ready.";
         refresh();
     }
@@ -125,7 +125,7 @@ public final class GameController {
         AttackResult attack = snapshot.lastAttack();
         effects.clear();
         enemyView = attack == null || attack.attackerId().equals(snapshot.playerId());
-        message = attack == null ? "Battle started. White moves first." : attack.type() + " at " + cellName(attack.coordinate());
+        message = attack == null ? "Battle started. Player 1 goes first." : attack.type() + " at " + cellName(attack.coordinate());
         refresh();
         if (attack != null) effects.play(attack, attack.sunk() ? attack.affectedCells() : List.of(),
                 this::refresh, () -> {
@@ -274,8 +274,13 @@ public final class GameController {
         if (effects.isBusy()) return;
         if (networkPlacement && action == PlacementHud.Action.RESTART) { leaveRoom.run(); return; }
         if (networkPlacement && action == PlacementHud.Action.READY) {
+            if (placementLocked()) {
+                message = submitted ? "Fleet locked. Waiting for opponent." : "Submitting fleet...";
+                refreshHud();
+                return;
+            }
             cancelShipDrag();
-            if (state().canReady() && !placementLocked()) {
+            if (state().canReady()) {
                 message = network.submitFleet(state().player().board()) ? "Submitting fleet..." : "Connection unavailable.";
             } else message = submitted ? "Waiting for opponent." : "Place all five ships.";
             refreshHud();

@@ -24,25 +24,34 @@ public final class GameEngine {
 
     public GameState state() { return state; }
 
-    /** The first player is white and opens the server-owned match. */
-    public GameEngine(Player white, Player black) {
+    /** Player 1 opens the server-owned match, independently of faction color. */
+    public GameEngine(Player first, Player second) {
         random = new Random();
-        state = new GameState(GamePhase.PLACEMENT, white, black, white.id(), null, null,
+        state = new GameState(GamePhase.PLACEMENT, first, second, first.id(), null, null,
                 PlacementState.initial(), false, 0);
     }
 
     public void submitFleet(String playerId, List<Ship> ships) {
         if (state.phase() != GamePhase.PLACEMENT) throw new IllegalStateException("Placement is closed");
+        boolean first = state.player().id().equals(playerId);
+        if (!first && !state.enemy().id().equals(playerId)) throw new IllegalArgumentException("Unknown player");
+        if ((first ? state.player() : state.enemy()).fleet().isComplete())
+            throw new IllegalStateException("Fleet already submitted");
         if (ships == null || ships.size() != ShipType.values().length)
-            throw new IllegalArgumentException("Place exactly five ships");
+            throw new IllegalArgumentException("Exactly five ships required.");
         Board board = new Board();
         for (Ship ship : ships) {
-            if (ship == null || board.ship(ship.type()) != null) throw new IllegalArgumentException("Duplicate ship");
+            if (ship == null) throw new IllegalArgumentException("Missing ship data.");
+            if (board.ship(ship.type()) != null) throw new IllegalArgumentException("Each ship type must appear once.");
+            PlacementResult validation = board.validatePlacement(ship.type(), ship.position(), ship.orientation());
+            if (!validation.success()) throw new IllegalArgumentException(switch (validation.reason()) {
+                case OUT_OF_BOUNDS -> ship.type().displayName() + " is outside the board.";
+                case OVERLAP -> ship.type().displayName() + " overlaps another ship.";
+                default -> "Invalid ship data.";
+            });
             board = board.withPlacement(ship.type(), ship.position(), ship.orientation());
         }
         if (!board.fleet().isComplete()) throw new IllegalArgumentException("Fleet is incomplete");
-        boolean first = state.player().id().equals(playerId);
-        if (!first && !state.enemy().id().equals(playerId)) throw new IllegalArgumentException("Unknown player");
         Player player = first ? state.player().withBoard(board) : state.player();
         Player enemy = first ? state.enemy() : state.enemy().withBoard(board);
         boolean complete = player.fleet().isComplete() && enemy.fleet().isComplete();

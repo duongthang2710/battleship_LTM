@@ -9,7 +9,7 @@ bàn cờ và mô hình tàu 3D. Backend dùng **Java TCP Socket** để quản 
 - **Local Game:** xếp tàu và bắn thủ công hai bên luân phiên trên cùng máy, không cần server.
 - **PvP:** tạo phòng, tham gia bằng mã 6 ký tự, phòng chờ hai người, Ready/Not Ready,
   xếp tàu và đánh trận qua TCP.
-- Server chọn ngẫu nhiên phe trắng/đen khi bắt đầu xếp tàu; trắng đi trước.
+- Server chọn ngẫu nhiên phe trắng/đen khi bắt đầu xếp tàu; Player 1 trong phòng đi trước, độc lập với màu phe.
   Góc nhìn ban đầu của mỗi người hướng về lâu đài đối thủ.
 - Kiểm tra vị trí tàu, giới hạn bàn cờ, chồng lấn, lượt bắn, hit/miss/sunk và thắng/thua.
 - Hỗ trợ đặt mới, kéo thả, xoay, xóa, reset và random đội tàu; minimap và hiệu ứng bắn.
@@ -77,14 +77,19 @@ sequenceDiagram
     S-->>B: START_PLACEMENT + phe được chọn
     A->>S: SUBMIT_FLEET
     B->>S: SUBMIT_FLEET
-    S-->>A: START_BATTLE (trắng đi trước)
-    S-->>B: START_BATTLE (trắng đi trước)
+    S-->>A: START_BATTLE (Player 1 đi trước)
+    S-->>B: START_BATTLE (Player 1 đi trước)
     A->>S: ATTACK(coordinate), nếu đến lượt A
     S-->>A: MATCH_UPDATED
     S-->>B: MATCH_UPDATED
 ```
 
-Server xác nhận đủ 5 tàu hợp lệ trước khi bắt đầu Battle. Mỗi lượt bắn hợp lệ
+Server xác nhận đủ 5 tàu hợp lệ trước khi bắt đầu Battle. Đội hình sai bị từ chối
+kèm lý do (thiếu/trùng loại tàu, thiếu dữ liệu, vượt biên hoặc chồng lấn); người chơi
+có thể sửa và gửi lại. Kích thước tàu được server suy ra từ `ShipType`, không tin
+kích thước hay danh sách ô do client tự khai báo. Người Ready trước chờ người còn lại,
+đội hình đã xác nhận bị khóa. Player 1 là người ở vị trí đầu tiên trong phòng chờ.
+Mỗi lượt bắn hợp lệ
 được giải quyết trên server, sau đó đổi lượt kể cả khi bắn trúng.
 Mỗi người nhận snapshot riêng: toàn bộ board của mình, các ô đã bắn trên board
 đối thủ và tàu đối thủ đã chìm; vị trí tàu chưa lộ không được gửi sang client.

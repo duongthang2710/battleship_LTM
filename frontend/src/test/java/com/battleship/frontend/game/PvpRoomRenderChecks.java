@@ -10,6 +10,7 @@ import com.battleship.shared.room.RoomPlayer;
 import com.battleship.shared.room.RoomSnapshot;
 import com.battleship.shared.game.GamePhase;
 import com.battleship.shared.game.Coordinate;
+import com.battleship.shared.game.Board;
 import com.battleship.shared.game.Side;
 import com.jme3.app.FlyCamAppState;
 import com.jme3.app.SimpleApplication;
@@ -47,6 +48,7 @@ public final class PvpRoomRenderChecks extends SimpleApplication {
     private String capture;
     private int captureFrames;
     private com.jme3.scene.Node board;
+    private long fleetWaitStarted;
 
     private PvpRoomRenderChecks(String role, Path journal) { this.role = role; this.journal = journal; }
 
@@ -76,7 +78,8 @@ public final class PvpRoomRenderChecks extends SimpleApplication {
         try {
             for (int i = 0; i < 2; i++) {
                 String role = i == 0 ? "A" : "B";
-                clients[i] = new ProcessBuilder(java, "--enable-native-access=ALL-UNNAMED", "-cp",
+                clients[i] = new ProcessBuilder(java, "--enable-native-access=ALL-UNNAMED",
+                        "-Dorg.lwjgl.system.SharedLibraryExtractPath=" + journal.resolve(role + "-natives"), "-cp",
                         System.getProperty("java.class.path"), PvpRoomRenderChecks.class.getName(), role, journal.toString())
                         .redirectErrorStream(true).redirectOutput(journal.resolve(role + ".log").toFile()).start();
             }
@@ -88,7 +91,7 @@ public final class PvpRoomRenderChecks extends SimpleApplication {
                 Thread.sleep(100);
             }
             require(clients[0].exitValue() == 0 && clients[1].exitValue() == 0, "Both desktop clients completed");
-            System.out.println("PASS: two desktop TCP clients; room updates without focus, opposite cameras/sides, white first, fleet submission, START_BATTLE, two 3D TCP attacks with equal revision, disconnect/reconnect, leave.");
+            System.out.println("PASS: two desktop TCP clients; room/Ready, editable placement, rejected fleet/retry, waiting/locked fleet, private START_BATTLE with Player 1 first, two synchronized attacks, disconnect/reconnect.");
         } finally {
             for (Process client : clients) if (client != null && client.isAlive()) client.destroyForcibly();
             for (String role : new String[] {"A", "B"}) {
@@ -158,7 +161,28 @@ public final class PvpRoomRenderChecks extends SimpleApplication {
                 if (!ready("A") && ready("B")) { action(PvpRoomPanel.Action.TOGGLE_READY); stage = 7; }
             }
             case 7 -> {
-                if (screens.networkPlacement()) { checkPlacement(); capture = "pvp-a-placement.png"; stage = 70; }
+                if (screens.networkPlacement()) {
+                    checkPlacement();
+                    screens.game().perform(PlacementHud.Action.READY);
+                    stage = 69;
+                }
+            }
+            case 69 -> {
+                var match = screens.pvp().match();
+                if (match != null && match.fleetSubmitted()) {
+                    require(match.phase() == GamePhase.PLACEMENT && !match.opponentSubmitted()
+                            && match.enemyBoard().ships().isEmpty(), "First Ready waits without receiving enemy positions");
+                    Board before = screens.game().state().player().board();
+                    screens.game().perform(PlacementHud.Action.RESET);
+                    screens.game().perform(PlacementHud.Action.RANDOM);
+                    screens.game().perform(PlacementHud.Action.READY);
+                    require(screens.game().state().player().board() == before && !screens.pvp().pending(),
+                            "Accepted fleet stays locked; repeated Ready cannot resubmit");
+                    require(textShown(guiNode, "Waiting for opponent"), "Waiting state is visible in HUD");
+                    capture = "pvp-a-placement.png";
+                    Files.writeString(journal.resolve("a-fleet-accepted"), "ok");
+                    stage = 70;
+                }
             }
             case 70 -> { if (battle()) { Files.writeString(journal.resolve("a-battle"), "ok"); stage = 71; } }
             case 71 -> {
@@ -216,7 +240,34 @@ public final class PvpRoomRenderChecks extends SimpleApplication {
             }
             case 3 -> { if (room != null && !ready("A")) { action(PvpRoomPanel.Action.TOGGLE_READY); stage = 4; } }
             case 4 -> {
-                if (screens.networkPlacement()) { checkPlacement(); capture = "pvp-b-placement.png"; stage = 40; }
+                if (screens.networkPlacement()) { checkPlacement(); stage = 38; }
+            }
+            case 38 -> {
+                if (Files.exists(journal.resolve("a-fleet-accepted")) && screens.pvp().match() != null) {
+                    require(screens.game().state().phase() == GamePhase.PLACEMENT, "Other client remains in placement");
+                    require(screens.pvp().match() != null && !screens.pvp().match().fleetSubmitted()
+                            && screens.pvp().match().enemyBoard().ships().isEmpty(), "Accepted opponent fleet stays private");
+                    require(screens.pvp().submitFleet(new Board()), "Send invalid fleet through production TCP adapter");
+                    stage = 39;
+                }
+            }
+            case 39 -> {
+                if (!screens.pvp().pending() && textShown(guiNode, "Exactly five ships required.")) {
+                    require(screens.game().state().phase() == GamePhase.PLACEMENT, "Rejected fleet stays in placement");
+                    screens.game().perform(PlacementHud.Action.REMOVE);
+                    require(screens.game().state().player().board().ships().size() == 4, "Rejected fleet unlocks editing");
+                    screens.game().perform(PlacementHud.Action.RANDOM);
+                    fleetWaitStarted = System.nanoTime();
+                    stage = 390;
+                }
+            }
+            case 390 -> {
+                if (System.nanoTime() - fleetWaitStarted > TimeUnit.MILLISECONDS.toNanos(500)) {
+                    require(screens.game().state().phase() == GamePhase.PLACEMENT, "No premature Battle while second player edits");
+                    screens.game().perform(PlacementHud.Action.READY);
+                    capture = "pvp-b-placement.png";
+                    stage = 40;
+                }
             }
             case 40 -> { if (battle()) { Files.writeString(journal.resolve("b-battle"), "ok"); stage = 41; } }
             case 41 -> {
@@ -266,18 +317,24 @@ public final class PvpRoomRenderChecks extends SimpleApplication {
         require(side == Side.WHITE ? cam.getLocation().x < 0 : cam.getLocation().x > 0,
                 "Camera faces opponent castle from assigned side");
         screens.game().perform(PlacementHud.Action.RANDOM);
-        screens.game().perform(PlacementHud.Action.READY);
-        require(screens.game().state().phase() == GamePhase.PLACEMENT, "Only server reply may start battle");
+        require(screens.game().state().canReady(), "Existing random placement produces a complete fleet");
     }
 
     private boolean battle() {
         if (screens.game().state().phase() != GamePhase.BATTLE) return false;
         var match = screens.pvp().match();
         require(match.enemyBoard().ships().isEmpty(), "No enemy placement leaked");
-        String whiteId = screens.pvp().room().players().stream().filter(player -> player.side() == Side.WHITE)
-                .findFirst().orElseThrow().clientId();
-        require(match.currentPlayerId().equals(whiteId) && match.turnNumber() == 1, "White starts on both clients");
+        String firstId = screens.pvp().room().players().getFirst().clientId();
+        require(match.currentPlayerId().equals(firstId) && match.turnNumber() == 1, "Player 1 starts on both clients");
         return true;
+    }
+
+    private static boolean textShown(com.jme3.scene.Node node, String value) {
+        for (var child : node.getChildren()) {
+            if (child instanceof com.jme3.font.BitmapText text && text.getText().contains(value)) return true;
+            if (child instanceof com.jme3.scene.Node nested && textShown(nested, value)) return true;
+        }
+        return false;
     }
 
     private void fireWhenOurTurn() throws Exception {
