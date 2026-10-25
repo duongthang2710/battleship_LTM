@@ -1,6 +1,7 @@
 package com.battleship.backend.server;
 
 import com.battleship.shared.protocol.ConnectRequest;
+import com.battleship.shared.auth.*;
 import com.battleship.shared.protocol.ConnectResponse;
 import com.battleship.shared.room.RoomError;
 import com.battleship.shared.protocol.Message;
@@ -29,6 +30,7 @@ public final class ClientHandler implements Runnable, AutoCloseable {
     }
 
     public String id() { return session.id(); }
+    public AccountProfile account() { return session.account(); }
 
     @Override
     public void run() {
@@ -63,8 +65,12 @@ public final class ClientHandler implements Runnable, AutoCloseable {
                         send(Message.reply(MessageType.PONG, message.requestId(), null));
                         LOG.fine("PONG " + id());
                     }
-                    case CREATE_ROOM, JOIN_ROOM, LEAVE_ROOM, READY, NOT_READY, SUBMIT_FLEET, ATTACK, REMATCH_REQUEST, REMATCH_DECLINE ->
-                            connections.rooms().handle(session.player(), message);
+                    case REGISTER, LOGIN, LOGOUT -> authenticate(message);
+                    case CREATE_ROOM, JOIN_ROOM, LEAVE_ROOM, READY, NOT_READY, SUBMIT_FLEET, ATTACK, REMATCH_REQUEST, REMATCH_DECLINE -> {
+                        if (session.account() == null) send(Message.reply(MessageType.AUTH_FAILED, message.requestId(),
+                                new AuthError("AUTH_REQUIRED", "Sign in before entering a PvP room.")));
+                        else connections.rooms().handle(session.player(), message);
+                    }
                     default -> send(Message.reply(MessageType.ERROR, message.requestId(),
                             new RoomError("INVALID_REQUEST", "Unsupported client message: " + message.type())));
                 }
@@ -74,6 +80,34 @@ public final class ClientHandler implements Runnable, AutoCloseable {
         } finally {
             close();
             connections.remove(id());
+        }
+    }
+
+    private void authenticate(Message message) {
+        try {
+            if (message.type() == MessageType.LOGOUT) {
+                connections.rooms().disconnected(id());
+                connections.auth().logout(id(), session.account());
+                session.authenticate(null);
+                send(Message.reply(MessageType.LOGOUT_OK, message.requestId(), null));
+            } else if (session.account() != null) {
+                send(Message.reply(MessageType.AUTH_FAILED, message.requestId(),
+                        new AuthError("ALREADY_AUTHENTICATED", "Sign out before using another account.")));
+            } else if (message.type() == MessageType.REGISTER) {
+                AccountProfile account = connections.auth().register(message.payloadAs(RegisterRequest.class));
+                send(Message.reply(MessageType.REGISTER_OK, message.requestId(), account));
+            } else {
+                AccountProfile account = connections.auth().login(id(), message.payloadAs(LoginRequest.class));
+                session.authenticate(account);
+                send(Message.reply(MessageType.AUTH_SUCCESS, message.requestId(), account));
+            }
+        } catch (com.google.gson.JsonParseException | IllegalArgumentException exception) {
+            String reason = exception instanceof com.google.gson.JsonParseException ? "Malformed account request." : exception.getMessage();
+            send(Message.reply(MessageType.AUTH_FAILED, message.requestId(), new AuthError("INVALID_CREDENTIALS", reason)));
+        } catch (java.sql.SQLException exception) {
+            LOG.warning("Account database request failed; SQL state=" + exception.getSQLState());
+            send(Message.reply(MessageType.AUTH_FAILED, message.requestId(),
+                    new AuthError("DATABASE_UNAVAILABLE", "Account service unavailable. Please try again.")));
         }
     }
 

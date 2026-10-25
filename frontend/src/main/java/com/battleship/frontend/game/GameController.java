@@ -84,6 +84,7 @@ public final class GameController {
         hud.hideTurnClock();
         ownSide = Side.WHITE;
         hud.setPlayerSide(null);
+        hud.setPlayerName(engine.state().player().name());
         minimap.setSide(null);
         gameOver.setNetworkMode(false);
         controls.setNetworkPlacement(false);
@@ -103,6 +104,7 @@ public final class GameController {
         minimap.setSide(side);
         gameOver.setNetworkMode(true);
         controls.setNetworkPlacement(true);
+        hud.setPlayerName(network.account().displayName());
         hud.setOpponentName(opponent);
         hud.setConnectionStatus("PVP " + roomCode + " / " + side + " / Player 1 starts");
         message = side + " fleet. Place ships, then Ready.";
@@ -117,9 +119,8 @@ public final class GameController {
             refreshHud();
             return;
         }
-        GameState previous = state();
         networkState = new GameState(snapshot.phase(),
-                new Player(snapshot.playerId(), previous.player().name(), snapshot.ownBoard().board()),
+                new Player(snapshot.playerId(), network.account().displayName(), snapshot.ownBoard().board()),
                 new Player(snapshot.opponentId(), snapshot.opponentName(), snapshot.enemyBoard().board()),
                 snapshot.currentPlayerId(), snapshot.winnerId(), snapshot.lastAttack(), PlacementState.initial(), true,
                 snapshot.turnNumber());
