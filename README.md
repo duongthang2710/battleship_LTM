@@ -9,6 +9,7 @@ bàn cờ và mô hình tàu 3D. Backend dùng **Java TCP Socket** để quản 
 ## Chức năng hiện có
 
 - **Bắt buộc đăng nhập:** mở ứng dụng → đăng ký/đăng nhập → Main Menu. Không còn chế độ Play Local.
+- **Leaderboard:** xếp hạng toàn server theo số trận thắng, tỷ lệ thắng hoặc số trận; 10 người/trang.
 - **PvP:** tạo phòng, tham gia bằng mã 6 ký tự, phòng chờ hai người, Ready/Not Ready,
   xếp tàu và đánh trận qua TCP.
 - Server chọn ngẫu nhiên phe trắng/đen khi bắt đầu xếp tàu; Player 1 trong phòng đi trước, độc lập với màu phe.
@@ -138,6 +139,7 @@ một message thành nhiều đoạn hoặc gộp nhiều message trong một l�
 | Phòng | `CREATE_ROOM`, `JOIN_ROOM`, `ROOM_CREATED`, `ROOM_JOINED`, `PLAYER_JOINED`, `ROOM_UPDATED` |
 | Sẵn sàng/rời phòng | `READY`, `NOT_READY`, `START_PLACEMENT`, `LEAVE_ROOM`, `ROOM_LEFT`, `PLAYER_LEFT` |
 | Trận đấu | `SUBMIT_FLEET`, `FLEET_ACCEPTED`, `START_BATTLE`, `ATTACK`, `MATCH_UPDATED`, `TURN_TIMER` |
+| Xếp hạng | `LEADERBOARD_REQUEST`, `LEADERBOARD_RESULT`, `LEADERBOARD_ERROR` |
 | Chơi lại | `REMATCH_REQUEST`, `REMATCH_DECLINE`, `REMATCH_UPDATED` |
 | Lệnh bị từ chối | `ERROR` |
 
@@ -311,6 +313,23 @@ Mã phòng chỉ chọn phòng bên trong server, không tự tìm server hay v�
 `-PserverPort=2210` cho các client. Khi chạy Java trực tiếp, các JVM property tương ứng
 là `battleship.host`, `battleship.port`, `battleship.player`.
 
+## Leaderboard
+
+Đăng nhập → **LEADERBOARD** trong Main Menu. Có **WINS**, **WIN RATE**, **MATCHES**,
+**PREVIOUS/NEXT**, **REFRESH** và **MAIN MENU**. Tự tải lại khi mở màn hình; mỗi trang tối đa 10 người.
+Chỉ người đã có ít nhất một trận PvP hoàn tất được xếp hạng. Không tạo dữ liệu mẫu trên bảng thật.
+
+- Mặc định: số thắng giảm dần → tỷ lệ thắng giảm dần → tổng trận giảm dần → username → ID, bảo đảm thứ tự ổn định.
+- **WIN RATE**: tối thiểu **10 trận PvP hoàn tất**; sắp theo tỷ lệ → số thắng → tổng trận → username → ID.
+- **MATCHES**: tổng trận → số thắng → tỷ lệ → username → ID.
+- Chỉ tính `mode=PVP`, `status=FINISHED`, có thời điểm/lý do kết thúc và đủ hai người thật với đúng một Victory/một Defeat, khớp `winner_slot`.
+  Timeout 60 giây và xử thua do rời trận hợp lệ đều được tính. BATTLE, ABORTED, PvAI hoặc bản ghi thiếu/mâu thuẫn bị loại.
+- Chuỗi thắng tính theo thời điểm kết thúc, rồi thời điểm bắt đầu; dấu `-` khi lịch sử có thắng/thua cùng hai mốc thời gian khiến thứ tự không xác định được.
+- Backend chờ các bản ghi kết quả đã xếp hàng được lưu trước khi truy vấn. Refresh sau lỗi lưu chỉ phản ánh dữ liệu thực sự đã ghi; không suy số trận từ client.
+
+Frontend dùng chung kết nối TCP đăng nhập; truy vấn PostgreSQL và kiểm tra yêu cầu nằm ở backend.
+SQL tổng hợp ở database, chỉ trả một trang cùng tổng số người đủ điều kiện. Không có cache xếp hạng phía client.
+
 ## Điều khiển
 
 | Chuột/phím | Thao tác |
@@ -367,6 +386,7 @@ Các kiểm tra giao diện cần môi trường OpenGL:
 .\gradlew.bat :frontend:checkPvpRooms
 .\gradlew.bat :frontend:checkAccountScreens
 .\gradlew.bat :frontend:checkPvpDisconnect
+.\gradlew.bat :frontend:checkLeaderboardScreens
 ```
 
 | Vấn đề | Kiểm tra |
@@ -382,3 +402,15 @@ Frontend và backend nên dùng cùng phiên bản source/protocol.
 
 Font Cormorant Garamond và Manrope có giấy phép SIL OFL trong
 `frontend/src/main/resources/fonts/`.
+
+Kiểm tra dữ liệu Leaderboard dùng **database kiểm thử mới, riêng biệt** để không thêm lịch sử mẫu vào database game.
+Ví dụ trên môi trường Docker phát triển (tên phải bắt đầu bằng `battleship_lb_test_`):
+
+```powershell
+docker compose exec -T postgres psql -U battleship -d postgres -c "CREATE DATABASE battleship_lb_test_manual"
+.\gradlew.bat :backend:checkLeaderboard -PleaderboardDatabase=battleship_lb_test_manual
+```
+
+Thay username `battleship` nếu `.env` dùng DB_USER khác. Test yêu cầu database mới/chưa có user;
+bao phủ dữ liệu rỗng/nhiều trận, đồng điểm, phân trang, chuỗi thắng, dữ liệu bị loại, timeout,
+kết quả mới qua TCP và lỗi truy vấn. Không chạy test này trên database vận hành.
