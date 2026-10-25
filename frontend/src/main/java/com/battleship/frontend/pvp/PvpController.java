@@ -15,6 +15,7 @@ import com.battleship.shared.match.FleetSubmission;
 import com.battleship.shared.match.ShipPlacement;
 import com.battleship.shared.match.AttackRequest;
 import com.battleship.shared.game.Board;
+import com.battleship.shared.auth.*;
 import com.battleship.shared.game.Coordinate;
 import java.util.function.Consumer;
 import java.util.logging.Logger;
@@ -34,9 +35,11 @@ public final class PvpController implements AutoCloseable {
     private final int port;
     private RoomSnapshot room;
     private String clientId;
+    private AccountProfile account;
     private String pendingRequest;
     private PvpRoomPanel.Action afterConnect;
     private boolean active;
+    private boolean accountView;
     private boolean joining;
     private boolean leaving;
     private String status = "Disconnected";
@@ -62,6 +65,19 @@ public final class PvpController implements AutoCloseable {
         port = Integer.getInteger("battleship.port", 2209);
         connection = new ConnectionManager(this::onMessage, this::onStatus);
     }
+
+    public AccountProfile account() { return account; }
+    public void openAccount() {
+        active = true;
+        accountView = true;
+        if (!connected()) connect();
+    }
+    public void login(String username, String password) { send(MessageType.LOGIN, new LoginRequest(username, password)); }
+    public void register(String username, String password, String confirmation) {
+        send(MessageType.REGISTER, new RegisterRequest(username, password, confirmation));
+    }
+    public void logout() { if (room == null) send(MessageType.LOGOUT, null); }
+    public void hide() { panel.hide(); }
 
     public RoomSnapshot room() { return room; }
     public String clientId() { return clientId; }
@@ -110,12 +126,13 @@ public final class PvpController implements AutoCloseable {
 
     public void open(MainMenu.Action action) {
         active = true;
+        accountView = false;
         joining = action == MainMenu.Action.JOIN_ROOM;
         if (joining) panel.showJoin(); else panel.showChoice();
         afterConnect = action == MainMenu.Action.CREATE_ROOM ? PvpRoomPanel.Action.CREATE_ROOM : null;
         if (connection.connected()) {
             panel.setConnection(true, false);
-            if (afterConnect != null) { afterConnect = null; handle(PvpRoomPanel.Action.CREATE_ROOM); }
+            if (account != null && afterConnect != null) { afterConnect = null; handle(PvpRoomPanel.Action.CREATE_ROOM); }
         } else connect();
     }
 
@@ -136,10 +153,10 @@ public final class PvpController implements AutoCloseable {
             case SHOW_JOIN -> { joining = true; panel.showJoin(); setStatus("Enter a six-character room code."); }
             case BACK -> {
                 if (joining) { joining = false; panel.showChoice(); setStatus(connected() ? "Connected" : "Disconnected"); }
-                else { close(); mainMenu.run(); }
+                else { hide(); mainMenu.run(); }
             }
-            case CREATE_ROOM -> send(MessageType.CREATE_ROOM, null);
-            case JOIN_ROOM -> send(MessageType.JOIN_ROOM, new JoinRoomRequest(panel.roomCode()));
+            case CREATE_ROOM -> { if (account != null) send(MessageType.CREATE_ROOM, null); }
+            case JOIN_ROOM -> { if (account != null) send(MessageType.JOIN_ROOM, new JoinRoomRequest(panel.roomCode())); }
             case LEAVE_ROOM -> { leaving = true; send(MessageType.LEAVE_ROOM, null); }
             case TOGGLE_READY -> {
                 if (room == null) return;
@@ -161,6 +178,7 @@ public final class PvpController implements AutoCloseable {
 
     public void disconnect() {
         connection.disconnect();
+        account = null;
         room = null;
         match = null;
         rematch = null;
@@ -174,7 +192,7 @@ public final class PvpController implements AutoCloseable {
         panel.setConnection(false, false);
         panel.showChoice();
         setStatus("Disconnected. Connect to find a room.");
-        showWaiting.run();
+        if (!accountView) showWaiting.run();
     }
 
     private boolean send(MessageType type, Object payload) {
@@ -199,12 +217,13 @@ public final class PvpController implements AutoCloseable {
         setStatus(state.detail());
         if (state.connected()) {
             clientId = state.player().clientId();
-            if (afterConnect != null) {
+            if (account != null && afterConnect != null) {
                 PvpRoomPanel.Action action = afterConnect;
                 afterConnect = null;
                 handle(action);
             }
         } else if (!state.connecting()) {
+            account = null;
             room = null;
             clientId = null;
             pendingRequest = null;
@@ -212,7 +231,7 @@ public final class PvpController implements AutoCloseable {
             leaving = false;
             panel.setBusy(false);
             if (joining) panel.showJoin(); else panel.showChoice();
-            showWaiting.run();
+            if (!accountView) showWaiting.run();
         }
     }
 
@@ -223,6 +242,17 @@ public final class PvpController implements AutoCloseable {
             panel.setBusy(false);
         }
         switch (message.type()) {
+            case AUTH_SUCCESS -> {
+                account = message.payloadAs(AccountProfile.class);
+                setStatus("Signed in as " + account.displayName() + ".");
+            }
+            case REGISTER_OK -> setStatus("Account created. Sign in to continue.");
+            case LOGOUT_OK -> { account = null; setStatus("Signed out."); }
+            case AUTH_FAILED -> {
+                AuthError error = message.payloadAs(AuthError.class);
+                if (error.code().equals("AUTH_REQUIRED")) account = null;
+                setStatus(error.message());
+            }
             case ROOM_CREATED, ROOM_JOINED, PLAYER_JOINED, ROOM_UPDATED, PLAYER_LEFT -> {
                 room = message.payloadAs(RoomSnapshot.class);
                 if (message.type() == MessageType.PLAYER_LEFT && match != null
@@ -297,8 +327,9 @@ public final class PvpController implements AutoCloseable {
                 clockReceivedAt = System.nanoTime();
             }
             case ERROR -> {
+                // A rejected earlier request must not cancel a queued Main Menu action.
+                if (leaving) menuAfterLeave = false;
                 leaving = false;
-                menuAfterLeave = false;
                 RoomError error = message.payloadAs(RoomError.class);
                 rematchStatus = error.message();
                 setStatus(error.message());
@@ -314,6 +345,7 @@ public final class PvpController implements AutoCloseable {
     @Override public void close() {
         active = false;
         connection.close();
+        account = null;
         room = null;
         match = null;
         rematch = null;

@@ -5,6 +5,7 @@ import com.battleship.frontend.camera.OrbitCamera;
 import com.battleship.frontend.effects.SceneEffects;
 import com.battleship.frontend.scene.BattleScene;
 import com.battleship.frontend.menu.MainMenu;
+import com.battleship.frontend.auth.AccountPanel;
 import com.battleship.frontend.pvp.PvpRoomPanel;
 import com.battleship.shared.room.RoomPlayer;
 import com.battleship.shared.room.RoomSnapshot;
@@ -15,6 +16,8 @@ import com.battleship.shared.game.Side;
 import com.battleship.shared.game.ShipType;
 import com.battleship.shared.game.Ship;
 import com.battleship.shared.game.ShipOrientation;
+import com.battleship.shared.game.AttackResultType;
+import com.battleship.shared.game.CellState;
 import com.jme3.app.FlyCamAppState;
 import com.jme3.app.SimpleApplication;
 import com.jme3.input.InputManager;
@@ -54,6 +57,8 @@ public final class PvpRoomRenderChecks extends SimpleApplication {
     private long fleetWaitStarted;
     private long finalTurnStarted;
     private int replayShots;
+    private long replayRevision = -1;
+    private final java.util.EnumSet<AttackResultType> replayResults = java.util.EnumSet.noneOf(AttackResultType.class);
 
     private PvpRoomRenderChecks(String role, Path journal) { this.role = role; this.journal = journal; }
 
@@ -84,7 +89,8 @@ public final class PvpRoomRenderChecks extends SimpleApplication {
             for (int i = 0; i < 2; i++) {
                 String role = i == 0 ? "A" : "B";
                 clients[i] = new ProcessBuilder(java, "--enable-native-access=ALL-UNNAMED",
-                        "-Dorg.lwjgl.system.SharedLibraryExtractPath=" + journal.resolve(role + "-natives"), "-cp",
+                        "-Dorg.lwjgl.system.SharedLibraryExtractPath=" + journal.resolve(role + "-natives"),
+                        "-Dbattleship.accountOnly=" + Boolean.getBoolean("battleship.accountOnly"), "-cp",
                         System.getProperty("java.class.path"), "-Dbattleship.port=" + System.getProperty("battleship.port", "2209"),
                         PvpRoomRenderChecks.class.getName(), role, journal.toString())
                         .redirectErrorStream(true).redirectOutput(journal.resolve(role + ".log").toFile()).start();
@@ -97,7 +103,9 @@ public final class PvpRoomRenderChecks extends SimpleApplication {
                 Thread.sleep(100);
             }
             require(clients[0].exitValue() == 0 && clients[1].exitValue() == 0, "Both desktop clients completed");
-            System.out.println("PASS: two desktop TCP clients; timeout result, rematch wait/decline, fresh placement, second complete battle with reversed results, menu cancellation and both main menus.");
+            System.out.println(Boolean.getBoolean("battleship.accountOnly")
+                    ? "PASS: two desktop account flows; registration, login, logout, session navigation and authenticated room entry."
+                    : "PASS: two desktop TCP clients; authenticated placement/retry, real timeout, HIT/MISS/SUNK, rematch/reset, fleet destruction, both menus.");
         } finally {
             for (Process client : clients) if (client != null && client.isAlive()) client.destroyForcibly();
             for (String role : new String[] {"A", "B"}) {
@@ -139,10 +147,87 @@ public final class PvpRoomRenderChecks extends SimpleApplication {
         try {
             if (stage == 0) {
                 click(screens.mainMenu().buttonCenter(MainMenu.Action.PVP));
-                stage = 1;
-            } else if (role.equals("A")) stepA();
+                stage = -1;
+            } else if (stage < 0) authenticate();
+            else if (Boolean.getBoolean("battleship.accountOnly")) accountNavigation();
+            else if (role.equals("A")) stepA();
             else stepB();
         } catch (Exception error) { throw new RuntimeException(error); }
+    }
+
+    private String accountName(String playerRole) {
+        return "qa_" + journal.getFileName().toString().substring(0, 8) + "_" + playerRole;
+    }
+
+    private void type(String value) { for (char character : value.toCharArray()) key(0, character); }
+
+    private void authenticate() {
+        AccountPanel panel = screens.accountPanel();
+        if (stage == -1 && panel.visible() && screens.pvp().connected()) {
+            click(panel.buttonCenter(AccountPanel.Action.SWITCH));
+            type(accountName(role)); key(KeyInput.KEY_TAB, '\t');
+            type("RenderCheckPassword2026!"); key(KeyInput.KEY_TAB, '\t');
+            type("RenderCheckPassword2026!");
+            capture = "account-register-" + role + ".png";
+            click(panel.buttonCenter(AccountPanel.Action.SUBMIT));
+            stage = -2;
+        } else if (stage == -2 && !screens.pvp().pending() && screens.pvp().status().startsWith("Account created")) {
+            click(panel.buttonCenter(AccountPanel.Action.SWITCH));
+            key(KeyInput.KEY_TAB, '\t'); type("RenderCheckPassword2026!");
+            capture = "account-login-" + role + ".png";
+            click(panel.buttonCenter(AccountPanel.Action.SUBMIT));
+            stage = -3;
+        } else if (stage == -3 && screens.pvp().account() != null && screens.roomPanel().visible()) {
+            require(screens.pvp().account().displayName().equals(accountName(role)), "Authenticated account controls displayed identity");
+            stage = 1;
+        }
+    }
+
+    private void accountNavigation() {
+        AccountPanel panel = screens.accountPanel();
+        switch (stage) {
+            case 1 -> { screens.requestMainMenu(); stage = 90; }
+            case 90 -> {
+                if (screens.mainMenu().visible()) {
+                    require(screens.pvp().account() != null, "Main Menu preserves account session");
+                    click(screens.mainMenu().buttonCenter(MainMenu.Action.PROFILE)); stage = 91;
+                }
+            }
+            case 91 -> {
+                if (panel.visible()) { click(panel.buttonCenter(AccountPanel.Action.LOGOUT)); stage = 92; }
+            }
+            case 92 -> {
+                if (!screens.pvp().pending() && screens.pvp().account() == null) {
+                    require(screens.pvp().status().equals("Signed out."), "Logout acknowledged by server");
+                    click(panel.buttonCenter(AccountPanel.Action.BACK)); stage = 93;
+                }
+            }
+            case 93 -> {
+                if (screens.mainMenu().visible()) {
+                    click(screens.mainMenu().buttonCenter(MainMenu.Action.CREATE_ROOM)); stage = 94;
+                }
+            }
+            case 94 -> {
+                if (panel.visible() && screens.pvp().connected()) {
+                    require(screens.pvp().room() == null, "Cannot bypass login with direct Create Room button");
+                    key(KeyInput.KEY_TAB, '\t'); type("RenderCheckPassword2026!");
+                    click(panel.buttonCenter(AccountPanel.Action.SUBMIT)); stage = 95;
+                }
+            }
+            case 95 -> {
+                if (screens.pvp().room() != null) {
+                    require(screens.pvp().account() != null, "Sign in resumes intended Create Room action");
+                    screens.pvp().returnToMainMenu(); stage = 96;
+                }
+            }
+            case 96 -> {
+                if (screens.mainMenu().visible()) {
+                    System.out.println("PASS account screens: register/login, session through menu, Profile logout, direct-room auth gate, login again and resume Create Room.");
+                    stop(); stage = 97;
+                }
+            }
+            default -> { }
+        }
     }
 
     private void stepA() throws Exception {
@@ -264,10 +349,17 @@ public final class PvpRoomRenderChecks extends SimpleApplication {
                     require(screens.game().state().phase() == GamePhase.GAME_OVER && textShown(guiNode, "VICTORY")
                             && !screens.pvp().rematch().available(), "Peer menu cancels rematch and preserves survivor result/room");
                     capture = "pvp-rematch-cancelled.png";
-                    click(new Vector2f(821, 386)); stage = 87;
+                    // Enter and MAIN MENU may arrive in the same input dispatch, before a server rejection.
+                    screens.game().perform(PlacementHud.Action.RESTART);
+                    require(screens.pvp().pending(), "Unavailable rematch request awaits server response");
+                    screens.game().primaryClick(new Vector2f(821, 386));
+                    require(screens.pvp().returningToMenu(), "Main Menu intent is queued behind the pending request");
+                    stage = 87;
                 }
             }
             case 87 -> {
+                require(screens.mainMenu().visible() || screens.pvp().pending() || screens.pvp().returningToMenu(),
+                        "Server rejection must not discard the queued Main Menu action");
                 if (screens.mainMenu().visible()) {
                     require(room == null && !screens.game().attackAnimating(), "Main Menu clears local match presentation");
                     System.out.println("PASS Client A: rematch waiting/decline, clean second round, victory, peer menu cancellation and own menu.");
@@ -392,13 +484,30 @@ public final class PvpRoomRenderChecks extends SimpleApplication {
         // Advance only presentation effects; server deadlines still use real monotonic time.
         if (screens.game().attackAnimating()) screens.game().update(3, new Vector2f(-1, -1));
         var state = screens.game().state();
-        if (state.phase() == GamePhase.GAME_OVER) return true;
+        var snapshot = screens.pvp().match();
+        if (snapshot != null && snapshot.lastAttack() != null && snapshot.revision() != replayRevision) {
+            replayRevision = snapshot.revision();
+            var attack = snapshot.lastAttack();
+            replayResults.add(attack.type());
+            Board defender = attack.defenderId().equals(state.player().id()) ? state.player().board() : state.enemy().board();
+            CellState expected = attack.type() == AttackResultType.MISS ? CellState.MISS
+                    : attack.sunk() ? CellState.SUNK : CellState.HIT;
+            require(defender.cell(attack.coordinate()).state() == expected, "3D client applies authoritative shot to correct board");
+            if (attack.sunk()) require(attack.affectedCells().stream().allMatch(cell -> defender.cell(cell).state() == CellState.SUNK),
+                    "All sunk cells agree with the server result");
+        }
+        if (state.phase() == GamePhase.GAME_OVER) {
+            require(replayResults.containsAll(java.util.List.of(AttackResultType.MISS, AttackResultType.HIT,
+                    AttackResultType.SUNK, AttackResultType.GAME_OVER)), "Both clients observed MISS/HIT/SUNK/fleet destruction");
+            return true;
+        }
         if (state.phase() != GamePhase.BATTLE || screens.pvp().pending() || !state.currentPlayerId().equals(state.player().id())) return false;
         if (!screens.game().enemyView()) screens.game().perform(PlacementHud.Action.TOGGLE_BOARD);
         var cells = java.util.stream.IntStream.range(0, ShipType.values().length)
                 .mapToObj(i -> new Ship(ShipType.values()[i], new Coordinate(i * 2, 0), ShipOrientation.HORIZONTAL))
                 .flatMap(ship -> ship.occupiedCells().stream()).toList();
-        pointAt(cells.get(replayShots++));
+        pointAt(replayShots == 0 ? new Coordinate(5, 5) : cells.get(replayShots - 1));
+        replayShots++;
         require(screens.pvp().pending(), "Replay click sends an authoritative TCP shot");
         return false;
     }
@@ -411,14 +520,14 @@ public final class PvpRoomRenderChecks extends SimpleApplication {
     private boolean twoPlayers() {
         RoomSnapshot room = screens.pvp().room();
         if (room == null || room.players().size() != 2) return false;
-        require(room.players().get(0).playerName().equals("Admiral A")
-                && room.players().get(1).playerName().equals("Admiral B"), "Both clients see the same two player names");
+        require(room.players().get(0).playerName().equals(accountName("A"))
+                && room.players().get(1).playerName().equals(accountName("B")), "Both clients see the same two player names");
         return true;
     }
 
     private boolean ready(String role) {
         RoomSnapshot room = screens.pvp().room();
-        return room != null && room.players().stream().anyMatch(player -> player.playerName().equals("Admiral " + role) && player.ready());
+        return room != null && room.players().stream().anyMatch(player -> player.playerName().equals(accountName(role)) && player.ready());
     }
 
     private void checkPlacement() {
@@ -440,7 +549,7 @@ public final class PvpRoomRenderChecks extends SimpleApplication {
         require(match.currentPlayerId().equals(firstId) && match.turnNumber() == 1, "Player 1 starts on both clients");
         require(match.timer().remainingMillis() > 59_000 && match.timer().remainingMillis() <= 60_000,
                 "Both clients receive initial 60-second deadline");
-        require(textShown(guiNode, "01:00") && textShown(guiNode, "TURN: Admiral A"), "Visible countdown names the current player");
+        require(textShown(guiNode, "01:00") && textShown(guiNode, "TURN: " + accountName("A")), "Visible countdown names the current player");
         return true;
     }
 

@@ -1,6 +1,8 @@
 package com.battleship.frontend.app;
 
 import com.battleship.frontend.camera.OrbitCamera;
+import com.battleship.frontend.auth.AccountPanel;
+import com.battleship.frontend.auth.AccountInput;
 import com.battleship.frontend.effects.AttackEffectManager;
 import com.battleship.frontend.graphics.Materials;
 import com.battleship.frontend.game.BoardPicker;
@@ -29,7 +31,7 @@ import com.jme3.scene.Spatial.CullHint;
 
 /** Owns screen navigation and input lifetimes; game rules remain in GameEngine. */
 public final class ScreenController implements AutoCloseable {
-    private enum Screen { MAIN_MENU, PVP, LOCAL_GAME, PVP_PLACEMENT }
+    private enum Screen { MAIN_MENU, ACCOUNT, PVP, LOCAL_GAME, PVP_PLACEMENT }
     private final InputManager input;
     private final OrbitCamera orbit;
     private final Runnable exit;
@@ -41,6 +43,10 @@ public final class ScreenController implements AutoCloseable {
     private final GameController game;
     private final PvpRoomPanel roomPanel;
     private final PvpController pvp;
+    private final AccountPanel accountPanel;
+    private AccountInput accountInput;
+    private PointerInput accountPointer;
+    private MainMenu.Action afterLogin;
     private PointerInput menuInput;
     private PointerInput roomInput;
     private RoomCodeInput codeInput;
@@ -57,6 +63,8 @@ public final class ScreenController implements AutoCloseable {
         this.orbit = orbit;
         this.exit = exit;
         menu = new MainMenu(assets);
+        accountPanel = new AccountPanel(assets);
+        gui.attachChild(accountPanel.root());
         hud = new BattleHud(assets, player);
         placementHud = new PlacementHud(assets);
         minimap = new OwnBoardMinimap(assets);
@@ -83,6 +91,7 @@ public final class ScreenController implements AutoCloseable {
         showMainMenu();
     }
 
+    public AccountPanel accountPanel() { return accountPanel; }
     public MainMenu mainMenu() { return menu; }
     public GameController game() { return game; }
     public PvpController pvp() { return pvp; }
@@ -93,6 +102,7 @@ public final class ScreenController implements AutoCloseable {
 
     public void resize(int width, int height) {
         menu.resize(width, height);
+        accountPanel.resize(width, height);
         hud.resize(width, height);
         placementHud.resize(width, height);
         minimap.resize(width, height);
@@ -102,6 +112,15 @@ public final class ScreenController implements AutoCloseable {
 
     public void update(float delta, Vector2f cursor) {
         pvp.update();
+        accountPanel.sync(pvp.account(), pvp.status(), pvp.pending(), pvp.connected());
+        if (screen == Screen.ACCOUNT && afterLogin != null && pvp.account() != null) {
+            pendingAction = afterLogin;
+            afterLogin = null;
+        }
+        if (screen == Screen.PVP && pvp.connected() && pvp.account() == null) {
+            afterLogin = MainMenu.Action.PVP;
+            showAccount();
+        }
         // Switch listeners after input dispatch, so the release cannot click the next screen.
         if (menuRequested) {
             menuRequested = false;
@@ -121,20 +140,21 @@ public final class ScreenController implements AutoCloseable {
             pendingAction = null;
             if (action == MainMenu.Action.LOCAL_GAME) startLocalGame();
             else if (action == MainMenu.Action.EXIT) { exit.run(); return; }
+            else if (action == MainMenu.Action.PROFILE) { afterLogin = null; showAccount(); }
             else if (action == MainMenu.Action.PVP || action == MainMenu.Action.CREATE_ROOM
                     || action == MainMenu.Action.JOIN_ROOM) {
-                showPvpRoom();
-                pvp.open(action);
+                if (pvp.account() == null) { afterLogin = action; showAccount(); }
+                else { showPvpRoom(); pvp.open(action); }
             }
         }
         if (screen == Screen.MAIN_MENU) menu.update(cursor);
         else if (screen == Screen.PVP) roomPanel.update(cursor);
-        else game.update(delta, cursor);
+        else if (screen != Screen.ACCOUNT) game.update(delta, cursor);
     }
 
     private void menuClick(Vector2f cursor) {
         menu.actionAt(cursor).ifPresent(action -> {
-            if (action == MainMenu.Action.LOCAL_GAME || action == MainMenu.Action.EXIT
+            if (action == MainMenu.Action.PROFILE || action == MainMenu.Action.LOCAL_GAME || action == MainMenu.Action.EXIT
                     || action == MainMenu.Action.PVP || action == MainMenu.Action.CREATE_ROOM
                     || action == MainMenu.Action.JOIN_ROOM) pendingAction = action;
         });
@@ -143,7 +163,7 @@ public final class ScreenController implements AutoCloseable {
     private void startLocalGame() {
         closeInputs();
         menu.hide();
-        pvp.close();
+        pvp.hide();
         screen = Screen.LOCAL_GAME;
         game.useLocalMode();
         orbit.useDefaultView();
@@ -154,7 +174,8 @@ public final class ScreenController implements AutoCloseable {
 
     private void showMainMenu() {
         closeInputs();
-        pvp.close();
+        pvp.hide();
+        afterLogin = null;
         screen = Screen.MAIN_MENU;
         game.useLocalMode();
         orbit.useDefaultView();
@@ -162,6 +183,34 @@ public final class ScreenController implements AutoCloseable {
         setGameHudVisible(false);
         menu.show();
         if (menuInput == null) menuInput = new PointerInput(input, orbit, this::menuClick);
+    }
+
+    private void showAccount() {
+        closeInputs();
+        menu.hide();
+        roomPanel.hide();
+        setGameHudVisible(false);
+        screen = Screen.ACCOUNT;
+        pvp.openAccount();
+        accountPanel.show();
+        accountInput = new AccountInput(input, accountPanel, this::accountAction);
+        accountPointer = new PointerInput(input, orbit, cursor -> accountPanel.click(cursor).ifPresent(this::accountAction));
+    }
+
+    private void accountAction(AccountPanel.Action action) {
+        if (!accountPanel.enabled(action)) return;
+        switch (action) {
+            case BACK -> { afterLogin = null; requestMainMenu(); }
+            case SWITCH -> accountPanel.switchMode();
+            case LOGOUT -> pvp.logout();
+            case CONNECT -> pvp.openAccount();
+            case SUBMIT -> {
+                if (!pvp.connected()) pvp.openAccount();
+                else if (accountPanel.registering()) pvp.register(accountPanel.username(), accountPanel.password(), accountPanel.confirmation());
+                else pvp.login(accountPanel.username(), accountPanel.password());
+                accountPanel.clearSecrets();
+            }
+        }
     }
 
     private void showPvpRoom() {
@@ -194,6 +243,9 @@ public final class ScreenController implements AutoCloseable {
     }
 
     private void closeInputs() {
+        accountPanel.hide();
+        if (accountInput != null) { accountInput.close(); accountInput = null; }
+        if (accountPointer != null) { accountPointer.close(); accountPointer = null; }
         if (menuInput != null) { menuInput.close(); menuInput = null; }
         if (gameInput != null) { gameInput.close(); gameInput = null; }
         if (roomInput != null) { roomInput.close(); roomInput = null; }

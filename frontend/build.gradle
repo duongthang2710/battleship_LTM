@@ -109,3 +109,14 @@ if (hostOs.contains('windows')) {
         enabled = false // The Windows launcher runs the private runtime instead of system Java.
     }
 }
+
+tasks.register('checkAccountScreens', JavaExec) {
+    group = 'verification'
+    description = 'Checks account forms/navigation with two desktop clients against a running backend.'
+    dependsOn testClasses
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'com.battleship.frontend.game.PvpRoomRenderChecks'
+    workingDir rootProject.projectDir
+    systemProperty 'battleship.port', providers.gradleProperty('serverPort').getOrElse('2209')
+    systemProperty 'battleship.accountOnly', 'true'
+}

@@ -81,7 +81,7 @@ public final class MainMenuFlowChecks extends SimpleApplication {
             for (MainMenu.Action action : MainMenu.Action.values()) {
                 if (action == MainMenu.Action.LOCAL_GAME || action == MainMenu.Action.EXIT
                         || action == MainMenu.Action.PVP || action == MainMenu.Action.CREATE_ROOM
-                        || action == MainMenu.Action.JOIN_ROOM) continue;
+                        || action == MainMenu.Action.JOIN_ROOM || action == MainMenu.Action.PROFILE) continue;
                 click(action);
                 require(screens.mainMenu().visible() && screens.game().state() == initialState,
                         "Planned button is inert: " + action);

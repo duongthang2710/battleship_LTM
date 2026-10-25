@@ -23,7 +23,8 @@ public final class BattleHud {
     private final Materials materials;
     private final BitmapFont display;
     private final BitmapFont body;
-    private final String playerName;
+    private String playerName;
+    private BitmapText playerText;
     private BitmapText connectionText;
     private BitmapText opponentText;
     private BitmapText playerSideText;
@@ -69,7 +70,7 @@ public final class BattleHud {
         text(body, "F A N T A S Y   N A V A L   S T R A T E G Y", 10, 60, h - 106, GOLD);
         ornatePanel(w - 427, h - 119, 391, 83);
         playerSideText = text(body, "RADIANT", 10, w - 406, h - 55, 0x91CEFF);
-        text(body, playerName, 17, w - 406, h - 79, IVORY);
+        playerText = text(body, playerName, 17, w - 406, h - 79, IVORY);
         line(w - 240, h - 100, w - 240, h - 55, GOLD);
         opponentSideText = text(body, "ABYSSAL", 10, w - 221, h - 55, 0xC1A3EC);
         setPlayerSide(side);
@@ -155,6 +156,11 @@ public final class BattleHud {
         opponentSideText.setText(side == null ? "ABYSSAL" : side.opponent() + " / OPPONENT");
         playerSideText.setColor(Materials.rgb(side == com.battleship.shared.game.Side.BLACK ? 0xC1A3EC : 0x91CEFF));
         opponentSideText.setColor(Materials.rgb(side == com.battleship.shared.game.Side.BLACK ? 0x91CEFF : 0xC1A3EC));
+    }
+
+    public void setPlayerName(String name) {
+        playerName = name;
+        if (playerText != null) playerText.setText(name);
     }
 
     public void setOpponentName(String name) {
