@@ -56,10 +56,14 @@ public final class Database {
     public void migrate() throws SQLException, IOException {
         try (Connection connection = open(); var statement = connection.createStatement()) {
             connection.setAutoCommit(false);
-            try (var resource = Database.class.getResourceAsStream("/db/V001__accounts_and_matches.sql")) {
-                if (resource == null) throw new IOException("Missing database migration");
+            try {
                 statement.execute("SELECT pg_advisory_xact_lock(2209001)");
-                statement.execute(new String(resource.readAllBytes(), StandardCharsets.UTF_8));
+                for (String migration : new String[] {"V001__accounts_and_matches.sql", "V002__match_summary.sql"}) {
+                    try (var resource = Database.class.getResourceAsStream("/db/" + migration)) {
+                        if (resource == null) throw new IOException("Missing database migration: " + migration);
+                        statement.execute(new String(resource.readAllBytes(), StandardCharsets.UTF_8));
+                    }
+                }
                 connection.commit();
             } catch (SQLException | IOException exception) {
                 connection.rollback();

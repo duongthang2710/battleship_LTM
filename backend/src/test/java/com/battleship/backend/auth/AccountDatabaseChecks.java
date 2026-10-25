@@ -71,18 +71,19 @@ public final class AccountDatabaseChecks {
         }
         database.migrate();
         try (var connection = database.open(); var query = connection.prepareStatement(
-                "SELECT password_hash FROM users WHERE id=?")) {
+                "SELECT password_hash, last_seen_at FROM users WHERE id=?")) {
             query.setObject(1, accountId);
             try (var row = query.executeQuery()) {
-                require(row.next() && !row.getString(1).contains(PASSWORD) && new PasswordHasher().verify(PASSWORD, row.getString(1)), "Hash persisted and survives repeat migration");
+                require(row.next() && !row.getString(1).contains(PASSWORD) && new PasswordHasher().verify(PASSWORD, row.getString(1)) && row.getTimestamp(2) != null, "Hash persisted and survives repeat migration");
             }
         }
         try (var connection = database.open(); var query = connection.prepareStatement(
-                "SELECT m.status, m.end_reason, p.result, p.shots, p.hits, p.ships_sunk FROM matches m JOIN match_players p ON p.match_id=m.id WHERE p.user_id=?")) {
+                "SELECT m.status, m.end_reason, p.result, p.shots, p.hits, p.ships_sunk, m.mode, m.winner_slot, m.total_turn, p.player_type FROM matches m JOIN match_players p ON p.match_id=m.id WHERE p.user_id=?")) {
             query.setObject(1, accountId);
             try (var row = query.executeQuery()) {
                 require(row.next() && row.getString(1).equals("FINISHED") && row.getString(2).equals("FLEET_DESTROYED")
-                        && row.getString(3).equals("VICTORY") && row.getInt(4) == 17 && row.getInt(5) == 17 && row.getInt(6) == 5,
+                        && row.getString(3).equals("VICTORY") && row.getInt(4) == 17 && row.getInt(5) == 17 && row.getInt(6) == 5 && row.getString(7).equals("PVP") && row.getInt(8) == 1
+                        && row.getInt(9) == 33 && row.getString(10).equals("HUMAN"),
                         "Server records exact winner and statistics in PostgreSQL");
                 require(!row.next(), "One match recorded once");
             }

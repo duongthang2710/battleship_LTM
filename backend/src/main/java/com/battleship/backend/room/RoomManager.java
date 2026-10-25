@@ -273,7 +273,7 @@ public final class RoomManager implements AutoCloseable {
         if (room.historyId != null && !room.historyFinished && room.match.phase() == GamePhase.GAME_OVER) {
             room.historyFinished = true;
             history.finish(room.historyId, java.time.Instant.now(), room.match.endReason().name(),
-                    room.match.statistics(room.accountIds));
+                    room.match.winnerSlot(), room.match.totalTurns(), room.match.statistics(room.accountIds));
         }
     }
 

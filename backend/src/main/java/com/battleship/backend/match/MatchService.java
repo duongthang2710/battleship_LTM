@@ -82,6 +82,14 @@ public final class MatchService {
     }
 
     public MatchEndReason endReason() { return endReason; }
+    public int totalTurns() {
+        return engine.state().player().board().attackedCells().size() + engine.state().enemy().board().attackedCells().size();
+    }
+    public Integer winnerSlot() {
+        String winner = engine.state().winnerId();
+        return winner == null ? null : winner.equals(engine.state().player().id()) ? 1 : 2;
+    }
+
     public TurnTimer timer() {
         long remaining = phase() == GamePhase.BATTLE ? Math.max(0, turnDeadline - nanoTime.getAsLong()) : 0;
         return new TurnTimer(revision, engine.state().turnNumber(), engine.state().currentPlayerId(),

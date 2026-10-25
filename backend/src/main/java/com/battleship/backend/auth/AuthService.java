@@ -38,11 +38,19 @@ public final class AuthService {
         if (!valid || user == null) throw new IllegalArgumentException("Incorrect username or password.");
         String owner = sessions.putIfAbsent(user.profile().id(), clientId);
         if (owner != null && !owner.equals(clientId)) throw new IllegalArgumentException("This account is already signed in.");
+        try { users.touch(user.profile().id()); }
+        catch (SQLException exception) { sessions.remove(user.profile().id(), clientId); throw exception; }
         return user.profile();
     }
 
     public void logout(String clientId, AccountProfile account) {
-        if (account != null) sessions.remove(account.id(), clientId);
+        if (account != null && sessions.remove(account.id(), clientId)) {
+            try { users.touch(account.id()); }
+            catch (SQLException exception) {
+                java.util.logging.Logger.getLogger(AuthService.class.getName())
+                        .warning("Could not update account last seen; SQL state=" + exception.getSQLState());
+            }
+        }
     }
 
     private String username(String value) {

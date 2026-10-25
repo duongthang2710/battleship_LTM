@@ -22,6 +22,14 @@ public final class UserRepository {
         return new AccountProfile(id, username, displayName);
     }
 
+    public void touch(UUID id) throws SQLException {
+        try (var connection = database.open(); var query = connection.prepareStatement(
+                "UPDATE users SET last_seen_at=CURRENT_TIMESTAMP WHERE id=?")) {
+            query.setObject(1, id);
+            query.executeUpdate();
+        }
+    }
+
     public StoredUser find(String username) throws SQLException {
         try (var connection = database.open(); var query = connection.prepareStatement(
                 "SELECT id, username, display_name, password_hash FROM users WHERE username = ?")) {

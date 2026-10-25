@@ -150,12 +150,12 @@ public final class TcpMatchChecks {
             }
         }
         try (var connection = database.open(); var query = connection.prepareStatement(
-                "SELECT m.status, m.end_reason, p.result FROM matches m JOIN match_players p ON p.match_id=m.id WHERE p.user_id=?")) {
+                "SELECT m.status, m.end_reason, m.winner_slot, m.total_turn, p.result FROM matches m JOIN match_players p ON p.match_id=m.id WHERE p.user_id=?")) {
             for (var id : accountIds) {
                 query.setObject(1, id);
                 try (var rows = query.executeQuery()) {
                     require(rows.next() && rows.getString(1).equals("FINISHED") && rows.getString(2).equals("PLAYER_LEFT")
-                            && rows.getString(3).equals("VICTORY"), "Departure persists winner and reason");
+                            && rows.getInt(3) == 1 && rows.getInt(4) == 0 && rows.getString(5).equals("VICTORY"), "Departure persists winner/reason/turns");
                     require(!rows.next(), "One departure cannot save two results");
                 }
             }

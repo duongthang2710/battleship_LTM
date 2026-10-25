@@ -226,8 +226,11 @@ Thông số theo [OWASP Password Storage](https://cheatsheetseries.owasp.org/che
 TCP hiện chưa mã hóa TLS: dùng mạng tin cậy/VPN khi truyền thông tin đăng nhập;
 triển khai công khai cần lớp mã hóa TCP/TLS trước khi dùng tài khoản thật.
 
-`users` lưu tài khoản; `matches` và `match_players` lưu thời gian, kết quả, nguyên nhân
+`users` lưu tài khoản và `last_seen_at` khi đăng nhập/đăng xuất; `matches` và `match_players` lưu thời gian, kết quả, nguyên nhân
 (`FLEET_DESTROYED`, `TURN_TIMEOUT`, `PLAYER_LEFT`) cùng số phát bắn/hit/tàu chìm theo tài khoản.
+Migration `V002__match_summary.sql` thêm `mode`, `winner_slot`, `total_turn`, `player_type`;
+`total_turn` đếm số phát bắn hợp lệ đã xử lý, không tính lượt bỏ dở khi hết giờ hoặc rời trận.
+Dữ liệu cũ được giữ và bổ sung tổng kết từ các thống kê đã có; lịch sử `ABORTED` cũ không bị đổi kết quả.
 Chỉ bắt đầu ghi trận khi cả hai đội hình hợp lệ vào Battle; mỗi rematch có ID mới.
 Ghi lịch sử chạy trong hàng đợi riêng, transaction; lỗi ghi được log, không chặn lượt bắn.
 Chưa có màn hình lịch sử trận hoặc đặt lại mật khẩu trong phạm vi này.
