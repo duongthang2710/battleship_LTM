@@ -120,3 +120,14 @@ tasks.register('checkAccountScreens', JavaExec) {
     systemProperty 'battleship.port', providers.gradleProperty('serverPort').getOrElse('2209')
     systemProperty 'battleship.accountOnly', 'true'
 }
+
+tasks.register('checkPvpDisconnect', JavaExec) {
+    group = 'verification'
+    description = 'Checks opponent departure and the final result in two desktop clients.'
+    dependsOn testClasses
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'com.battleship.frontend.game.PvpRoomRenderChecks'
+    workingDir rootProject.projectDir
+    systemProperty 'battleship.port', providers.gradleProperty('serverPort').getOrElse('2209')
+    systemProperty 'battleship.disconnectOnly', 'true'
+}

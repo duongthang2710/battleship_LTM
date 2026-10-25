@@ -221,9 +221,13 @@ public final class GameEngine {
         return result;
     }
 
-    public boolean timeoutCurrentTurn() {
+    public boolean timeoutCurrentTurn() { return forfeit(state.currentPlayerId()); }
+
+    public boolean forfeit(String playerId) {
         if (state.phase() != GamePhase.BATTLE) return false;
-        String winner = state.currentPlayerId().equals(state.player().id()) ? state.enemy().id() : state.player().id();
+        if (!state.player().id().equals(playerId) && !state.enemy().id().equals(playerId))
+            throw new IllegalArgumentException("Unknown player");
+        String winner = playerId.equals(state.player().id()) ? state.enemy().id() : state.player().id();
         state = new GameState(GamePhase.GAME_OVER, state.player(), state.enemy(), state.currentPlayerId(),
                 winner, null, state.placement(), state.ready(), state.turnNumber());
         return true;

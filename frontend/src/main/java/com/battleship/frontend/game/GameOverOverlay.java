@@ -33,6 +33,7 @@ public final class GameOverOverlay {
     private final BitmapFont body;
     private BitmapText title;
     private BitmapText winner;
+    private BitmapText resultReason;
     private BitmapText restartLabel;
     private BitmapText rematchStatus;
     private BitmapText declineLabel;
@@ -59,6 +60,17 @@ public final class GameOverOverlay {
         restartLabel.setText("PLAY AGAIN");
         restartLabel.setLocalTranslation(BUTTON_X + (BUTTON_WIDTH - restartLabel.getLineWidth()) / 2, BUTTON_Y + 24, 42);
         setRematchStatus("", true, false);
+        setEndReason(null);
+    }
+
+    public void setEndReason(com.battleship.shared.match.MatchEndReason reason) {
+        if (resultReason == null) return;
+        resultReason.setText(reason == null ? "WINNER" : switch (reason) {
+            case FLEET_DESTROYED -> "FLEET DESTROYED";
+            case TURN_TIMEOUT -> "TURN TIME EXPIRED";
+            case PLAYER_LEFT -> "PLAYER LEFT THE MATCH";
+        });
+        center(resultReason, 131);
     }
 
     public void setRematchStatus(String status, boolean canPlay, boolean canDecline) {
@@ -127,7 +139,7 @@ public final class GameOverOverlay {
         Geometry crest = panel(WIDTH / 2, HEIGHT - 29, 7, 7, Materials.rgb(GOLD), 41);
         crest.rotate(0, 0, FastMath.QUARTER_PI);
         title = text(display, "VICTORY", 46, HEIGHT - 42, GOLD);
-        text(body, "WINNER", 10, 131, GOLD);
+        resultReason = text(body, "WINNER", 10, 131, GOLD);
         winner = text(display, "", 25, 108, IVORY);
         panel(BUTTON_X, BUTTON_Y, BUTTON_WIDTH, BUTTON_HEIGHT,
                 new ColorRGBA(0.025f, 0.055f, 0.095f, 1), 40);

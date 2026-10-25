@@ -114,6 +114,7 @@ public final class GameController {
     public void applyNetworkState(MatchSnapshot snapshot) {
         if (!networkPlacement) return;
         submitted = snapshot.fleetSubmitted();
+        gameOver.setEndReason(snapshot.endReason());
         if (snapshot.phase() == GamePhase.PLACEMENT) {
             message = submitted ? "Fleet locked. Waiting for opponent." : "Opponent ready. Finish your fleet.";
             refreshHud();
@@ -126,8 +127,8 @@ public final class GameController {
                 snapshot.turnNumber());
         AttackResult attack = snapshot.lastAttack();
         effects.clear();
-        if (snapshot.timedOut()) {
-            message = "Turn time expired.";
+        if (snapshot.phase() == GamePhase.GAME_OVER && snapshot.endReason() != com.battleship.shared.match.MatchEndReason.FLEET_DESTROYED) {
+            message = snapshot.timedOut() ? "Turn time expired." : "A player left the match.";
             refresh();
             gameOver.show(state());
             return;

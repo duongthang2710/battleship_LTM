@@ -147,9 +147,12 @@ Server dùng `System.nanoTime()` để quyết định hết giờ, đồng th�
 khoảng mỗi giây. Client chỉ nội suy thời gian còn lại để hiển thị, không tự xử
 thắng/thua. Timeout và lệnh bắn được xử lý dưới cùng khóa; phát bắn được xử lý
 tại hoặc sau deadline bị từ chối. Không có timer riêng tồn đọng từ lượt cũ.
-Heartbeat `PING/PONG` duy trì kết nối. Khi một người rời hoặc mất kết nối,
-trận đang chơi bị hủy và người còn lại trở về phòng chờ với Ready được reset.
+Heartbeat `PING/PONG` duy trì kết nối. Khi một người rời hoặc mất kết nối trong Battle,
+server xử thua người đó, gửi Victory cho đối thủ và lưu kết quả `PLAYER_LEFT`.
+Trong Waiting Room/Placement, server cập nhật thành viên và đưa người còn lại về phòng chờ.
 Nếu trận đã kết thúc, kết quả được giữ nguyên và yêu cầu chơi lại bị hủy.
+Màn kết quả hiển thị lý do kết thúc: phá hủy hạm đội, hết giờ hoặc người chơi rời trận.
+Timeout đã xảy ra được ưu tiên khi yêu cầu rời trận đến đúng/sau deadline; kết quả không bị ghi đè.
 
 ## Chạy sau khi clone
 
@@ -354,6 +357,7 @@ Các kiểm tra giao diện cần môi trường OpenGL:
 # Cần backend chạy riêng tại localhost:2209:
 .\gradlew.bat :frontend:checkPvpRooms
 .\gradlew.bat :frontend:checkAccountScreens
+.\gradlew.bat :frontend:checkPvpDisconnect
 ```
 
 | Vấn đề | Kiểm tra |

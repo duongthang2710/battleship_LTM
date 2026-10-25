@@ -90,7 +90,8 @@ public final class PvpRoomRenderChecks extends SimpleApplication {
                 String role = i == 0 ? "A" : "B";
                 clients[i] = new ProcessBuilder(java, "--enable-native-access=ALL-UNNAMED",
                         "-Dorg.lwjgl.system.SharedLibraryExtractPath=" + journal.resolve(role + "-natives"),
-                        "-Dbattleship.accountOnly=" + Boolean.getBoolean("battleship.accountOnly"), "-cp",
+                        "-Dbattleship.accountOnly=" + Boolean.getBoolean("battleship.accountOnly"),
+                        "-Dbattleship.disconnectOnly=" + Boolean.getBoolean("battleship.disconnectOnly"), "-cp",
                         System.getProperty("java.class.path"), "-Dbattleship.port=" + System.getProperty("battleship.port", "2209"),
                         PvpRoomRenderChecks.class.getName(), role, journal.toString())
                         .redirectErrorStream(true).redirectOutput(journal.resolve(role + ".log").toFile()).start();
@@ -103,8 +104,9 @@ public final class PvpRoomRenderChecks extends SimpleApplication {
                 Thread.sleep(100);
             }
             require(clients[0].exitValue() == 0 && clients[1].exitValue() == 0, "Both desktop clients completed");
-            System.out.println(Boolean.getBoolean("battleship.accountOnly")
-                    ? "PASS: two desktop account flows; registration, login, logout, session navigation and authenticated room entry."
+            System.out.println(Boolean.getBoolean("battleship.disconnectOnly")
+                    ? "PASS: two desktop clients, opponent departure, private final victory/reason, rematch disabled, menu/login."
+                    : Boolean.getBoolean("battleship.accountOnly") ? "PASS: two desktop account flows; registration, login, logout, session navigation and authenticated room entry."
                     : "PASS: two desktop TCP clients; authenticated placement/retry, real timeout, HIT/MISS/SUNK, rematch/reset, fleet destruction, both menus.");
         } finally {
             for (Process client : clients) if (client != null && client.isAlive()) client.destroyForcibly();
@@ -152,6 +154,7 @@ public final class PvpRoomRenderChecks extends SimpleApplication {
                 require(!screens.mainMenu().visible(), "Requesting Main Menu cannot bypass login");
                 stage = -1;
             } else if (stage < 0) authenticate();
+            else if (Boolean.getBoolean("battleship.disconnectOnly")) disconnectBattle();
             else if (Boolean.getBoolean("battleship.accountOnly")) accountNavigation();
             else if (role.equals("A")) stepA();
             else stepB();
@@ -184,6 +187,57 @@ public final class PvpRoomRenderChecks extends SimpleApplication {
             require(screens.pvp().account().displayName().equals(accountName(role)), "Authenticated account controls displayed identity");
             if (!Boolean.getBoolean("battleship.accountOnly")) click(screens.mainMenu().buttonCenter(MainMenu.Action.PVP));
             stage = 1;
+        }
+    }
+
+    private void disconnectBattle() throws Exception {
+        var room = screens.pvp().room();
+        switch (stage) {
+            case 1 -> {
+                if (role.equals("A")) { action(PvpRoomPanel.Action.CREATE_ROOM); stage = 2; }
+                else if (Files.exists(journal.resolve("code"))) { join(Files.readString(journal.resolve("code"))); stage = 2; }
+            }
+            case 2 -> {
+                if (role.equals("A") && room != null) Files.writeString(journal.resolve("code"), room.roomCode());
+                if (twoPlayers() && !screens.pvp().pending()) { action(PvpRoomPanel.Action.TOGGLE_READY); stage = 3; }
+            }
+            case 3 -> {
+                if (screens.networkPlacement()) {
+                    screens.game().perform(PlacementHud.Action.RANDOM);
+                    screens.game().perform(PlacementHud.Action.READY); stage = 4;
+                }
+            }
+            case 4 -> {
+                if (screens.game().state().phase() == GamePhase.BATTLE) {
+                    Files.writeString(journal.resolve(role + "-in-battle"), "ok");
+                    if (role.equals("A")) stage = 5;
+                    else if (Files.exists(journal.resolve("A-in-battle"))) {
+                        screens.pvp().disconnect(); stage = 5;
+                    }
+                }
+            }
+            case 5 -> {
+                if (role.equals("A") && screens.game().state().phase() == GamePhase.GAME_OVER) {
+                    require(screens.pvp().match().endReason() == com.battleship.shared.match.MatchEndReason.PLAYER_LEFT
+                            && screens.game().state().winnerId().equals(screens.game().state().player().id())
+                            && textShown(guiNode, "VICTORY") && textShown(guiNode, "PLAYER LEFT THE MATCH")
+                            && !screens.roomPanel().visible(), "Disconnected opponent yields visible victory/reason on current Battle screen");
+                    require(screens.pvp().room().players().size() == 1 && !screens.pvp().rematch().available(), "No rematch with an absent player");
+                    capture = "pvp-disconnect-victory.png";
+                    Files.writeString(journal.resolve("A-disconnect-victory"), "ok");
+                    stage = 50;
+                } else if (role.equals("B") && Files.exists(journal.resolve("A-disconnect-victory"))) {
+                    require(screens.accountPanel().visible() && !screens.mainMenu().visible(), "Disconnected client returns to mandatory login");
+                    System.out.println("PASS client B: explicit disconnect during Battle returns to login."); stop(); stage = 7;
+                }
+            }
+            case 50 -> { if (capture == null) { screens.pvp().returnToMainMenu(); stage = 6; } }
+            case 6 -> {
+                if (screens.mainMenu().visible()) {
+                    System.out.println("PASS client A: opponent disconnect ends Battle, victory/reason, cancelled rematch and Main Menu."); stop(); stage = 7;
+                }
+            }
+            default -> { }
         }
     }
 

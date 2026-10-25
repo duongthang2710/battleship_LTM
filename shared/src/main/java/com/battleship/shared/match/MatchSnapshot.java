@@ -8,4 +8,4 @@ public record MatchSnapshot(long revision, GamePhase phase, String playerId, Str
                             String opponentName, Side side, BoardView ownBoard, BoardView enemyBoard,
                             boolean fleetSubmitted, boolean opponentSubmitted, String currentPlayerId,
                             int turnNumber, String winnerId, AttackResult lastAttack,
-                            TurnTimer timer, boolean timedOut) { }
+                            TurnTimer timer, boolean timedOut, MatchEndReason endReason) { }

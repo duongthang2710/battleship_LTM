@@ -61,7 +61,7 @@ public final class MatchRepository implements AutoCloseable {
                 try (var match = connection.prepareStatement("UPDATE matches SET ended_at=?, status=?, end_reason=? WHERE id=? AND status='BATTLE'");
                      var player = connection.prepareStatement("UPDATE match_players SET result=?, shots=?, hits=?, ships_sunk=? WHERE match_id=? AND user_id=?")) {
                     match.setTimestamp(1, java.sql.Timestamp.from(ended));
-                    match.setString(2, reason.equals("PLAYER_LEFT") ? "ABORTED" : "FINISHED");
+                    match.setString(2, "FINISHED");
                     match.setString(3, reason);
                     match.setObject(4, matchId);
                     if (match.executeUpdate() == 1) for (Statistics stats : statistics) {

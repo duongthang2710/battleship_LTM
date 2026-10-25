@@ -5,6 +5,7 @@ import com.battleship.shared.match.BoardView;
 import com.battleship.shared.match.FleetSubmission;
 import com.battleship.shared.match.MatchSnapshot;
 import com.battleship.shared.match.TurnTimer;
+import com.battleship.shared.match.MatchEndReason;
 import com.battleship.shared.room.RoomPlayer;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
@@ -19,7 +20,7 @@ public final class MatchService {
     private long revision = 1;
     private long turnDeadline;
     private long lastClockSecond = 60;
-    private boolean timedOut;
+    private MatchEndReason endReason;
 
     public MatchService(List<RoomPlayer> players) {
         this(players, System::nanoTime);
@@ -54,6 +55,7 @@ public final class MatchService {
         if (result.accepted()) {
             revision++;
             if (phase() == GamePhase.BATTLE) startTurn();
+            else if (phase() == GamePhase.GAME_OVER) endReason = MatchEndReason.FLEET_DESTROYED;
         }
         return result;
     }
@@ -66,11 +68,20 @@ public final class MatchService {
     public boolean expireTurn() {
         if (phase() != GamePhase.BATTLE || nanoTime.getAsLong() - turnDeadline < 0) return false;
         engine.timeoutCurrentTurn();
-        timedOut = true;
+        endReason = MatchEndReason.TURN_TIMEOUT;
         revision++;
         return true;
     }
 
+    public boolean forfeit(String clientId) {
+        if (expireTurn()) return true;
+        if (!engine.forfeit(clientId)) return false;
+        endReason = MatchEndReason.PLAYER_LEFT;
+        revision++;
+        return true;
+    }
+
+    public MatchEndReason endReason() { return endReason; }
     public TurnTimer timer() {
         long remaining = phase() == GamePhase.BATTLE ? Math.max(0, turnDeadline - nanoTime.getAsLong()) : 0;
         return new TurnTimer(revision, engine.state().turnNumber(), engine.state().currentPlayerId(),
@@ -86,11 +97,11 @@ public final class MatchService {
         return timer;
     }
 
-    public List<MatchRepository.Statistics> statistics(java.util.Map<String, java.util.UUID> accounts, boolean aborted) {
+    public List<MatchRepository.Statistics> statistics(java.util.Map<String, java.util.UUID> accounts) {
         GameState state = engine.state();
         return List.of(state.player(), state.enemy()).stream().map(player -> {
             Player target = player.id().equals(state.player().id()) ? state.enemy() : state.player();
-            String result = aborted ? "ABORTED" : player.id().equals(state.winnerId()) ? "VICTORY" : "DEFEAT";
+            String result = player.id().equals(state.winnerId()) ? "VICTORY" : "DEFEAT";
             return MatchRepository.Statistics.from(accounts.get(player.id()), result, target.board());
         }).toList();
     }
@@ -106,7 +117,7 @@ public final class MatchService {
         return new MatchSnapshot(revision, state.phase(), own.id(), enemy.id(), enemy.name(),
                 first ? firstSide : firstSide.opponent(), BoardView.from(own.board(), false), BoardView.from(enemy.board(), true),
                 own.fleet().isComplete(), enemy.fleet().isComplete(), state.currentPlayerId(), state.turnNumber(),
-                state.winnerId(), attack, timer(), timedOut);
+                state.winnerId(), attack, timer(), endReason == MatchEndReason.TURN_TIMEOUT, endReason);
     }
 
 }

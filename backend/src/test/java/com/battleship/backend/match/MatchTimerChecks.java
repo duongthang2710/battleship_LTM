@@ -52,6 +52,20 @@ final class MatchTimerChecks {
                 "A shot processed exactly at expiry loses to timeout");
         require(match.snapshot("second").winnerId().equals("second")
                 && match.snapshot("second").ownBoard().shots().isEmpty(), "Late shot cannot damage defender");
+        AtomicLong disconnectTime = new AtomicLong();
+        MatchService disconnected = match(disconnectTime);
+        require(disconnected.forfeit("second") && disconnected.snapshot("first").winnerId().equals("first")
+                && disconnected.endReason() == com.battleship.shared.match.MatchEndReason.PLAYER_LEFT, "Disconnect ends a live match");
+        long disconnectRevision = disconnected.snapshot("first").revision();
+        disconnectTime.set(TimeUnit.SECONDS.toNanos(120));
+        require(!disconnected.expireTurn() && !disconnected.forfeit("first")
+                && disconnected.snapshot("first").revision() == disconnectRevision, "Stale timer/disconnect cannot overwrite forfeit");
+        AtomicLong boundary = new AtomicLong();
+        MatchService deadlineFirst = match(boundary);
+        boundary.set(TimeUnit.SECONDS.toNanos(60));
+        require(deadlineFirst.forfeit("second") && deadlineFirst.snapshot("first").winnerId().equals("second")
+                && deadlineFirst.endReason() == com.battleship.shared.match.MatchEndReason.TURN_TIMEOUT,
+                "Expired turn takes precedence over a concurrent opponent departure");
         System.out.println("PASS turn timer: 60 seconds, valid reset, invalid/repeat unchanged, deadline boundary, stale expiry, timeout and post-game guard.");
     }
 

@@ -226,7 +226,7 @@ public final class RoomManager implements AutoCloseable {
     }
 
     private void publishMatch(Room room, MessageType event, String actorId, String requestId) {
-        recordMatch(room, false);
+        recordMatch(room);
         for (String id : room.players.keySet()) connections.send(id, Message.reply(event,
                 id.equals(actorId) ? requestId : java.util.UUID.randomUUID().toString(), room.match.snapshot(id)));
     }
@@ -235,8 +235,9 @@ public final class RoomManager implements AutoCloseable {
         String code = memberships.remove(clientId);
         if (code == null) return;
         Room room = rooms.get(code);
+        if (room.match != null && room.match.phase() == GamePhase.BATTLE && room.match.forfeit(clientId))
+            publishMatch(room, MessageType.MATCH_UPDATED, null, null);
         boolean finished = room.match != null && room.match.phase() == GamePhase.GAME_OVER;
-        if (room.match != null && room.match.phase() == GamePhase.BATTLE) recordMatch(room, true);
         room.players.remove(clientId);
         if (requestId != null) connections.send(clientId, Message.reply(MessageType.ROOM_LEFT, requestId, null));
         if (room.players.isEmpty()) {
@@ -255,7 +256,7 @@ public final class RoomManager implements AutoCloseable {
         LOG.info("PLAYER_LEFT code=" + code + " player=" + clientId);
     }
 
-    private void recordMatch(Room room, boolean aborted) {
+    private void recordMatch(Room room) {
         if (room.historyId == null && room.match.phase() == GamePhase.BATTLE) {
             room.historyId = java.util.UUID.randomUUID();
             Map<String, java.util.UUID> accounts = new HashMap<>();
@@ -269,11 +270,10 @@ public final class RoomManager implements AutoCloseable {
             room.accountIds = Map.copyOf(accounts);
             history.start(room.historyId, java.time.Instant.now(), java.util.List.copyOf(participants));
         }
-        if (room.historyId != null && !room.historyFinished && (aborted || room.match.phase() == GamePhase.GAME_OVER)) {
+        if (room.historyId != null && !room.historyFinished && room.match.phase() == GamePhase.GAME_OVER) {
             room.historyFinished = true;
-            String reason = aborted ? "PLAYER_LEFT" : room.match.snapshot(room.players.keySet().iterator().next()).timedOut()
-                    ? "TURN_TIMEOUT" : "FLEET_DESTROYED";
-            history.finish(room.historyId, java.time.Instant.now(), reason, room.match.statistics(room.accountIds, aborted));
+            history.finish(room.historyId, java.time.Instant.now(), room.match.endReason().name(),
+                    room.match.statistics(room.accountIds));
         }
     }
 

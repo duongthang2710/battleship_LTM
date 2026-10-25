@@ -17,6 +17,7 @@ public final class TcpMatchChecks {
         MatchTimerChecks.run();
         com.battleship.backend.auth.AccountDatabaseChecks.run();
         playerOneStartsWithEitherColor();
+        disconnectionRounds();
         try (TcpServer server = new TcpServer(0)) {
             Thread.ofVirtual().start(() -> { try { server.start(); } catch (IOException e) { throw new UncheckedIOException(e); } });
             try (Peer a = new Peer(server.port(), "A"); Peer b = new Peer(server.port(), "B")) {
@@ -104,6 +105,64 @@ public final class TcpMatchChecks {
         }
     }
 
+    private static void disconnectionRounds() throws Exception {
+        var database = com.battleship.backend.database.Database.fromEnvironment();
+        var accountIds = new java.util.ArrayList<java.util.UUID>();
+        try (TcpServer server = new TcpServer(0)) {
+            Thread.ofVirtual().start(() -> { try { server.start(); } catch (IOException e) { throw new UncheckedIOException(e); } });
+            for (String scenario : List.of("leave", "disconnect", "broken-frame", "waiting")) {
+                try (Peer a = new Peer(server.port(), "Survivor"); Peer b = new Peer(server.port(), "Leaving")) {
+                    a.send(MessageType.CREATE_ROOM, null);
+                    String code = a.read(MessageType.ROOM_CREATED).payloadAs(RoomSnapshot.class).roomCode();
+                    b.send(MessageType.JOIN_ROOM, new JoinRoomRequest(code)); b.read(MessageType.ROOM_JOINED); a.read(MessageType.PLAYER_JOINED);
+                    if (scenario.equals("waiting")) {
+                        b.close();
+                        require(a.read(MessageType.PLAYER_LEFT).payloadAs(RoomSnapshot.class).players().size() == 1,
+                                "Disconnect in waiting updates membership without declaring a winner");
+                        a.send(MessageType.LEAVE_ROOM, null); a.read(MessageType.ROOM_LEFT);
+                        continue;
+                    }
+                    accountIds.add(a.accountId);
+                    a.send(MessageType.READY, null); a.read(MessageType.ROOM_UPDATED); b.read(MessageType.ROOM_UPDATED);
+                    b.send(MessageType.READY, null); a.read(MessageType.ROOM_UPDATED); b.read(MessageType.ROOM_UPDATED);
+                    a.read(MessageType.START_PLACEMENT); b.read(MessageType.START_PLACEMENT);
+                    a.send(MessageType.SUBMIT_FLEET, fleet()); a.read(MessageType.FLEET_ACCEPTED); b.read(MessageType.FLEET_ACCEPTED);
+                    b.send(MessageType.SUBMIT_FLEET, fleet()); a.read(MessageType.START_BATTLE); b.read(MessageType.START_BATTLE);
+                    if (scenario.equals("leave")) {
+                        b.send(MessageType.LEAVE_ROOM, null);
+                        require(b.read(MessageType.MATCH_UPDATED).payloadAs(MatchSnapshot.class).winnerId().equals(a.id), "Leaving player receives final defeat before room ack");
+                        b.read(MessageType.ROOM_LEFT);
+                    } else if (scenario.equals("broken-frame")) {
+                        b.output.writeInt(100_000); b.output.flush();
+                    } else b.close();
+                    MatchSnapshot result = a.read(MessageType.MATCH_UPDATED).payloadAs(MatchSnapshot.class);
+                    require(result.phase() == GamePhase.GAME_OVER && result.winnerId().equals(a.id)
+                            && result.endReason() == com.battleship.shared.match.MatchEndReason.PLAYER_LEFT
+                            && result.timer().remainingMillis() == 0 && !result.timedOut()
+                            && result.enemyBoard().ships().isEmpty(), "Peer departure produces one private final victory: " + scenario);
+                    require(!a.read(MessageType.REMATCH_UPDATED).payloadAs(RematchState.class).available(), "Rematch is unavailable after departure");
+                    a.read(MessageType.PLAYER_LEFT);
+                    a.send(MessageType.ATTACK, new AttackRequest(new Coordinate(9, 9)));
+                    require(a.read(MessageType.ERROR).payloadAs(RoomError.class).code().equals("GAME_FINISHED"), "No shot after forfeit");
+                    a.send(MessageType.PING, null); a.read(MessageType.PONG);
+                    a.send(MessageType.LEAVE_ROOM, null); a.read(MessageType.ROOM_LEFT);
+                }
+            }
+        }
+        try (var connection = database.open(); var query = connection.prepareStatement(
+                "SELECT m.status, m.end_reason, p.result FROM matches m JOIN match_players p ON p.match_id=m.id WHERE p.user_id=?")) {
+            for (var id : accountIds) {
+                query.setObject(1, id);
+                try (var rows = query.executeQuery()) {
+                    require(rows.next() && rows.getString(1).equals("FINISHED") && rows.getString(2).equals("PLAYER_LEFT")
+                            && rows.getString(3).equals("VICTORY"), "Departure persists winner and reason");
+                    require(!rows.next(), "One departure cannot save two results");
+                }
+            }
+        }
+        System.out.println("PASS TCP departures: leave, socket close, invalid frame, waiting-room cleanup, private final victory, late-shot guard and database.");
+    }
+
     private static void checkBoardViews(MatchSnapshot a, MatchSnapshot b) {
         Board aOwn = a.ownBoard().board(), aEnemy = a.enemyBoard().board();
         Board bOwn = b.ownBoard().board(), bEnemy = b.enemyBoard().board();
@@ -140,7 +199,7 @@ public final class TcpMatchChecks {
             MatchSnapshot fresh = a.read(MessageType.FLEET_ACCEPTED).payloadAs(MatchSnapshot.class);
             MatchSnapshot other = b.read(MessageType.FLEET_ACCEPTED).payloadAs(MatchSnapshot.class);
             require(fresh.phase() == GamePhase.PLACEMENT && fresh.winnerId() == null && fresh.lastAttack() == null
-                    && fresh.turnNumber() == 0 && fresh.timer().remainingMillis() == 0 && !fresh.timedOut()
+                    && fresh.endReason() == null && fresh.turnNumber() == 0 && fresh.timer().remainingMillis() == 0 && !fresh.timedOut()
                     && fresh.ownBoard().shots().isEmpty() && other.ownBoard().ships().isEmpty()
                     && other.ownBoard().shots().isEmpty() && other.enemyBoard().ships().isEmpty(),
                     "Fresh placement contains no old fleet, shots, winner or deadline");
@@ -204,6 +263,7 @@ public final class TcpMatchChecks {
         final DataInputStream input;
         final DataOutputStream output;
         final String id;
+        final java.util.UUID accountId;
         Peer(int port, String name) throws Exception {
             socket = new Socket("localhost", port); socket.setTcpNoDelay(true); socket.setSoTimeout(5_000);
             input = new DataInputStream(socket.getInputStream()); output = new DataOutputStream(socket.getOutputStream());
@@ -214,7 +274,7 @@ public final class TcpMatchChecks {
             send(MessageType.REGISTER, new com.battleship.shared.auth.RegisterRequest(username, password, password));
             read(MessageType.REGISTER_OK);
             send(MessageType.LOGIN, new com.battleship.shared.auth.LoginRequest(username, password));
-            read(MessageType.AUTH_SUCCESS);
+            accountId = read(MessageType.AUTH_SUCCESS).payloadAs(com.battleship.shared.auth.AccountProfile.class).id();
         }
         void send(MessageType type, Object payload) throws IOException { MessageCodec.write(output, Message.request(type, payload)); }
         Message read(MessageType type) throws IOException {

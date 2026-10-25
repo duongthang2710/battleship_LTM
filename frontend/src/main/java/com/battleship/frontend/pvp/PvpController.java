@@ -225,6 +225,11 @@ public final class PvpController implements AutoCloseable {
         } else if (!state.connecting()) {
             account = null;
             room = null;
+            match = null;
+            rematch = null;
+            turnTimer = null;
+            rematchStatus = "";
+            menuAfterLeave = false;
             clientId = null;
             pendingRequest = null;
             afterConnect = null;
@@ -314,6 +319,10 @@ public final class PvpController implements AutoCloseable {
                 MatchSnapshot next = message.payloadAs(MatchSnapshot.class);
                 if (!next.playerId().equals(clientId) || (match != null && next.revision() <= match.revision())) return;
                 match = next;
+                if (next.phase() == com.battleship.shared.game.GamePhase.GAME_OVER) {
+                    pendingRequest = null;
+                    panel.setBusy(false);
+                }
                 turnTimer = next.timer();
                 clockReceivedAt = System.nanoTime();
                 matchUpdates.accept(next);
