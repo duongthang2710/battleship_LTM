@@ -6,6 +6,8 @@ import com.battleship.frontend.effects.SceneEffects;
 import com.battleship.frontend.scene.BattleScene;
 import com.battleship.frontend.menu.MainMenu;
 import com.battleship.frontend.auth.AccountPanel;
+import com.battleship.frontend.leaderboard.LeaderboardPanel;
+import com.battleship.shared.leaderboard.LeaderboardSort;
 import com.battleship.frontend.pvp.PvpRoomPanel;
 import com.battleship.shared.room.RoomPlayer;
 import com.battleship.shared.room.RoomSnapshot;
@@ -91,7 +93,8 @@ public final class PvpRoomRenderChecks extends SimpleApplication {
                 clients[i] = new ProcessBuilder(java, "--enable-native-access=ALL-UNNAMED",
                         "-Dorg.lwjgl.system.SharedLibraryExtractPath=" + journal.resolve(role + "-natives"),
                         "-Dbattleship.accountOnly=" + Boolean.getBoolean("battleship.accountOnly"),
-                        "-Dbattleship.disconnectOnly=" + Boolean.getBoolean("battleship.disconnectOnly"), "-cp",
+                        "-Dbattleship.disconnectOnly=" + Boolean.getBoolean("battleship.disconnectOnly"),
+                        "-Dbattleship.leaderboardOnly=" + Boolean.getBoolean("battleship.leaderboardOnly"), "-cp",
                         System.getProperty("java.class.path"), "-Dbattleship.port=" + System.getProperty("battleship.port", "2209"),
                         PvpRoomRenderChecks.class.getName(), role, journal.toString())
                         .redirectErrorStream(true).redirectOutput(journal.resolve(role + ".log").toFile()).start();
@@ -104,7 +107,9 @@ public final class PvpRoomRenderChecks extends SimpleApplication {
                 Thread.sleep(100);
             }
             require(clients[0].exitValue() == 0 && clients[1].exitValue() == 0, "Both desktop clients completed");
-            System.out.println(Boolean.getBoolean("battleship.disconnectOnly")
+            System.out.println(Boolean.getBoolean("battleship.leaderboardOnly")
+                    ? "PASS: two desktop leaderboard clients; real TCP rows, loading, three sorts, page navigation, empty/eligibility, error/retry and stale responses after Back."
+                    : Boolean.getBoolean("battleship.disconnectOnly")
                     ? "PASS: two desktop clients, editable server address, opponent departure, private final victory/reason, rematch disabled, menu/login."
                     : Boolean.getBoolean("battleship.accountOnly") ? "PASS: two desktop account flows; registration, login, logout, session navigation and authenticated room entry."
                     : "PASS: two desktop TCP clients; authenticated placement/retry, real timeout, HIT/MISS/SUNK, rematch/reset, fleet destruction, both menus.");
@@ -154,6 +159,7 @@ public final class PvpRoomRenderChecks extends SimpleApplication {
                 require(!screens.mainMenu().visible(), "Requesting Main Menu cannot bypass login");
                 stage = -1;
             } else if (stage < 0) authenticate();
+            else if (Boolean.getBoolean("battleship.leaderboardOnly")) leaderboardScreens();
             else if (Boolean.getBoolean("battleship.disconnectOnly")) disconnectBattle();
             else if (Boolean.getBoolean("battleship.accountOnly")) accountNavigation();
             else if (role.equals("A")) stepA();
@@ -197,8 +203,70 @@ public final class PvpRoomRenderChecks extends SimpleApplication {
             stage = -3;
         } else if (stage == -3 && screens.pvp().account() != null && screens.mainMenu().visible()) {
             require(screens.pvp().account().displayName().equals(accountName(role)), "Authenticated account controls displayed identity");
-            if (!Boolean.getBoolean("battleship.accountOnly")) click(screens.mainMenu().buttonCenter(MainMenu.Action.PVP));
+            if (!Boolean.getBoolean("battleship.accountOnly") && !Boolean.getBoolean("battleship.leaderboardOnly")) click(screens.mainMenu().buttonCenter(MainMenu.Action.PVP));
             stage = 1;
+        }
+    }
+
+    private void leaderboardAction(LeaderboardPanel.Action action) {
+        var panel = screens.leaderboardPanel();
+        require(panel.enabled(action), "Leaderboard action enabled: " + action);
+        click(panel.buttonCenter(action));
+    }
+
+    private void leaderboardScreens() {
+        var panel = screens.leaderboardPanel();
+        var data = panel.data();
+        switch (stage) {
+            case 1 -> {
+                click(screens.mainMenu().buttonCenter(MainMenu.Action.LEADERBOARD));
+                require(panel.visible() && panel.loading() && !screens.mainMenu().visible(), "Menu opens real loading state"); stage = 2;
+            }
+            case 2 -> {
+                if (data != null) {
+                    require(data.sort() == LeaderboardSort.WINS && data.page() == 0 && data.entries().size() <= 10, "Default bounded wins ranking");
+                    require(data.entries().stream().allMatch(e -> e.matches() == e.wins() + e.losses()
+                            && Math.abs(e.winRate() - 100.0 * e.wins() / e.matches()) < .001), "Rendered metrics are internally consistent");
+                    capture = "leaderboard-wins-" + role + ".png"; stage = 20;
+                }
+            }
+            case 20 -> {
+                if (capture == null) {
+                    if (panel.enabled(LeaderboardPanel.Action.NEXT)) { leaderboardAction(LeaderboardPanel.Action.NEXT); stage = 3; }
+                    else { leaderboardAction(LeaderboardPanel.Action.MATCHES); stage = 5; }
+                }
+            }
+            case 3 -> { if (data != null && data.page() == 1) { require(data.entries().getFirst().rank() == 11, "Global ranks continue on page two"); leaderboardAction(LeaderboardPanel.Action.PREVIOUS); stage = 4; } }
+            case 4 -> { if (data != null && data.page() == 0) { leaderboardAction(LeaderboardPanel.Action.MATCHES); stage = 5; } }
+            case 5 -> { if (data != null && data.sort() == LeaderboardSort.MATCHES) { leaderboardAction(LeaderboardPanel.Action.WIN_RATE); stage = 6; } }
+            case 6 -> {
+                if (data != null && data.sort() == LeaderboardSort.WIN_RATE) {
+                    require(data.entries().stream().allMatch(e -> e.matches() >= data.minWinRateMatches()), "Win-rate minimum is enforced");
+                    require(textShown(guiNode, "minimum " + data.minWinRateMatches()), "Qualification requirement is visible");
+                    require(!data.entries().isEmpty() || !panel.status().isEmpty(), "Empty ranking explains its state");
+                    // Component error display, followed by recovery through the real TCP request.
+                    panel.setError("Could not load rankings. Please refresh.");
+                    require(textShown(guiNode, "Could not load rankings") && panel.enabled(LeaderboardPanel.Action.REFRESH), "Error and retry are visible");
+                    leaderboardAction(LeaderboardPanel.Action.REFRESH); stage = 7;
+                }
+            }
+            case 7 -> {
+                if (data != null) {
+                    leaderboardAction(LeaderboardPanel.Action.REFRESH);
+                    leaderboardAction(LeaderboardPanel.Action.BACK);
+                    require(screens.mainMenu().visible(), "Back works while a request is pending");
+                    click(screens.mainMenu().buttonCenter(MainMenu.Action.LEADERBOARD)); stage = 8;
+                }
+            }
+            case 8 -> {
+                if (data != null) {
+                    require(data.sort() == LeaderboardSort.WINS && data.page() == 0, "Old response cannot overwrite reopened rankings");
+                    leaderboardAction(LeaderboardPanel.Action.BACK);
+                    System.out.println("PASS leaderboard UI: loading, real rows, sorts/pages, eligibility/empty state, error component/retry, stale-response guard, Main Menu.");
+                    click(screens.mainMenu().buttonCenter(MainMenu.Action.EXIT)); stage = 9;
+                }
+            }
+            default -> { }
         }
     }
 

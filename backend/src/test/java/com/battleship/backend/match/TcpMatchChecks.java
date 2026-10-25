@@ -252,24 +252,25 @@ public final class TcpMatchChecks {
         }
     }
 
-    private static FleetSubmission fleet() {
+    static FleetSubmission fleet() {
         ShipType[] types = ShipType.values();
         return new FleetSubmission(java.util.stream.IntStream.range(0, types.length)
                 .mapToObj(i -> new ShipPlacement(types[i], new Coordinate(i, 0), ShipOrientation.HORIZONTAL)).toList());
     }
 
-    private static final class Peer implements AutoCloseable {
+    static final class Peer implements AutoCloseable {
         final Socket socket;
         final DataInputStream input;
         final DataOutputStream output;
         final String id;
         final java.util.UUID accountId;
+        final String username;
         Peer(int port, String name) throws Exception {
             socket = new Socket("localhost", port); socket.setTcpNoDelay(true); socket.setSoTimeout(5_000);
             input = new DataInputStream(socket.getInputStream()); output = new DataOutputStream(socket.getOutputStream());
             send(MessageType.CONNECT, new ConnectRequest(name));
             id = read(MessageType.CONNECT_OK).payloadAs(ConnectResponse.class).player().clientId();
-            String username = "tcp_" + java.util.UUID.randomUUID().toString().substring(0, 12).replace("-", "");
+            username = "tcp_" + java.util.UUID.randomUUID().toString().substring(0, 12).replace("-", "");
             String password = "TcpCheckPassword2026!";
             send(MessageType.REGISTER, new com.battleship.shared.auth.RegisterRequest(username, password, password));
             read(MessageType.REGISTER_OK);

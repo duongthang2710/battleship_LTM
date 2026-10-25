@@ -23,3 +23,13 @@ tasks.register('checkPasswords', JavaExec) {
     mainClass = 'com.battleship.backend.auth.PasswordChecks'
 }
 tasks.named('check') { dependsOn 'checkPasswords' }
+
+tasks.register('checkLeaderboard', JavaExec) {
+    group = 'verification'
+    dependsOn testClasses
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'com.battleship.backend.match.LeaderboardChecks'
+    workingDir rootProject.projectDir
+    onlyIf { providers.gradleProperty('leaderboardDatabase').isPresent() }
+    environment 'DB_NAME', providers.gradleProperty('leaderboardDatabase').getOrElse('')
+}
