@@ -4,6 +4,8 @@ Game desktop chiến thuật hải chiến trên bàn cờ 10×10, viết bằng
 Frontend dùng **jMonkeyEngine** để dựng không gian biển fantasy, lâu đài hai phe,
 bàn cờ và mô hình tàu 3D. Backend dùng **Java TCP Socket** để quản lý phòng và trận PvP.
 
+Định hướng theo báo cáo môn học và các điểm cần đối chiếu: [tài liệu tham chiếu](docs/requirements-reference.md).
+
 ## Chức năng hiện có
 
 - **Bắt buộc đăng nhập:** mở ứng dụng → đăng ký/đăng nhập → Main Menu. Không còn chế độ Play Local.
