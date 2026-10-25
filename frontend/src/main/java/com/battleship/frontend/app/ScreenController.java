@@ -3,6 +3,8 @@ package com.battleship.frontend.app;
 import com.battleship.frontend.camera.OrbitCamera;
 import com.battleship.frontend.auth.AccountPanel;
 import com.battleship.frontend.auth.AccountInput;
+import com.battleship.frontend.leaderboard.LeaderboardPanel;
+import com.battleship.frontend.leaderboard.LeaderboardController;
 import com.battleship.frontend.effects.AttackEffectManager;
 import com.battleship.frontend.graphics.Materials;
 import com.battleship.frontend.game.BoardPicker;
@@ -31,7 +33,7 @@ import com.jme3.scene.Spatial.CullHint;
 
 /** Owns screen navigation and input lifetimes; game rules remain in GameEngine. */
 public final class ScreenController implements AutoCloseable {
-    private enum Screen { MAIN_MENU, ACCOUNT, PVP, PVP_PLACEMENT }
+    private enum Screen { MAIN_MENU, ACCOUNT, LEADERBOARD, PVP, PVP_PLACEMENT }
     private final InputManager input;
     private final OrbitCamera orbit;
     private final Runnable exit;
@@ -43,6 +45,9 @@ public final class ScreenController implements AutoCloseable {
     private final GameController game;
     private final PvpRoomPanel roomPanel;
     private final PvpController pvp;
+    private final LeaderboardPanel leaderboardPanel;
+    private final LeaderboardController leaderboard;
+    private PointerInput leaderboardInput;
     private final AccountPanel accountPanel;
     private AccountInput accountInput;
     private PointerInput accountPointer;
@@ -88,9 +93,14 @@ public final class ScreenController implements AutoCloseable {
             placementRequested = null;
             roomRequested = true;
         }, this::requestMainMenu, game::applyNetworkState, game::networkError);
+        leaderboardPanel = new LeaderboardPanel(assets);
+        gui.attachChild(leaderboardPanel.root());
+        leaderboard = new LeaderboardController(pvp, leaderboardPanel, this::requestMainMenu);
         showAccount();
     }
 
+    public LeaderboardPanel leaderboardPanel() { return leaderboardPanel; }
+    public LeaderboardController leaderboard() { return leaderboard; }
     public AccountPanel accountPanel() { return accountPanel; }
     public MainMenu mainMenu() { return menu; }
     public GameController game() { return game; }
@@ -102,6 +112,7 @@ public final class ScreenController implements AutoCloseable {
 
     public void resize(int width, int height) {
         menu.resize(width, height);
+        leaderboardPanel.resize(width, height);
         accountPanel.resize(width, height);
         hud.resize(width, height);
         placementHud.resize(width, height);
@@ -112,6 +123,7 @@ public final class ScreenController implements AutoCloseable {
 
     public void update(float delta, Vector2f cursor) {
         pvp.update();
+        leaderboard.update();
         accountPanel.sync(pvp.account(), pvp.status(), pvp.pending(), pvp.connected());
         if (pvp.account() == null) {
             pendingAction = null;
@@ -148,6 +160,7 @@ public final class ScreenController implements AutoCloseable {
             pendingAction = null;
             if (action == MainMenu.Action.EXIT) { exit.run(); return; }
             else if (action == MainMenu.Action.PROFILE) showAccount();
+            else if (action == MainMenu.Action.LEADERBOARD) showLeaderboard();
             else if (action == MainMenu.Action.PVP || action == MainMenu.Action.CREATE_ROOM
                     || action == MainMenu.Action.JOIN_ROOM) {
                 showPvpRoom();
@@ -156,15 +169,24 @@ public final class ScreenController implements AutoCloseable {
         }
         if (screen == Screen.MAIN_MENU) menu.update(cursor);
         else if (screen == Screen.PVP) roomPanel.update(cursor);
+        else if (screen == Screen.LEADERBOARD) leaderboardPanel.update(cursor);
         else if (screen != Screen.ACCOUNT) game.update(delta, cursor);
     }
 
     private void menuClick(Vector2f cursor) {
         menu.actionAt(cursor).ifPresent(action -> {
-            if (action == MainMenu.Action.PROFILE || action == MainMenu.Action.EXIT
+            if (action == MainMenu.Action.LEADERBOARD || action == MainMenu.Action.PROFILE || action == MainMenu.Action.EXIT
                     || action == MainMenu.Action.PVP || action == MainMenu.Action.CREATE_ROOM
                     || action == MainMenu.Action.JOIN_ROOM) pendingAction = action;
         });
+    }
+
+    private void showLeaderboard() {
+        closeInputs();
+        menu.hide(); roomPanel.hide(); setGameHudVisible(false);
+        screen = Screen.LEADERBOARD;
+        leaderboard.show();
+        leaderboardInput = new PointerInput(input, orbit, cursor -> leaderboardPanel.actionAt(cursor).ifPresent(leaderboard::handle));
     }
 
     private void showMainMenu() {
@@ -245,6 +267,8 @@ public final class ScreenController implements AutoCloseable {
     }
 
     private void closeInputs() {
+        leaderboard.hide();
+        if (leaderboardInput != null) { leaderboardInput.close(); leaderboardInput = null; }
         accountPanel.hide();
         if (accountInput != null) { accountInput.close(); accountInput = null; }
         if (accountPointer != null) { accountPointer.close(); accountPointer = null; }

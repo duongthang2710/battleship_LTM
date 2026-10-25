@@ -257,7 +257,7 @@ public final class PvpRoomRenderChecks extends SimpleApplication {
         AccountPanel panel = screens.accountPanel();
         switch (stage) {
             case 1 -> {
-                require(screens.mainMenu().visible() && MainMenu.Action.values().length == 8, "Authenticated menu has no Local Game action");
+                require(screens.mainMenu().visible() && MainMenu.Action.values().length == 9, "Authenticated menu has no Local Game action");
                 for (MainMenu.Action action : new MainMenu.Action[] {MainMenu.Action.PVE, MainMenu.Action.FRIENDS, MainMenu.Action.SETTINGS}) {
                     click(screens.mainMenu().buttonCenter(action));
                     require(screens.mainMenu().visible() && screens.pvp().room() == null, "Unimplemented menu action stays inert");
