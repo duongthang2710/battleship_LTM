@@ -15,6 +15,7 @@ import com.google.gson.JsonParser;
 public final class TcpMatchChecks {
     public static void main(String[] args) throws Exception {
         MatchTimerChecks.run();
+        com.battleship.backend.auth.AccountDatabaseChecks.run();
         playerOneStartsWithEitherColor();
         try (TcpServer server = new TcpServer(0)) {
             Thread.ofVirtual().start(() -> { try { server.start(); } catch (IOException e) { throw new UncheckedIOException(e); } });
@@ -65,12 +66,25 @@ public final class TcpMatchChecks {
                 a.send(MessageType.REMATCH_REQUEST, null); a.read(MessageType.ERROR);
                 b.send(MessageType.ATTACK, new AttackRequest(new Coordinate(9, 9))); b.read(MessageType.ERROR);
                 a.send(MessageType.ATTACK, new AttackRequest(new Coordinate(-1, 0))); a.read(MessageType.ERROR);
-                a.send(MessageType.ATTACK, new AttackRequest(new Coordinate(0, 0)));
+                Message firstShot = Message.request(MessageType.ATTACK, new AttackRequest(new Coordinate(0, 0)));
+                MessageCodec.write(a.output, firstShot);
                 sa = a.read(MessageType.MATCH_UPDATED).payloadAs(MatchSnapshot.class);
                 sb = b.read(MessageType.MATCH_UPDATED).payloadAs(MatchSnapshot.class);
                 require(sa.lastAttack().type() == AttackResultType.HIT && sa.revision() == sb.revision(), "Server resolves hit for both peers");
+                checkBoardViews(sa, sb);
                 require(sa.currentPlayerId().equals(b.id), "Turn switches on hit");
-                Peer actor = b;
+                MessageCodec.write(a.output, firstShot);
+                a.read(MessageType.ERROR);
+                b.send(MessageType.ATTACK, new AttackRequest(new Coordinate(9, 9)));
+                sa = a.read(MessageType.MATCH_UPDATED).payloadAs(MatchSnapshot.class);
+                sb = b.read(MessageType.MATCH_UPDATED).payloadAs(MatchSnapshot.class);
+                require(sa.lastAttack().type() == AttackResultType.MISS && sa.revision() == 5,
+                        "Duplicate frame does not apply another shot; next valid shot is a miss");
+                checkBoardViews(sa, sb);
+                MessageCodec.write(a.output, firstShot);
+                require(a.read(MessageType.ERROR).payloadAs(RoomError.class).code().equals("ALREADY_ATTACKED"),
+                        "Same shot remains rejected after the turn returns");
+                Peer actor = a;
                 int firstTarget = 1, secondTarget = 0;
                 List<Coordinate> cells = fleet().ships().stream().flatMap(p -> p.ship().occupiedCells().stream()).toList();
                 while (sa.phase() != GamePhase.GAME_OVER) {
@@ -79,6 +93,7 @@ public final class TcpMatchChecks {
                     sa = a.read(MessageType.MATCH_UPDATED).payloadAs(MatchSnapshot.class);
                     sb = b.read(MessageType.MATCH_UPDATED).payloadAs(MatchSnapshot.class);
                     require(sa.revision() == sb.revision() && java.util.Objects.equals(sa.winnerId(), sb.winnerId()), "Peers agree after every shot");
+                    checkBoardViews(sa, sb);
                     actor = actor == a ? b : a;
                 }
                 require(sa.winnerId().equals(a.id), "Player 1 wins complete alternating match");
@@ -87,6 +102,19 @@ public final class TcpMatchChecks {
                 System.out.println("PASS TCP match: placement/privacy, turns/game over, three consecutive games, rematch wait/decline/reset, menu cancellation. Join notification: " + joinedMs + " ms (localhost).");
             }
         }
+    }
+
+    private static void checkBoardViews(MatchSnapshot a, MatchSnapshot b) {
+        Board aOwn = a.ownBoard().board(), aEnemy = a.enemyBoard().board();
+        Board bOwn = b.ownBoard().board(), bEnemy = b.enemyBoard().board();
+        require(aEnemy.attackedCells().equals(bOwn.attackedCells()) && bEnemy.attackedCells().equals(aOwn.attackedCells()),
+                "Both clients agree on shot history of each board");
+        for (Coordinate shot : aEnemy.attackedCells())
+            require(aEnemy.cell(shot).state() == bOwn.cell(shot).state(), "Attacker and defender agree on hit/miss/sunk");
+        for (Coordinate shot : bEnemy.attackedCells())
+            require(bEnemy.cell(shot).state() == aOwn.cell(shot).state(), "Defender and attacker agree on board state");
+        require(aEnemy.ships().stream().allMatch(Ship::isSunk) && bEnemy.ships().stream().allMatch(Ship::isSunk),
+                "Only sunk enemy ships are revealed");
     }
 
     private static void rematchRounds(Peer a, Peer b, String code) throws IOException {
@@ -125,7 +153,8 @@ public final class TcpMatchChecks {
                 Peer attacker = shot % 2 == 0 ? a : b;
                 attacker.send(MessageType.ATTACK, new AttackRequest(cells.get(shot / 2)));
                 fresh = a.read(MessageType.MATCH_UPDATED).payloadAs(MatchSnapshot.class);
-                b.read(MessageType.MATCH_UPDATED);
+                MatchSnapshot peer = b.read(MessageType.MATCH_UPDATED).payloadAs(MatchSnapshot.class);
+                checkBoardViews(fresh, peer);
             }
             require(fresh.phase() == GamePhase.GAME_OVER && fresh.winnerId().equals(a.id), "Consecutive round ends correctly");
         }
@@ -180,6 +209,12 @@ public final class TcpMatchChecks {
             input = new DataInputStream(socket.getInputStream()); output = new DataOutputStream(socket.getOutputStream());
             send(MessageType.CONNECT, new ConnectRequest(name));
             id = read(MessageType.CONNECT_OK).payloadAs(ConnectResponse.class).player().clientId();
+            String username = "tcp_" + java.util.UUID.randomUUID().toString().substring(0, 12).replace("-", "");
+            String password = "TcpCheckPassword2026!";
+            send(MessageType.REGISTER, new com.battleship.shared.auth.RegisterRequest(username, password, password));
+            read(MessageType.REGISTER_OK);
+            send(MessageType.LOGIN, new com.battleship.shared.auth.LoginRequest(username, password));
+            read(MessageType.AUTH_SUCCESS);
         }
         void send(MessageType type, Object payload) throws IOException { MessageCodec.write(output, Message.request(type, payload)); }
         Message read(MessageType type) throws IOException {

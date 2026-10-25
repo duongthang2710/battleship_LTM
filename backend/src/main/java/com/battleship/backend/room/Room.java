@@ -15,6 +15,9 @@ final class Room {
     final Map<String, RoomPlayer> players = new LinkedHashMap<>();
     RoomPhase phase = RoomPhase.WAITING;
     MatchService match;
+    java.util.UUID historyId;
+    java.util.Map<String, java.util.UUID> accountIds = java.util.Map.of();
+    boolean historyFinished;
     final Set<String> rematchRequests = new HashSet<>();
     boolean rematchDeclined;
 

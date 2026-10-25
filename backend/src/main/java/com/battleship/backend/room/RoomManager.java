@@ -2,6 +2,7 @@ package com.battleship.backend.room;
 
 import com.battleship.backend.server.ConnectionManager;
 import com.battleship.backend.match.MatchService;
+import com.battleship.backend.match.MatchRepository;
 import com.battleship.shared.game.Side;
 import com.battleship.shared.game.GamePhase;
 import com.battleship.shared.match.AttackRequest;
@@ -30,11 +31,13 @@ public final class RoomManager implements AutoCloseable {
     private final Map<String, Room> rooms = new HashMap<>();
     private final Map<String, String> memberships = new HashMap<>();
     private final ConnectionManager connections;
+    private final MatchRepository history;
     private final ScheduledExecutorService clock = Executors.newSingleThreadScheduledExecutor(
             Thread.ofPlatform().daemon(true).name("match-clock").factory());
 
-    public RoomManager(ConnectionManager connections) {
+    public RoomManager(ConnectionManager connections, MatchRepository history) {
         this.connections = connections;
+        this.history = history;
         clock.scheduleAtFixedRate(this::updateClocks, 200, 200, TimeUnit.MILLISECONDS);
     }
 
@@ -160,6 +163,9 @@ public final class RoomManager implements AutoCloseable {
         room.rematchDeclined = false;
         // A fresh match also discards the old deadline, shot history and winner.
         room.match = new MatchService(room.snapshot().players());
+        room.historyId = null;
+        room.historyFinished = false;
+        room.accountIds = Map.of();
         broadcast(room, MessageType.START_PLACEMENT);
         LOG.info("START_PLACEMENT code=" + room.code);
     }
@@ -220,6 +226,7 @@ public final class RoomManager implements AutoCloseable {
     }
 
     private void publishMatch(Room room, MessageType event, String actorId, String requestId) {
+        recordMatch(room, false);
         for (String id : room.players.keySet()) connections.send(id, Message.reply(event,
                 id.equals(actorId) ? requestId : java.util.UUID.randomUUID().toString(), room.match.snapshot(id)));
     }
@@ -229,6 +236,7 @@ public final class RoomManager implements AutoCloseable {
         if (code == null) return;
         Room room = rooms.get(code);
         boolean finished = room.match != null && room.match.phase() == GamePhase.GAME_OVER;
+        if (room.match != null && room.match.phase() == GamePhase.BATTLE) recordMatch(room, true);
         room.players.remove(clientId);
         if (requestId != null) connections.send(clientId, Message.reply(MessageType.ROOM_LEFT, requestId, null));
         if (room.players.isEmpty()) {
@@ -245,6 +253,28 @@ public final class RoomManager implements AutoCloseable {
             broadcast(room, MessageType.PLAYER_LEFT);
         }
         LOG.info("PLAYER_LEFT code=" + code + " player=" + clientId);
+    }
+
+    private void recordMatch(Room room, boolean aborted) {
+        if (room.historyId == null && room.match.phase() == GamePhase.BATTLE) {
+            room.historyId = java.util.UUID.randomUUID();
+            Map<String, java.util.UUID> accounts = new HashMap<>();
+            var participants = new java.util.ArrayList<MatchRepository.Participant>();
+            for (RoomPlayer player : room.players.values()) {
+                var account = connections.account(player.clientId());
+                if (account == null) throw new IllegalStateException("Room member is not authenticated");
+                accounts.put(player.clientId(), account.id());
+                participants.add(new MatchRepository.Participant(account.id(), player.side(), participants.size() + 1));
+            }
+            room.accountIds = Map.copyOf(accounts);
+            history.start(room.historyId, java.time.Instant.now(), java.util.List.copyOf(participants));
+        }
+        if (room.historyId != null && !room.historyFinished && (aborted || room.match.phase() == GamePhase.GAME_OVER)) {
+            room.historyFinished = true;
+            String reason = aborted ? "PLAYER_LEFT" : room.match.snapshot(room.players.keySet().iterator().next()).timedOut()
+                    ? "TURN_TIMEOUT" : "FLEET_DESTROYED";
+            history.finish(room.historyId, java.time.Instant.now(), reason, room.match.statistics(room.accountIds, aborted));
+        }
     }
 
     private boolean alreadyInRoom(PlayerIdentity player, Message message) {

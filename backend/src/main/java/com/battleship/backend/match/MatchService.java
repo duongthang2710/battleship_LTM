@@ -86,6 +86,15 @@ public final class MatchService {
         return timer;
     }
 
+    public List<MatchRepository.Statistics> statistics(java.util.Map<String, java.util.UUID> accounts, boolean aborted) {
+        GameState state = engine.state();
+        return List.of(state.player(), state.enemy()).stream().map(player -> {
+            Player target = player.id().equals(state.player().id()) ? state.enemy() : state.player();
+            String result = aborted ? "ABORTED" : player.id().equals(state.winnerId()) ? "VICTORY" : "DEFEAT";
+            return MatchRepository.Statistics.from(accounts.get(player.id()), result, target.board());
+        }).toList();
+    }
+
     public MatchSnapshot snapshot(String clientId) {
         GameState state = engine.state();
         boolean first = state.player().id().equals(clientId);

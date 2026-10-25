@@ -1,6 +1,10 @@
 package com.battleship.backend.server;
 
 import java.io.IOException;
+import com.battleship.backend.database.Database;
+import com.battleship.backend.auth.AuthService;
+import com.battleship.backend.auth.UserRepository;
+import com.battleship.backend.match.MatchRepository;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.net.SocketException;
@@ -11,10 +15,15 @@ import java.util.logging.Logger;
 public final class TcpServer implements AutoCloseable {
     private static final Logger LOG = Logger.getLogger(TcpServer.class.getName());
     private final ServerSocket server;
-    private final ConnectionManager connections = new ConnectionManager();
+    private final ConnectionManager connections;
     private final ExecutorService workers = Executors.newVirtualThreadPerTaskExecutor();
 
-    public TcpServer(int port) throws IOException { server = new ServerSocket(port); }
+    public TcpServer(int port) throws IOException, java.sql.SQLException {
+        Database database = Database.fromEnvironment();
+        database.migrate();
+        server = new ServerSocket(port);
+        connections = new ConnectionManager(new AuthService(new UserRepository(database)), new MatchRepository(database));
+    }
     public int port() { return server.getLocalPort(); }
 
     public void start() throws IOException {

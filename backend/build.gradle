@@ -1,12 +1,25 @@
 plugins { id 'application' }
-dependencies { implementation project(':shared') }
+dependencies {
+    implementation project(':shared')
+    runtimeOnly 'org.postgresql:postgresql:42.7.14'
+}
 application { mainClass = 'com.battleship.backend.server.ServerMain' }
+tasks.named('run') { workingDir rootProject.projectDir }
 
 tasks.register('checkTcpMatch', JavaExec) {
     group = 'verification'
     dependsOn testClasses
+    workingDir rootProject.projectDir
+    onlyIf { providers.gradleProperty('databaseChecks').isPresent() }
     classpath = sourceSets.test.runtimeClasspath
     mainClass = 'com.battleship.backend.match.TcpMatchChecks'
 }
 tasks.named('check') { dependsOn 'checkTcpMatch' }
 tasks.named('test') { failOnNoDiscoveredTests = false }
+
+tasks.register('checkPasswords', JavaExec) {
+    dependsOn testClasses
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'com.battleship.backend.auth.PasswordChecks'
+}
+tasks.named('check') { dependsOn 'checkPasswords' }
