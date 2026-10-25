@@ -2,6 +2,7 @@ package com.battleship.backend.server;
 
 import com.battleship.shared.protocol.ConnectRequest;
 import com.battleship.shared.auth.*;
+import com.battleship.shared.leaderboard.*;
 import com.battleship.shared.protocol.ConnectResponse;
 import com.battleship.shared.room.RoomError;
 import com.battleship.shared.protocol.Message;
@@ -65,6 +66,7 @@ public final class ClientHandler implements Runnable, AutoCloseable {
                         send(Message.reply(MessageType.PONG, message.requestId(), null));
                         LOG.fine("PONG " + id());
                     }
+                    case LEADERBOARD_REQUEST -> leaderboard(message);
                     case REGISTER, LOGIN, LOGOUT -> authenticate(message);
                     case CREATE_ROOM, JOIN_ROOM, LEAVE_ROOM, READY, NOT_READY, SUBMIT_FLEET, ATTACK, REMATCH_REQUEST, REMATCH_DECLINE -> {
                         if (session.account() == null) send(Message.reply(MessageType.AUTH_FAILED, message.requestId(),
@@ -80,6 +82,26 @@ public final class ClientHandler implements Runnable, AutoCloseable {
         } finally {
             close();
             connections.remove(id());
+        }
+    }
+
+    private void leaderboard(Message message) {
+        if (session.account() == null) {
+            send(Message.reply(MessageType.AUTH_FAILED, message.requestId(), new AuthError("AUTH_REQUIRED", "Sign in to view rankings.")));
+            return;
+        }
+        try {
+            var page = connections.leaderboard().page(message.payloadAs(LeaderboardRequest.class));
+            send(Message.reply(MessageType.LEADERBOARD_RESULT, message.requestId(), page));
+        } catch (com.google.gson.JsonParseException | IllegalArgumentException exception) {
+            send(Message.reply(MessageType.LEADERBOARD_ERROR, message.requestId(), new LeaderboardError("Invalid leaderboard sort or page.")));
+        } catch (InterruptedException exception) {
+            Thread.currentThread().interrupt();
+            send(Message.reply(MessageType.LEADERBOARD_ERROR, message.requestId(), new LeaderboardError("Rankings unavailable. Please refresh.")));
+        } catch (java.sql.SQLException | java.util.concurrent.ExecutionException | java.util.concurrent.TimeoutException
+                | java.util.concurrent.RejectedExecutionException exception) {
+            LOG.warning("Leaderboard request failed: " + exception.getClass().getSimpleName());
+            send(Message.reply(MessageType.LEADERBOARD_ERROR, message.requestId(), new LeaderboardError("Could not load rankings. Please refresh.")));
         }
     }
 

@@ -2,6 +2,8 @@ package com.battleship.backend.server;
 
 import com.battleship.backend.room.RoomManager;
 import com.battleship.backend.auth.AuthService;
+import com.battleship.backend.leaderboard.LeaderboardService;
+import com.battleship.backend.leaderboard.LeaderboardRepository;
 import com.battleship.backend.match.MatchRepository;
 import com.battleship.shared.auth.AccountProfile;
 import com.battleship.shared.protocol.Message;
@@ -15,13 +17,16 @@ public final class ConnectionManager implements AutoCloseable {
     private final RoomManager rooms;
     private final AuthService auth;
     private final MatchRepository history;
+    private final LeaderboardService leaderboard;
 
-    public ConnectionManager(AuthService auth, MatchRepository history) {
+    public ConnectionManager(AuthService auth, MatchRepository history, LeaderboardRepository leaderboardRepository) {
         this.auth = auth;
         this.history = history;
+        leaderboard = new LeaderboardService(leaderboardRepository, history);
         rooms = new RoomManager(this, history);
     }
 
+    public LeaderboardService leaderboard() { return leaderboard; }
     public AuthService auth() { return auth; }
     public AccountProfile account(String id) {
         ClientHandler client = clients.get(id);

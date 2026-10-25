@@ -16,6 +16,7 @@ import com.battleship.shared.match.ShipPlacement;
 import com.battleship.shared.match.AttackRequest;
 import com.battleship.shared.game.Board;
 import com.battleship.shared.auth.*;
+import com.battleship.shared.leaderboard.LeaderboardRequest;
 import com.battleship.shared.game.Coordinate;
 import java.util.function.Consumer;
 import java.util.logging.Logger;
@@ -31,6 +32,7 @@ public final class PvpController implements AutoCloseable {
     private final Consumer<MatchSnapshot> matchUpdates;
     private final Consumer<String> matchErrors;
     private final String playerName;
+    private Consumer<Message> leaderboardListener = message -> { };
     private String host;
     private int port;
     private RoomSnapshot room;
@@ -64,6 +66,13 @@ public final class PvpController implements AutoCloseable {
         host = System.getProperty("battleship.host", "localhost");
         port = Integer.getInteger("battleship.port", 2209);
         connection = new ConnectionManager(this::onMessage, this::onStatus);
+    }
+
+    public void setLeaderboardListener(Consumer<Message> listener) { leaderboardListener = listener; }
+    public String requestLeaderboard(LeaderboardRequest request) {
+        if (account == null) return null;
+        Message message = Message.request(MessageType.LEADERBOARD_REQUEST, request);
+        return connection.send(message) ? message.requestId() : null;
     }
 
     public AccountProfile account() { return account; }
@@ -259,6 +268,10 @@ public final class PvpController implements AutoCloseable {
 
     private void onMessage(Message message) {
         if (!active) return;
+        if (message.type() == MessageType.LEADERBOARD_RESULT || message.type() == MessageType.LEADERBOARD_ERROR) {
+            leaderboardListener.accept(message);
+            return;
+        }
         if (message.requestId().equals(pendingRequest)) {
             pendingRequest = null;
             panel.setBusy(false);
@@ -271,6 +284,7 @@ public final class PvpController implements AutoCloseable {
             case REGISTER_OK -> setStatus("Account created. Sign in to continue.");
             case LOGOUT_OK -> { account = null; setStatus("Signed out."); }
             case AUTH_FAILED -> {
+                leaderboardListener.accept(message);
                 AuthError error = message.payloadAs(AuthError.class);
                 if (error.code().equals("AUTH_REQUIRED")) account = null;
                 setStatus(error.message());
