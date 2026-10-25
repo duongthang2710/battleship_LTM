@@ -36,13 +36,12 @@ public final class ConnectionManager implements AutoCloseable {
     }
 
     public void remove(String id) {
-        ClientHandler client = clients.get(id);
-        if (client != null) {
-            rooms.disconnected(id);
-            auth.logout(id, client.account());
-            clients.remove(id, client);
-            LOG.info("Client disconnected " + id + "; active=" + clients.size());
-        }
+        clients.computeIfPresent(id, (clientId, client) -> {
+            rooms.disconnected(clientId);
+            auth.logout(clientId, client.account());
+            LOG.info("Client disconnected " + clientId);
+            return null;
+        });
     }
 
     public void send(String id, Message message) {
