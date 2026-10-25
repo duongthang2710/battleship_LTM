@@ -81,6 +81,12 @@ public final class MatchRepository implements AutoCloseable {
         });
     }
 
+    public void awaitPendingWrites() throws InterruptedException, java.util.concurrent.ExecutionException,
+            java.util.concurrent.TimeoutException {
+        // Called on a client worker, never while holding the room/timer lock.
+        writes.submit(() -> { }).get(5, TimeUnit.SECONDS);
+    }
+
     private void enqueue(SqlWrite operation) {
         try {
             writes.execute(() -> {
