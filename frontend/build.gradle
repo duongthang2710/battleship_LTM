@@ -35,7 +35,7 @@ tasks.register('checkGameplayRendering', JavaExec) {
 
 tasks.register('checkMainMenu', JavaExec) {
     group = 'verification'
-    description = 'Checks the real main menu, local game navigation and Exit (requires OpenGL).'
+    description = 'Checks mandatory sign-in, removed local entry, menu hit targets and Exit (requires OpenGL).'
     dependsOn testClasses
     classpath = sourceSets.test.runtimeClasspath
     mainClass = 'com.battleship.frontend.game.MainMenuFlowChecks'

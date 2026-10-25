@@ -5,7 +5,7 @@ import com.battleship.frontend.camera.OrbitCamera;
 import com.battleship.frontend.effects.SceneEffects;
 import com.battleship.frontend.scene.BattleScene;
 import com.battleship.frontend.menu.MainMenu;
-import com.battleship.shared.game.GamePhase;
+import com.battleship.frontend.auth.AccountPanel;
 import com.jme3.app.FlyCamAppState;
 import com.jme3.app.SimpleApplication;
 import com.jme3.input.InputManager;
@@ -74,49 +74,33 @@ public final class MainMenuFlowChecks extends SimpleApplication {
         screens.update(delta, inputManager.getCursorPosition());
         frame++;
         if (frame == 20) {
-            require(screens.mainMenu().visible(), "App starts at Main Menu");
+            require(screens.accountPanel().visible() && !screens.mainMenu().visible(), "App requires sign-in before Main Menu");
             require(guiNode.getChild("Placement HUD").getLocalCullHint() == CullHint.Always,
-                    "Placement HUD stays hidden on menu");
+                    "Placement HUD stays hidden before sign-in");
             var initialState = screens.game().state();
-            for (MainMenu.Action action : MainMenu.Action.values()) {
-                if (action == MainMenu.Action.LOCAL_GAME || action == MainMenu.Action.EXIT
-                        || action == MainMenu.Action.PVP || action == MainMenu.Action.CREATE_ROOM
-                        || action == MainMenu.Action.JOIN_ROOM || action == MainMenu.Action.PROFILE) continue;
-                click(action);
-                require(screens.mainMenu().visible() && screens.game().state() == initialState,
-                        "Planned button is inert: " + action);
+            key(KeyInput.KEY_F, 'f');
+            key(KeyInput.KEY_RETURN, '\n');
+            require(screens.game().state() == initialState, "Gameplay shortcuts are inactive before login");
+            screens.requestMainMenu();
+            screens.update(0, inputManager.getCursorPosition());
+            require(!screens.mainMenu().visible() && screens.accountPanel().visible(), "Main Menu request cannot bypass authentication");
+            require(!screens.accountPanel().enabled(AccountPanel.Action.BACK), "Login has no unauthenticated back route");
+            MainMenu menu = new MainMenu(assetManager);
+            require(MainMenu.Action.values().length == 8, "Only the eight non-local menu actions remain");
+            for (int[] size : new int[][] {{1440, 900}, {960, 600}}) {
+                menu.resize(size[0], size[1]);
+                for (MainMenu.Action action : MainMenu.Action.values())
+                    require(menu.actionAt(menu.buttonCenter(action)).orElseThrow() == action, "Menu hit target scales: " + action);
             }
-            screens.resize(960, 600);
-            for (MainMenu.Action action : MainMenu.Action.values())
-                require(screens.mainMenu().actionAt(screens.mainMenu().buttonCenter(action)).orElseThrow() == action,
-                        "Menu hit target scales: " + action);
-            screens.resize(1440, 900);
-            key(KeyInput.KEY_F, 'f');
-            key(KeyInput.KEY_RETURN, '\n');
-            require(screens.game().state() == initialState, "Gameplay shortcuts are inactive on menu");
         } else if (frame == 25) {
-            click(MainMenu.Action.LOCAL_GAME);
-            require(!screens.mainMenu().visible() && screens.game().state().phase() == GamePhase.PLACEMENT,
-                    "PLAY opens existing placement");
-            require(guiNode.getChild("Placement HUD").getLocalCullHint() == CullHint.Inherit,
-                    "Placement HUD visible after PLAY");
-            require(screens.game().state().player().board().ships().isEmpty(), "PLAY release does not place a ship");
-            key(KeyInput.KEY_F, 'f');
-            key(KeyInput.KEY_RETURN, '\n');
-            require(screens.game().state().phase() == GamePhase.BATTLE, "Ready still enters battle");
-            screens.requestMainMenu();
-            screens.update(0, inputManager.getCursorPosition());
-            require(screens.mainMenu().visible() && screens.game().state().player().board().ships().isEmpty(),
-                    "Return to menu clears local match");
-            click(MainMenu.Action.LOCAL_GAME);
-            require(!screens.mainMenu().visible() && screens.game().state().phase() == GamePhase.PLACEMENT,
-                    "PLAY again starts a fresh local match");
-            screens.requestMainMenu();
-            screens.update(0, inputManager.getCursorPosition());
-        } else if (frame == 30) {
-            click(MainMenu.Action.EXIT);
-            require(exitCalled, "EXIT invokes application stop");
-            System.out.println("PASS: Main Menu, all planned buttons inert, scaled hit targets, PLAY/Ready, return/replay, EXIT.");
+            Vector2f position = screens.accountPanel().buttonCenter(AccountPanel.Action.EXIT);
+            mouse.next = () -> {
+                inputManager.onMouseButtonEvent(new MouseButtonEvent(MouseInput.BUTTON_LEFT, true, (int) position.x, (int) position.y));
+                inputManager.onMouseButtonEvent(new MouseButtonEvent(MouseInput.BUTTON_LEFT, false, (int) position.x, (int) position.y));
+            };
+            inputManager.update(1 / 60f);
+            require(exitCalled, "EXIT closes the application before login");
+            System.out.println("PASS: mandatory login, no Local Game action, no menu bypass, scaled menu targets, login-screen Exit.");
         }
     }
 
@@ -127,21 +111,10 @@ public final class MainMenuFlowChecks extends SimpleApplication {
             renderer.getRenderer().readFrameBufferWithFormat(null, buffer, Image.Format.BGRA8);
             BufferedImage image = new BufferedImage(1440, 900, BufferedImage.TYPE_4BYTE_ABGR);
             Screenshots.convertScreenShot(buffer, image);
-            Path directory = Path.of(System.getProperty("battleship.previewDir", "docs"));
+            Path directory = Path.of(System.getProperty("battleship.previewDir", "build/menu-verification"));
             Files.createDirectories(directory);
-            ImageIO.write(image, "png", directory.resolve("main-menu.png").toFile());
+            ImageIO.write(image, "png", directory.resolve("login-required.png").toFile());
         } catch (Exception error) { throw new RuntimeException(error); }
-    }
-
-    private void click(MainMenu.Action action) {
-        Vector2f position = screens.mainMenu().buttonCenter(action);
-        require(screens.mainMenu().actionAt(position).orElseThrow() == action, "Menu button: " + action);
-        mouse.next = () -> {
-            inputManager.onMouseButtonEvent(new MouseButtonEvent(MouseInput.BUTTON_LEFT, true, (int) position.x, (int) position.y));
-            inputManager.onMouseButtonEvent(new MouseButtonEvent(MouseInput.BUTTON_LEFT, false, (int) position.x, (int) position.y));
-        };
-        inputManager.update(1 / 60f);
-        screens.update(0, position);
     }
 
     private void key(int code, char value) {

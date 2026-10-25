@@ -146,7 +146,10 @@ public final class PvpRoomRenderChecks extends SimpleApplication {
         require(System.nanoTime() - started < TimeUnit.SECONDS.toNanos(210), "Client " + role + " timed out at stage " + stage);
         try {
             if (stage == 0) {
-                click(screens.mainMenu().buttonCenter(MainMenu.Action.PVP));
+                require(screens.accountPanel().visible() && !screens.mainMenu().visible(), "Startup is gated by login");
+                screens.requestMainMenu();
+                screens.update(0, inputManager.getCursorPosition());
+                require(!screens.mainMenu().visible(), "Requesting Main Menu cannot bypass login");
                 stage = -1;
             } else if (stage < 0) authenticate();
             else if (Boolean.getBoolean("battleship.accountOnly")) accountNavigation();
@@ -177,8 +180,9 @@ public final class PvpRoomRenderChecks extends SimpleApplication {
             capture = "account-login-" + role + ".png";
             click(panel.buttonCenter(AccountPanel.Action.SUBMIT));
             stage = -3;
-        } else if (stage == -3 && screens.pvp().account() != null && screens.roomPanel().visible()) {
+        } else if (stage == -3 && screens.pvp().account() != null && screens.mainMenu().visible()) {
             require(screens.pvp().account().displayName().equals(accountName(role)), "Authenticated account controls displayed identity");
+            if (!Boolean.getBoolean("battleship.accountOnly")) click(screens.mainMenu().buttonCenter(MainMenu.Action.PVP));
             stage = 1;
         }
     }
@@ -186,7 +190,14 @@ public final class PvpRoomRenderChecks extends SimpleApplication {
     private void accountNavigation() {
         AccountPanel panel = screens.accountPanel();
         switch (stage) {
-            case 1 -> { screens.requestMainMenu(); stage = 90; }
+            case 1 -> {
+                require(screens.mainMenu().visible() && MainMenu.Action.values().length == 8, "Authenticated menu has no Local Game action");
+                for (MainMenu.Action action : new MainMenu.Action[] {MainMenu.Action.PVE, MainMenu.Action.FRIENDS, MainMenu.Action.SETTINGS}) {
+                    click(screens.mainMenu().buttonCenter(action));
+                    require(screens.mainMenu().visible() && screens.pvp().room() == null, "Unimplemented menu action stays inert");
+                }
+                stage = 90;
+            }
             case 90 -> {
                 if (screens.mainMenu().visible()) {
                     require(screens.pvp().account() != null, "Main Menu preserves account session");
@@ -199,31 +210,40 @@ public final class PvpRoomRenderChecks extends SimpleApplication {
             case 92 -> {
                 if (!screens.pvp().pending() && screens.pvp().account() == null) {
                     require(screens.pvp().status().equals("Signed out."), "Logout acknowledged by server");
-                    click(panel.buttonCenter(AccountPanel.Action.BACK)); stage = 93;
-                }
-            }
-            case 93 -> {
-                if (screens.mainMenu().visible()) {
-                    click(screens.mainMenu().buttonCenter(MainMenu.Action.CREATE_ROOM)); stage = 94;
+                    screens.requestMainMenu();
+                    screens.update(0, inputManager.getCursorPosition());
+                    require(panel.visible() && !screens.mainMenu().visible() && !panel.enabled(AccountPanel.Action.BACK),
+                            "Logout returns to mandatory login without a backdoor");
+                    stage = 94;
                 }
             }
             case 94 -> {
                 if (panel.visible() && screens.pvp().connected()) {
-                    require(screens.pvp().room() == null, "Cannot bypass login with direct Create Room button");
-                    key(KeyInput.KEY_TAB, '\t'); type("RenderCheckPassword2026!");
+                    require(screens.pvp().room() == null, "Logged out player cannot enter a room");
+                    key(KeyInput.KEY_TAB, '\t'); type("IncorrectPassword2026!");
+                    click(panel.buttonCenter(AccountPanel.Action.SUBMIT)); stage = 940;
+                }
+            }
+            case 940 -> {
+                if (!screens.pvp().pending() && screens.pvp().status().startsWith("Incorrect")) {
+                    require(!screens.mainMenu().visible() && panel.visible(), "Wrong password keeps the app locked");
+                    type("RenderCheckPassword2026!");
                     click(panel.buttonCenter(AccountPanel.Action.SUBMIT)); stage = 95;
                 }
             }
             case 95 -> {
-                if (screens.pvp().room() != null) {
-                    require(screens.pvp().account() != null, "Sign in resumes intended Create Room action");
-                    screens.pvp().returnToMainMenu(); stage = 96;
+                if (screens.mainMenu().visible()) {
+                    require(screens.pvp().account() != null && screens.pvp().room() == null, "Login returns to menu without creating a room");
+                    click(screens.mainMenu().buttonCenter(MainMenu.Action.CREATE_ROOM)); stage = 950;
                 }
+            }
+            case 950 -> {
+                if (screens.pvp().room() != null) { screens.pvp().returnToMainMenu(); stage = 96; }
             }
             case 96 -> {
                 if (screens.mainMenu().visible()) {
-                    System.out.println("PASS account screens: register/login, session through menu, Profile logout, direct-room auth gate, login again and resume Create Room.");
-                    stop(); stage = 97;
+                    System.out.println("PASS account screens: mandatory login, no Local Game, inert planned actions, Profile logout, wrong-password gate, login again, room entry and Exit.");
+                    click(screens.mainMenu().buttonCenter(MainMenu.Action.EXIT)); stage = 97;
                 }
             }
             default -> { }

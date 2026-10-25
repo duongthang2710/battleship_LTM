@@ -31,7 +31,7 @@ import com.jme3.scene.Spatial.CullHint;
 
 /** Owns screen navigation and input lifetimes; game rules remain in GameEngine. */
 public final class ScreenController implements AutoCloseable {
-    private enum Screen { MAIN_MENU, ACCOUNT, PVP, LOCAL_GAME, PVP_PLACEMENT }
+    private enum Screen { MAIN_MENU, ACCOUNT, PVP, PVP_PLACEMENT }
     private final InputManager input;
     private final OrbitCamera orbit;
     private final Runnable exit;
@@ -46,7 +46,7 @@ public final class ScreenController implements AutoCloseable {
     private final AccountPanel accountPanel;
     private AccountInput accountInput;
     private PointerInput accountPointer;
-    private MainMenu.Action afterLogin;
+    private boolean loginRequired;
     private PointerInput menuInput;
     private PointerInput roomInput;
     private RoomCodeInput codeInput;
@@ -88,7 +88,7 @@ public final class ScreenController implements AutoCloseable {
             placementRequested = null;
             roomRequested = true;
         }, this::requestMainMenu, game::applyNetworkState, game::networkError);
-        showMainMenu();
+        showAccount();
     }
 
     public AccountPanel accountPanel() { return accountPanel; }
@@ -113,13 +113,21 @@ public final class ScreenController implements AutoCloseable {
     public void update(float delta, Vector2f cursor) {
         pvp.update();
         accountPanel.sync(pvp.account(), pvp.status(), pvp.pending(), pvp.connected());
-        if (screen == Screen.ACCOUNT && afterLogin != null && pvp.account() != null) {
-            pendingAction = afterLogin;
-            afterLogin = null;
+        if (pvp.account() == null) {
+            pendingAction = null;
+            menuRequested = roomRequested = false;
+            placementRequested = null;
+            loginRequired = true;
+            if (screen != Screen.ACCOUNT) {
+                game.useLocalMode();
+                game.restartLocalMatch();
+                showAccount();
+            }
+            return;
         }
-        if (screen == Screen.PVP && pvp.connected() && pvp.account() == null) {
-            afterLogin = MainMenu.Action.PVP;
-            showAccount();
+        if (screen == Screen.ACCOUNT && loginRequired) {
+            loginRequired = false;
+            menuRequested = true;
         }
         // Switch listeners after input dispatch, so the release cannot click the next screen.
         if (menuRequested) {
@@ -138,13 +146,12 @@ public final class ScreenController implements AutoCloseable {
         } else if (pendingAction != null) {
             MainMenu.Action action = pendingAction;
             pendingAction = null;
-            if (action == MainMenu.Action.LOCAL_GAME) startLocalGame();
-            else if (action == MainMenu.Action.EXIT) { exit.run(); return; }
-            else if (action == MainMenu.Action.PROFILE) { afterLogin = null; showAccount(); }
+            if (action == MainMenu.Action.EXIT) { exit.run(); return; }
+            else if (action == MainMenu.Action.PROFILE) showAccount();
             else if (action == MainMenu.Action.PVP || action == MainMenu.Action.CREATE_ROOM
                     || action == MainMenu.Action.JOIN_ROOM) {
-                if (pvp.account() == null) { afterLogin = action; showAccount(); }
-                else { showPvpRoom(); pvp.open(action); }
+                showPvpRoom();
+                pvp.open(action);
             }
         }
         if (screen == Screen.MAIN_MENU) menu.update(cursor);
@@ -154,28 +161,16 @@ public final class ScreenController implements AutoCloseable {
 
     private void menuClick(Vector2f cursor) {
         menu.actionAt(cursor).ifPresent(action -> {
-            if (action == MainMenu.Action.PROFILE || action == MainMenu.Action.LOCAL_GAME || action == MainMenu.Action.EXIT
+            if (action == MainMenu.Action.PROFILE || action == MainMenu.Action.EXIT
                     || action == MainMenu.Action.PVP || action == MainMenu.Action.CREATE_ROOM
                     || action == MainMenu.Action.JOIN_ROOM) pendingAction = action;
         });
     }
 
-    private void startLocalGame() {
-        closeInputs();
-        menu.hide();
-        pvp.hide();
-        screen = Screen.LOCAL_GAME;
-        game.useLocalMode();
-        orbit.useDefaultView();
-        game.restartLocalMatch();
-        setGameHudVisible(true);
-        gameInput = new GameInput(input, game, orbit);
-    }
-
     private void showMainMenu() {
+        if (pvp.account() == null) { showAccount(); return; }
         closeInputs();
         pvp.hide();
-        afterLogin = null;
         screen = Screen.MAIN_MENU;
         game.useLocalMode();
         orbit.useDefaultView();
@@ -191,6 +186,7 @@ public final class ScreenController implements AutoCloseable {
         roomPanel.hide();
         setGameHudVisible(false);
         screen = Screen.ACCOUNT;
+        loginRequired = pvp.account() == null;
         pvp.openAccount();
         accountPanel.show();
         accountInput = new AccountInput(input, accountPanel, this::accountAction);
@@ -200,7 +196,8 @@ public final class ScreenController implements AutoCloseable {
     private void accountAction(AccountPanel.Action action) {
         if (!accountPanel.enabled(action)) return;
         switch (action) {
-            case BACK -> { afterLogin = null; requestMainMenu(); }
+            case BACK -> requestMainMenu();
+            case EXIT -> exit.run();
             case SWITCH -> accountPanel.switchMode();
             case LOGOUT -> pvp.logout();
             case CONNECT -> pvp.openAccount();

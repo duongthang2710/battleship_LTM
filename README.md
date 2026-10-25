@@ -6,7 +6,7 @@ bàn cờ và mô hình tàu 3D. Backend dùng **Java TCP Socket** để quản 
 
 ## Chức năng hiện có
 
-- **Local Game:** xếp tàu và bắn thủ công hai bên luân phiên trên cùng máy, không cần server.
+- **Bắt buộc đăng nhập:** mở ứng dụng → đăng ký/đăng nhập → Main Menu. Không còn chế độ Play Local.
 - **PvP:** tạo phòng, tham gia bằng mã 6 ký tự, phòng chờ hai người, Ready/Not Ready,
   xếp tàu và đánh trận qua TCP.
 - Server chọn ngẫu nhiên phe trắng/đen khi bắt đầu xếp tàu; Player 1 trong phòng đi trước, độc lập với màu phe.
@@ -26,7 +26,7 @@ gửi yêu cầu đến server: một người đồng ý thì chờ trên màn 
 thì cùng về xếp tàu trong phòng hiện tại. Ván mới xóa đội hình, lịch sử bắn,
 thắng/thua và timer cũ. **DECLINE** hủy yêu cầu đang chờ, giữ kết quả trận.
 **MAIN MENU** rời phòng và về menu; nếu đối thủ còn ở màn kết quả, họ nhận
-thông báo hủy chơi lại và vẫn giữ kết quả đó. Local Game có thể PLAY AGAIN ngay.
+thông báo hủy chơi lại và vẫn giữ kết quả đó.
 
 ## Cấu trúc dự án
 
@@ -207,12 +207,12 @@ docker compose restart postgres
 Không xóa volume khi dừng dịch vụ. Thay biến DB_USER/DB_PASSWORD sau khi volume đã có
 không tự đổi tài khoản PostgreSQL đã khởi tạo; cần dùng đúng thông tin đã tạo hoặc đổi bằng SQL.
 
-Chọn **PVP / CREATE ROOM / JOIN ROOM** khi chưa đăng nhập sẽ mở form tài khoản.
+Ứng dụng mở thẳng form tài khoản. Phải đăng nhập thành công mới vào Main Menu và các chức năng game.
 Chọn **CREATE AN ACCOUNT**, nhập username/mật khẩu/xác nhận; đăng ký xong chuyển
 về **SIGN IN** để đăng nhập. Username gồm 3–24 chữ ASCII, số hoặc `_`, không phân biệt
 hoa/thường. Mật khẩu 12–128 ký tự. **PROFILE → SIGN OUT** đăng xuất; về Main Menu
 vẫn giữ phiên đăng nhập. Không lưu mật khẩu trên đĩa phía client.
-Local Game giữ hoạt động offline như trước.
+Đăng xuất đưa về form đăng nhập và khóa Main Menu. Trước khi đăng nhập, nút **EXIT** đóng ứng dụng; không có đường bỏ qua đăng nhập.
 
 Server gắn tài khoản với kết nối TCP sau `AUTH_SUCCESS`; `CONNECT.playerName`, user ID
 hoặc username tự thêm vào lệnh phòng không cấp quyền. Tất cả lệnh phòng/trận đều cần xác thực.
@@ -237,7 +237,7 @@ Build dự án:
 .\gradlew.bat build
 ```
 
-Chỉ chơi local: chạy lệnh dưới, chọn **PLAY / LOCAL GAME**, xếp đủ tàu rồi Ready.
+Chạy client, đăng ký/đăng nhập rồi chọn **PVP** để chơi:
 
 ```powershell
 .\gradlew.bat :frontend:run -PplayerName="Player A"
@@ -293,7 +293,7 @@ Mã phòng chỉ chọn phòng bên trong server, không tự tìm server hay v�
 | --- | --- | --- |
 | `-PserverHost=...` | `localhost` | IP/domain backend |
 | `-PserverPort=...` | `2209` | TCP port backend |
-| `-PplayerName="..."` | `Captain` | Tên Local Game/handshake; tên PvP lấy từ tài khoản |
+| `-PplayerName="..."` | `Captain` | Tên handshake; tên trong game lấy từ tài khoản |
 
 Đổi port server bằng `.\gradlew.bat :backend:run --args="2210"`, sau đó dùng
 `-PserverPort=2210` cho các client. Khi chạy Java trực tiếp, các JVM property tương ứng

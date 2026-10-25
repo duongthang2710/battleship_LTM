@@ -20,7 +20,7 @@ import java.util.Optional;
 
 /** Account form only. All requests go through the existing TCP controller. */
 public final class AccountPanel {
-    public enum Action { SUBMIT, SWITCH, BACK, LOGOUT, CONNECT }
+    public enum Action { SUBMIT, SWITCH, BACK, LOGOUT, CONNECT, EXIT }
     private static final int GOLD = 0xDEB663, IVORY = 0xF4EAD1, CYAN = 0x91CEFF;
     private final Node root = new Node("Account form");
     private final Node card = new Node("Account card");
@@ -76,7 +76,8 @@ public final class AccountPanel {
     }
     public boolean enabled(Action action) {
         return switch (action) {
-            case BACK -> !busy;
+            case BACK -> !busy && account != null;
+            case EXIT -> !busy && account == null;
             case SWITCH -> !busy && account == null;
             case CONNECT -> !busy && !connected;
             case LOGOUT -> !busy && account != null && connected;
@@ -151,7 +152,7 @@ public final class AccountPanel {
             button(166, "SIGN OUT", Action.LOGOUT);
         }
         statusLabel = text(body, wrap(status), 11, 32, 89, CYAN);
-        button(22, "MAIN MENU", Action.BACK);
+        button(22, account == null ? "EXIT" : "MAIN MENU", account == null ? Action.EXIT : Action.BACK);
         refreshFields();
     }
     private String wrap(String value) {

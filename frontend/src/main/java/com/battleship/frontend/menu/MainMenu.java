@@ -20,7 +20,7 @@ import java.util.Optional;
 
 public final class MainMenu {
     public enum Action {
-        LOCAL_GAME, PVP, PVE, CREATE_ROOM, JOIN_ROOM, FRIENDS, PROFILE, SETTINGS, EXIT
+        PVP, PVE, CREATE_ROOM, JOIN_ROOM, FRIENDS, PROFILE, SETTINGS, EXIT
     }
 
     private static final float WIDTH = 400;
@@ -103,7 +103,7 @@ public final class MainMenu {
         hovered = next;
         for (Button button : buttons) {
             boolean active = button.action == hovered;
-            boolean primary = button.action == Action.LOCAL_GAME;
+            boolean primary = button.action == Action.PVP;
             button.fill.setColor("Color", active
                     ? new ColorRGBA(0.055f, 0.098f, 0.137f, 0.98f)
                     : primary ? new ColorRGBA(0.029f, 0.068f, 0.109f, 0.97f)
@@ -122,10 +122,9 @@ public final class MainMenu {
         centered(display, "BATTLESHIP", 48, WIDTH / 2, 545, IVORY);
         centered(body, "FANTASY NAVAL STRATEGY", 10, WIDTH / 2, 492, GOLD);
         divider(469);
-        button(28, 380, 344, 66, "PLAY", Action.LOCAL_GAME, true);
-        centered(body, "LOCAL GAME", 10, WIDTH / 2, 398, CYAN);
-        button(28, 311, 165, 52, "PVP", Action.PVP, false);
-        button(207, 311, 165, 52, "PVE / VS AI", Action.PVE, false);
+        button(28, 380, 344, 66, "PVP", Action.PVP, true);
+        centered(body, "ONLINE MATCH", 10, WIDTH / 2, 398, CYAN);
+        button(28, 311, 344, 52, "PVE / VS AI", Action.PVE, false);
         button(28, 247, 165, 52, "CREATE ROOM", Action.CREATE_ROOM, false);
         button(207, 247, 165, 52, "JOIN ROOM", Action.JOIN_ROOM, false);
         button(28, 183, 165, 52, "FRIENDS", Action.FRIENDS, false);

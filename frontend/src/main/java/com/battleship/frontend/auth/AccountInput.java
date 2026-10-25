@@ -21,7 +21,7 @@ public final class AccountInput extends RawInputListenerAdapter implements AutoC
             case KeyInput.KEY_RETURN, KeyInput.KEY_NUMPADENTER -> {
                 if (!event.isRepeating() && panel.enabled(AccountPanel.Action.SUBMIT)) action.accept(AccountPanel.Action.SUBMIT);
             }
-            case KeyInput.KEY_ESCAPE -> { if (!event.isRepeating()) action.accept(AccountPanel.Action.BACK); }
+            case KeyInput.KEY_ESCAPE -> { if (!event.isRepeating()) action.accept(panel.enabled(AccountPanel.Action.BACK) ? AccountPanel.Action.BACK : AccountPanel.Action.EXIT); }
             default -> panel.inputCharacter(event.getKeyChar());
         }
         event.setConsumed();
