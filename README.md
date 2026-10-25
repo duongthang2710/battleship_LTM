@@ -211,6 +211,10 @@ Không xóa volume khi dừng dịch vụ. Thay biến DB_USER/DB_PASSWORD sau k
 không tự đổi tài khoản PostgreSQL đã khởi tạo; cần dùng đúng thông tin đã tạo hoặc đổi bằng SQL.
 
 Ứng dụng mở thẳng form tài khoản. Phải đăng nhập thành công mới vào Main Menu và các chức năng game.
+Dòng **SERVER: ... / CHANGE** mở form IP/hostname và TCP port: nhập địa chỉ backend,
+chọn **CONNECT TO SERVER**, sau đó đăng nhập. Port phải từ 1 đến 65535; **BACK** hủy chỉnh sửa.
+Gửi/nhận vẫn qua network layer riêng, không chặn render thread. Địa chỉ chỉ giữ trong lần chạy hiện tại;
+tham số `-PserverHost`/`-PserverPort` vẫn dùng để chọn giá trị ban đầu.
 Chọn **CREATE AN ACCOUNT**, nhập username/mật khẩu/xác nhận; đăng ký xong chuyển
 về **SIGN IN** để đăng nhập. Username gồm 3–24 chữ ASCII, số hoặc `_`, không phân biệt
 hoa/thường. Mật khẩu 12–128 ký tự. **PROFILE → SIGN OUT** đăng xuất; về Main Menu

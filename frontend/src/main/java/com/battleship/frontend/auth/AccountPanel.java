@@ -20,7 +20,7 @@ import java.util.Optional;
 
 /** Account form only. All requests go through the existing TCP controller. */
 public final class AccountPanel {
-    public enum Action { SUBMIT, SWITCH, BACK, LOGOUT, CONNECT, EXIT }
+    public enum Action { SUBMIT, SWITCH, BACK, LOGOUT, CONNECT, EXIT, SERVER }
     private static final int GOLD = 0xDEB663, IVORY = 0xF4EAD1, CYAN = 0x91CEFF;
     private final Node root = new Node("Account form");
     private final Node card = new Node("Account card");
@@ -28,6 +28,10 @@ public final class AccountPanel {
     private final BitmapFont display, body;
     private final List<Button> buttons = new ArrayList<>();
     private final String[] values = {"", "", ""};
+    private final String[] serverValues = {System.getProperty("battleship.host", "localhost"),
+            Integer.toString(Integer.getInteger("battleship.port", 2209))};
+    private final String[] appliedServer = serverValues.clone();
+    private boolean editingServer;
     private final BitmapText[] fields = new BitmapText[3];
     private BitmapText statusLabel;
     private boolean register, visible, busy, connected;
@@ -48,6 +52,18 @@ public final class AccountPanel {
     public Node root() { return root; }
     public boolean visible() { return visible; }
     public boolean registering() { return register; }
+    public boolean editingServer() { return editingServer; }
+    public String serverHost() { return serverValues[0]; }
+    public String serverPort() { return serverValues[1]; }
+    public void toggleServer() {
+        editingServer = !editingServer;
+        System.arraycopy(appliedServer, 0, serverValues, 0, 2);
+        focused = 0; clearSecrets(); rebuild();
+    }
+    public void applyServer() {
+        System.arraycopy(serverValues, 0, appliedServer, 0, 2);
+        toggleServer();
+    }
     public String username() { return values[0]; }
     public String password() { return values[1]; }
     public String confirmation() { return values[2]; }
@@ -78,18 +94,21 @@ public final class AccountPanel {
         return switch (action) {
             case BACK -> !busy && account != null;
             case EXIT -> !busy && account == null;
-            case SWITCH -> !busy && account == null;
-            case CONNECT -> !busy && !connected;
+            case SWITCH -> !busy && account == null && !editingServer;
+            case SERVER -> !busy && account == null;
+            case CONNECT -> !busy && account == null && (editingServer || !connected);
             case LOGOUT -> !busy && account != null && connected;
-            case SUBMIT -> !busy && connected && account == null && !values[0].isBlank()
+            case SUBMIT -> !editingServer && !busy && connected && account == null && !values[0].isBlank()
                     && !values[1].isEmpty() && (!register || !values[2].isEmpty());
         };
     }
     public Optional<Action> click(Vector2f cursor) {
         if (!visible) return Optional.empty();
         float x = (cursor.x - left) / scale, y = (cursor.y - bottom) / scale;
+        if (!editingServer && account == null && enabled(Action.SERVER) && x >= 30 && x <= 410 && y >= 480 && y <= 508)
+            return Optional.of(Action.SERVER);
         if (account == null && !busy && x >= 30 && x <= 410) {
-            for (int i = 0; i < (register ? 3 : 2); i++) if (y >= fieldY(i) && y <= fieldY(i) + 48) {
+            for (int i = 0; i < (!editingServer && register ? 3 : 2); i++) if (y >= fieldY(i) && y <= fieldY(i) + 48) {
                 focused = i; refreshFields(); return Optional.empty();
             }
         }
@@ -98,17 +117,27 @@ public final class AccountPanel {
         return Optional.empty();
     }
     public Vector2f buttonCenter(Action action) {
+        if (action == Action.SERVER && !editingServer) return new Vector2f(left + 220 * scale, bottom + 494 * scale);
         Button button = buttons.stream().filter(b -> b.action() == action).findFirst().orElseThrow();
         return new Vector2f(left + 220 * scale, bottom + (button.y() + 21) * scale);
     }
-    public void nextField() { if (!busy) { focused = (focused + 1) % (register ? 3 : 2); refreshFields(); } }
+    public void nextField() { if (!busy) { focused = (focused + 1) % (!editingServer && register ? 3 : 2); refreshFields(); } }
     public void backspace() {
-        if (!busy && !values[focused].isEmpty()) {
-            values[focused] = values[focused].substring(0, values[focused].length() - 1); rebuild();
+        String[] input = editingServer ? serverValues : values;
+        if (!busy && !input[focused].isEmpty()) {
+            input[focused] = input[focused].substring(0, input[focused].length() - 1); rebuild();
         }
     }
     public void inputCharacter(char value) {
         if (busy || account != null || Character.isISOControl(value) || Character.isSurrogate(value)) return;
+        if (editingServer) {
+            int limit = focused == 0 ? 253 : 5;
+            if (serverValues[focused].length() >= limit || value > 127 || Character.isWhitespace(value)) return;
+            if (focused == 1 && (value < '0' || value > '9')) return;
+            serverValues[focused] += value;
+            rebuild();
+            return;
+        }
         int limit = focused == 0 ? 24 : 128;
         if (values[focused].length() >= limit) return;
         if (focused == 0 && !(value >= 'a' && value <= 'z' || value >= 'A' && value <= 'Z'
@@ -119,7 +148,9 @@ public final class AccountPanel {
     private float fieldY(int i) { return 408 - i * 84; }
     private void refreshFields() {
         for (int i = 0; i < 3; i++) if (fields[i] != null) {
-            String value = i == 0 ? values[i] : "*".repeat(Math.min(28, values[i].length()));
+            String value = editingServer ? (i < 2 ? serverValues[i] : "")
+                    : i == 0 ? values[i] : "*".repeat(Math.min(28, values[i].length()));
+            if (editingServer && value.length() > 30) value = value.substring(value.length() - 30);
             fields[i].setText(value.isEmpty() ? (i == focused ? "|" : "") : value);
             fields[i].setColor(Materials.rgb(i == focused ? CYAN : IVORY));
         }
@@ -130,21 +161,25 @@ public final class AccountPanel {
         outline(0, 0, 440, 620, GOLD);
         outline(8, 8, 424, 604, 0x655638);
         text(display, "BATTLESHIP", 20, 30, 582, GOLD);
-        text(display, account != null ? "YOUR ACCOUNT" : register ? "CREATE ACCOUNT" : "SIGN IN", 36, 30, 540, IVORY);
-        text(body, "ADMIRAL'S REGISTRY", 10, 32, 501, CYAN);
+        text(display, account != null ? "YOUR ACCOUNT" : editingServer ? "SERVER CONNECTION" : register ? "CREATE ACCOUNT" : "SIGN IN", 36, 30, 540, IVORY);
+        String endpoint = appliedServer[0] + ":" + appliedServer[1];
+        text(body, account == null && !editingServer ? "SERVER: " + (endpoint.length() > 30 ? endpoint.substring(0, 27) + "..." : endpoint) + " / CHANGE"
+                : "ADMIRAL'S REGISTRY", 10, 32, 501, CYAN);
         if (account == null) {
-            String[] captions = {"USERNAME", "PASSWORD", "CONFIRM PASSWORD"};
-            for (int i = 0; i < (register ? 3 : 2); i++) {
+            String[] captions = editingServer ? new String[] {"SERVER IP / HOSTNAME", "TCP PORT"} : new String[] {"USERNAME", "PASSWORD", "CONFIRM PASSWORD"};
+            for (int i = 0; i < (!editingServer && register ? 3 : 2); i++) {
                 float y = fieldY(i);
                 text(body, captions[i], 10, 32, y + 65, GOLD);
                 rect(30, y, 380, 48, new ColorRGBA(.015f, .038f, .07f, 1), 81);
                 outline(30, y, 380, 48, 0x516275);
                 fields[i] = text(body, "", 16, 44, y + 31, IVORY);
             }
-            text(body, register ? "12-128 characters / Tab to move" : "Tab to move / Enter to sign in", 10, 32,
-                    register ? 220 : 290, 0xAFBBD0);
-            button(166, !connected ? "CONNECT TO SERVER" : register ? "REGISTER" : "SIGN IN", connected ? Action.SUBMIT : Action.CONNECT);
-            button(112, register ? "ALREADY REGISTERED? SIGN IN" : "CREATE AN ACCOUNT", Action.SWITCH);
+            text(body, editingServer ? "Tab to move / Enter to connect" : register ? "12-128 characters / Tab to move" : "Tab to move / Enter to sign in", 10, 32,
+                    !editingServer && register ? 220 : 290, 0xAFBBD0);
+            button(166, editingServer || !connected ? "CONNECT TO SERVER" : register ? "REGISTER" : "SIGN IN",
+                    editingServer || !connected ? Action.CONNECT : Action.SUBMIT);
+            button(112, editingServer ? "BACK" : register ? "ALREADY REGISTERED? SIGN IN" : "CREATE AN ACCOUNT",
+                    editingServer ? Action.SERVER : Action.SWITCH);
         } else {
             text(display, account.displayName(), 31, 30, 426, IVORY);
             text(body, "@" + account.username(), 14, 32, 388, CYAN);

@@ -200,7 +200,12 @@ public final class ScreenController implements AutoCloseable {
             case EXIT -> exit.run();
             case SWITCH -> accountPanel.switchMode();
             case LOGOUT -> pvp.logout();
-            case CONNECT -> pvp.openAccount();
+            case SERVER -> accountPanel.toggleServer();
+            case CONNECT -> {
+                if (accountPanel.editingServer()) {
+                    if (pvp.connectTo(accountPanel.serverHost(), accountPanel.serverPort())) accountPanel.applyServer();
+                } else pvp.openAccount();
+            }
             case SUBMIT -> {
                 if (!pvp.connected()) pvp.openAccount();
                 else if (accountPanel.registering()) pvp.register(accountPanel.username(), accountPanel.password(), accountPanel.confirmation());

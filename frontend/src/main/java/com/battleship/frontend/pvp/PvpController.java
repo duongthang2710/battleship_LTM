@@ -31,8 +31,8 @@ public final class PvpController implements AutoCloseable {
     private final Consumer<MatchSnapshot> matchUpdates;
     private final Consumer<String> matchErrors;
     private final String playerName;
-    private final String host;
-    private final int port;
+    private String host;
+    private int port;
     private RoomSnapshot room;
     private String clientId;
     private AccountProfile account;
@@ -72,6 +72,23 @@ public final class PvpController implements AutoCloseable {
         accountView = true;
         if (!connected()) connect();
     }
+    public boolean connectTo(String serverHost, String serverPort) {
+        if (account != null || room != null || pending()) return false;
+        String nextHost = serverHost == null ? "" : serverHost.strip();
+        if (nextHost.isEmpty() || nextHost.length() > 253 || nextHost.chars().anyMatch(Character::isWhitespace)) {
+            setStatus("Enter a server IP address or hostname.");
+            return false;
+        }
+        int nextPort;
+        try { nextPort = Integer.parseInt(serverPort); }
+        catch (NumberFormatException exception) { setStatus("Port must be a number from 1 to 65535."); return false; }
+        if (nextPort < 1 || nextPort > 65535) { setStatus("Port must be a number from 1 to 65535."); return false; }
+        host = nextHost;
+        port = nextPort;
+        connect();
+        return true;
+    }
+
     public void login(String username, String password) { send(MessageType.LOGIN, new LoginRequest(username, password)); }
     public void register(String username, String password, String confirmation) {
         send(MessageType.REGISTER, new RegisterRequest(username, password, confirmation));

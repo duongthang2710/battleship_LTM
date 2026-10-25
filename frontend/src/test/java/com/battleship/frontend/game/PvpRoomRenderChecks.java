@@ -105,7 +105,7 @@ public final class PvpRoomRenderChecks extends SimpleApplication {
             }
             require(clients[0].exitValue() == 0 && clients[1].exitValue() == 0, "Both desktop clients completed");
             System.out.println(Boolean.getBoolean("battleship.disconnectOnly")
-                    ? "PASS: two desktop clients, opponent departure, private final victory/reason, rematch disabled, menu/login."
+                    ? "PASS: two desktop clients, editable server address, opponent departure, private final victory/reason, rematch disabled, menu/login."
                     : Boolean.getBoolean("battleship.accountOnly") ? "PASS: two desktop account flows; registration, login, logout, session navigation and authenticated room entry."
                     : "PASS: two desktop TCP clients; authenticated placement/retry, real timeout, HIT/MISS/SUNK, rematch/reset, fleet destruction, both menus.");
         } finally {
@@ -170,6 +170,18 @@ public final class PvpRoomRenderChecks extends SimpleApplication {
     private void authenticate() {
         AccountPanel panel = screens.accountPanel();
         if (stage == -1 && panel.visible() && screens.pvp().connected()) {
+            click(panel.buttonCenter(AccountPanel.Action.SERVER));
+            require(panel.editingServer(), "Server address form is reachable before login");
+            for (int i = panel.serverHost().length(); i > 0; i--) key(KeyInput.KEY_BACK, '\b');
+            type("127.0.0.1"); key(KeyInput.KEY_TAB, '\t');
+            for (int i = panel.serverPort().length(); i > 0; i--) key(KeyInput.KEY_BACK, '\b');
+            type("0"); click(panel.buttonCenter(AccountPanel.Action.CONNECT));
+            require(panel.editingServer() && screens.pvp().status().contains("1 to 65535"), "Invalid TCP port does not reconnect");
+            key(KeyInput.KEY_BACK, '\b'); type(System.getProperty("battleship.port", "2209"));
+            click(panel.buttonCenter(AccountPanel.Action.CONNECT));
+            stage = -4;
+        } else if (stage == -4 && screens.pvp().connected()) {
+            require(!panel.editingServer(), "Valid endpoint reconnects asynchronously and returns to login");
             click(panel.buttonCenter(AccountPanel.Action.SWITCH));
             type(accountName(role)); key(KeyInput.KEY_TAB, '\t');
             type("RenderCheckPassword2026!"); key(KeyInput.KEY_TAB, '\t');
