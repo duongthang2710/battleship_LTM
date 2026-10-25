@@ -17,8 +17,9 @@ bàn cờ và mô hình tàu 3D. Backend dùng **Java TCP Socket** để quản 
 Mỗi đội gồm Carrier (5 ô), Battleship (4 ô), Cruiser (3 ô), Submarine (3 ô)
 và Destroyer (2 ô). Tàu không được chồng lấn hoặc nằm ngoài bàn cờ.
 
-Các nút PVE / VS AI, Friends, Profile và Settings hiện chỉ có giao diện,
-chưa thực hiện chức năng. Chưa có database, tài khoản, chat hay khôi phục trận sau mất kết nối.
+Các nút PVE / VS AI, Friends và Settings hiện chỉ có giao diện,
+chưa thực hiện chức năng (riêng **Profile** hiện mở tài khoản để đăng nhập/đăng xuất).
+Đã có tài khoản và lưu kết quả PvP bằng PostgreSQL; chưa có chat hay khôi phục trận sau mất kết nối.
 
 Kết thúc trận hiển thị Victory/Defeat theo từng người. **PLAY AGAIN** trong PvP
 gửi yêu cầu đến server: một người đồng ý thì chờ trên màn kết quả, cả hai đồng ý
@@ -46,7 +47,9 @@ LTM_battleship/
 │   └── src/main/java/com/battleship/backend/
 │       ├── server/       # ServerSocket, kết nối và phiên client
 │       ├── room/         # Thành viên, mã phòng, Ready và phân phe
-│       └── match/        # Trạng thái và xử lý trận PvP trên server
+│       ├── match/        # Trận PvP và repository lưu kết quả
+│       ├── auth/         # Xác thực, password hashing và user repository
+│       └── database/     # Cấu hình JDBC và migration
 ├── shared/               # Code thuần Java dùng chung
 │   └── src/main/java/com/battleship/shared/
 │       ├── game/         # Model và luật Battleship
@@ -73,9 +76,9 @@ sequenceDiagram
     participant A as Client A
     participant S as TCP Server
     participant B as Client B
-    A->>S: CONNECT → CREATE_ROOM
+    A->>S: CONNECT → REGISTER (nếu chưa có tài khoản) → LOGIN → CREATE_ROOM
     S-->>A: CONNECT_OK → ROOM_CREATED
-    B->>S: CONNECT → JOIN_ROOM(roomCode)
+    B->>S: CONNECT → LOGIN → JOIN_ROOM(roomCode)
     S-->>B: CONNECT_OK → ROOM_JOINED
     S-->>A: PLAYER_JOINED
     A->>S: READY
@@ -129,6 +132,7 @@ một message thành nhiều đoạn hoặc gộp nhiều message trong một l�
 | Nhóm | Message chính |
 | --- | --- |
 | Kết nối | `CONNECT`, `CONNECT_OK`, `PING`, `PONG`, `DISCONNECT` |
+| Tài khoản | `REGISTER`, `REGISTER_OK`, `LOGIN`, `LOGOUT`, `LOGOUT_OK`, `AUTH_SUCCESS`, `AUTH_FAILED` |
 | Phòng | `CREATE_ROOM`, `JOIN_ROOM`, `ROOM_CREATED`, `ROOM_JOINED`, `PLAYER_JOINED`, `ROOM_UPDATED` |
 | Sẵn sàng/rời phòng | `READY`, `NOT_READY`, `START_PLACEMENT`, `LEAVE_ROOM`, `ROOM_LEFT`, `PLAYER_LEFT` |
 | Trận đấu | `SUBMIT_FLEET`, `FLEET_ACCEPTED`, `START_BATTLE`, `ATTACK`, `MATCH_UPDATED`, `TURN_TIMER` |
@@ -154,7 +158,7 @@ Nếu trận đã kết thúc, kết quả được giữ nguyên và yêu cầu
 - Git và **JDK 25**; cấu hình `JAVA_HOME` trỏ đến JDK 25.
 - Frontend cần driver đồ họa hỗ trợ **OpenGL 3.2**; có thể dùng GPU onboard.
 - Có Internet trong lần build đầu để tải Gradle và thư viện. Không cần cài Gradle riêng.
-- Backend chỉ cần Java, không cần GPU hoặc database.
+- Backend cần Java và PostgreSQL; Docker Desktop/Engine + Compose để chạy database. Không cần GPU.
 
 Dự án dùng Gradle Wrapper 9.1.0, jMonkeyEngine 3.8.1-stable và Gson 2.13.2.
 
@@ -167,6 +171,63 @@ java -version
 ```
 
 Mở chính thư mục chứa `settings.gradle` trong IDE và import dưới dạng Gradle project.
+
+### PostgreSQL và tài khoản
+
+Chỉ PostgreSQL chạy trong Docker; Java backend/frontend vẫn chạy trực tiếp.
+Tại thư mục gốc, sao chép cấu hình rồi đặt `DB_PASSWORD` riêng (không để trống):
+
+```powershell
+Copy-Item .env.example .env
+# Sửa .env: DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASSWORD
+# Khởi động Docker Desktop trước, sau đó:
+docker compose up -d --wait
+docker compose ps
+docker compose logs --tail=50 postgres
+```
+
+macOS/Linux dùng `cp .env.example .env`. `.env` đã được git-ignore.
+Database chỉ được publish trên localhost; client không kết nối PostgreSQL.
+Backend đọc `.env` trong thư mục chạy (hoặc thư mục gốc khi chạy từ `backend/`);
+biến môi trường của tiến trình ưu tiên hơn file. Không đưa `.env` lên Git.
+Khi triển khai bản `installDist`, đặt `.env` trong thư mục chạy hoặc export các biến `DB_*`.
+
+Backend tự chạy script `backend/src/main/resources/db/V001__accounts_and_matches.sql`
+trước khi mở TCP. Script chạy trong transaction, dùng khóa migration và `IF NOT EXISTS`;
+chạy lại không xóa dữ liệu. Dữ liệu nằm trong named volume `postgres_data`.
+Dừng/khởi động lại thông thường:
+
+```powershell
+docker compose stop postgres
+docker compose start postgres
+# Hoặc khởi động lại tiến trình PostgreSQL:
+docker compose restart postgres
+```
+
+Không xóa volume khi dừng dịch vụ. Thay biến DB_USER/DB_PASSWORD sau khi volume đã có
+không tự đổi tài khoản PostgreSQL đã khởi tạo; cần dùng đúng thông tin đã tạo hoặc đổi bằng SQL.
+
+Chọn **PVP / CREATE ROOM / JOIN ROOM** khi chưa đăng nhập sẽ mở form tài khoản.
+Chọn **CREATE AN ACCOUNT**, nhập username/mật khẩu/xác nhận; đăng ký xong chuyển
+về **SIGN IN** để đăng nhập. Username gồm 3–24 chữ ASCII, số hoặc `_`, không phân biệt
+hoa/thường. Mật khẩu 12–128 ký tự. **PROFILE → SIGN OUT** đăng xuất; về Main Menu
+vẫn giữ phiên đăng nhập. Không lưu mật khẩu trên đĩa phía client.
+Local Game giữ hoạt động offline như trước.
+
+Server gắn tài khoản với kết nối TCP sau `AUTH_SUCCESS`; `CONNECT.playerName`, user ID
+hoặc username tự thêm vào lệnh phòng không cấp quyền. Tất cả lệnh phòng/trận đều cần xác thực.
+Một tài khoản chỉ có một phiên đăng nhập. Đăng xuất giải phóng phiên và rời phòng hiện tại.
+Password hashing dùng PBKDF2-HMAC-SHA256, 600.000 vòng, salt ngẫu nhiên riêng 16 byte,
+so sánh hằng thời gian; không lưu/gửi password hash về client.
+Thông số theo [OWASP Password Storage](https://cheatsheetseries.owasp.org/cheatsheets/Password_Storage_Cheat_Sheet.html).
+TCP hiện chưa mã hóa TLS: dùng mạng tin cậy/VPN khi truyền thông tin đăng nhập;
+triển khai công khai cần lớp mã hóa TCP/TLS trước khi dùng tài khoản thật.
+
+`users` lưu tài khoản; `matches` và `match_players` lưu thời gian, kết quả, nguyên nhân
+(`FLEET_DESTROYED`, `TURN_TIMEOUT`, `PLAYER_LEFT`) cùng số phát bắn/hit/tàu chìm theo tài khoản.
+Chỉ bắt đầu ghi trận khi cả hai đội hình hợp lệ vào Battle; mỗi rematch có ID mới.
+Ghi lịch sử chạy trong hàng đợi riêng, transaction; lỗi ghi được log, không chặn lượt bắn.
+Chưa có màn hình lịch sử trận hoặc đặt lại mật khẩu trong phạm vi này.
 
 ### Windows / PowerShell
 
@@ -193,7 +254,8 @@ Thử PvP trên một máy: mở **ba terminal** tại thư mục gốc, mỗi t
 .\gradlew.bat :frontend:run -PplayerName="Player B"
 ```
 
-Trên client A chọn **PVP → Create Room**; client B chọn **PVP → Join Room** và nhập mã.
+Mỗi client đăng ký/đăng nhập bằng **hai tài khoản khác nhau**. Trên client A chọn
+**PVP → Create Room**; client B chọn **PVP → Join Room** và nhập mã.
 Cả hai Ready trong Waiting Room để vào xếp tàu. Xếp đủ 5 tàu rồi Ready lần nữa;
 server khóa đội tàu đã gửi và bắt đầu Battle khi cả hai hoàn tất.
 
@@ -231,7 +293,7 @@ Mã phòng chỉ chọn phòng bên trong server, không tự tìm server hay v�
 | --- | --- | --- |
 | `-PserverHost=...` | `localhost` | IP/domain backend |
 | `-PserverPort=...` | `2209` | TCP port backend |
-| `-PplayerName="..."` | `Captain` | Tên hiển thị, 1–32 ký tự |
+| `-PplayerName="..."` | `Captain` | Tên Local Game/handshake; tên PvP lấy từ tài khoản |
 
 Đổi port server bằng `.\gradlew.bat :backend:run --args="2210"`, sau đó dùng
 `-PserverPort=2210` cho các client. Khi chạy Java trực tiếp, các JVM property tương ứng
@@ -270,17 +332,28 @@ sh bin/backend 2209
 Mở TCP port tương ứng trong firewall/security group; dùng IP/domain máy chủ làm
 `serverHost` của tất cả client. Khi vận hành lâu dài, chạy backend dưới service manager
 như systemd. Server cần hỗ trợ TCP trực tiếp; frontend 3D vẫn chạy trên máy người chơi.
-Phòng và trận hiện lưu trong RAM, khởi động lại server sẽ mất trạng thái.
+Phòng/trận đang chơi lưu trong RAM; khởi động lại server mất trạng thái đang chơi.
+Tài khoản và lịch sử trận đã ghi vẫn giữ trong PostgreSQL.
 
 ## Kiểm tra và xử lý lỗi
 
-`build` chạy kiểm tra luật chơi, mapping tọa độ và một trận TCP bằng hai kết nối.
+`build` chạy kiểm tra luật chơi, mapping tọa độ và password hashing, không cần database.
+Kiểm tra PostgreSQL/TCP chạy riêng khi database đã healthy và `.env` đã cấu hình:
+
+```powershell
+.\gradlew.bat build -PdatabaseChecks
+```
+
+Lệnh trên kiểm tra đăng ký/login/logout, username trùng, identity giả, phiên trùng,
+migration lặp, hash trong database, thống kê trận và các trận TCP/rematch.
+Các kiểm tra tạo tài khoản QA với tên duy nhất trong database phát triển.
 Các kiểm tra giao diện cần môi trường OpenGL:
 
 ```powershell
 .\gradlew.bat :frontend:checkGameplayRendering :frontend:checkMainMenu
 # Cần backend chạy riêng tại localhost:2209:
 .\gradlew.bat :frontend:checkPvpRooms
+.\gradlew.bat :frontend:checkAccountScreens
 ```
 
 | Vấn đề | Kiểm tra |

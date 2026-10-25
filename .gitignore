@@ -34,4 +34,7 @@ bin/
 *.log
 hs_err_pid*
 replay_pid*
+.env
+.env.*
+!.env.example
 
