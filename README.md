@@ -23,8 +23,9 @@ bàn cờ và mô hình tàu 3D. Backend dùng **Java TCP Socket** để quản 
 Mỗi đội gồm Carrier (5 ô), Battleship (4 ô), Cruiser (3 ô), Submarine (3 ô)
 và Destroyer (2 ô). Tàu không được chồng lấn hoặc nằm ngoài bàn cờ.
 
-Các nút PVE / VS AI và Settings hiện chỉ có giao diện,
-chưa thực hiện chức năng (riêng **Profile** hiện mở tài khoản để đăng nhập/đăng xuất).
+**Settings** đã hoạt động: cửa sổ/toàn màn hình không viền, kích thước cửa sổ, độ nhạy orbit/zoom và lưu cấu hình cục bộ.
+**Profile** hiện hiển thị tài khoản và đăng xuất; chưa có màn lịch sử/thống kê cá nhân.
+PvE / VS AI chưa được triển khai; đã bỏ nút không có tác dụng khỏi menu demo.
 Đã có tài khoản và lưu kết quả PvP bằng PostgreSQL; có chat trong phòng/trận; chưa có chat riêng hoặc khôi phục trận sau mất kết nối.
 
 Kết thúc trận hiển thị Victory/Defeat theo từng người. **PLAY AGAIN** trong PvP
@@ -42,6 +43,7 @@ LTM_battleship/
 │   └── src/
 │       ├── main/java/com/battleship/frontend/
 │       │   ├── app/      # Khởi động và điều hướng màn hình
+│       │   ├── settings/ # Cấu hình desktop cục bộ, UI và lưu file
 │       │   ├── menu/     # Main Menu
 │       │   ├── pvp/      # Giao diện phòng và gửi lệnh PvP
 │       │   ├── network/  # TCP client, luồng gửi/nhận
@@ -230,7 +232,7 @@ vẫn giữ phiên đăng nhập. Không lưu mật khẩu trên đĩa phía cli
 
 Server gắn tài khoản với kết nối TCP sau `AUTH_SUCCESS`; `CONNECT.playerName`, user ID
 hoặc username tự thêm vào lệnh phòng không cấp quyền. Tất cả lệnh phòng/trận đều cần xác thực.
-Một tài khoản chỉ có một phiên đăng nhập. Đăng xuất giải phóng phiên và rời phòng hiện tại.
+Một tài khoản chỉ có một phiên đăng nhập. Đăng xuất giải phóng phiên; hãy rời phòng trước khi đăng xuất.
 Password hashing dùng PBKDF2-HMAC-SHA256, 600.000 vòng, salt ngẫu nhiên riêng 16 byte,
 so sánh hằng thời gian; không lưu/gửi password hash về client.
 Thông số theo [OWASP Password Storage](https://cheatsheetseries.owasp.org/cheatsheets/Password_Storage_Cheat_Sheet.html).
@@ -316,6 +318,35 @@ Mã phòng chỉ chọn phòng bên trong server, không tự tìm server hay v�
 `-PserverPort=2210` cho các client. Khi chạy Java trực tiếp, các JVM property tương ứng
 là `battleship.host`, `battleship.port`, `battleship.player`.
 
+## Settings và chuẩn bị demo
+
+Main Menu có **PVP, LEADERBOARD, CREATE ROOM, JOIN ROOM, FRIENDS, PROFILE, SETTINGS, EXIT**.
+Từ **SETTINGS**:
+
+- **WINDOW MODE**: cửa sổ hoặc toàn màn hình không viền ở độ phân giải gốc của màn hình chính. Chuyển chế độ giữ nguyên kết nối TCP và tài nguyên 3D.
+- **WINDOWED SIZE**: chọn trong 960×600, 1280×720, 1440×900, 1600×900, 1920×1080 nếu vừa vùng làm việc của màn hình. Chỉ chỉnh khi ở chế độ cửa sổ; cửa sổ cũng có thể kéo giãn thủ công.
+- **ORBIT / ZOOM SENSITIVITY**: 50–200%, mặc định 100%; giữ nguyên góc nhìn và giới hạn camera hiện có.
+- **APPLY & SAVE** áp dụng và ghi file; **RESET TO SAVED** bỏ bản chỉnh chưa lưu, **BACK / Esc** về menu và bỏ chỉnh sửa chưa lưu.
+- Bảng **Controls** liệt kê thao tác hiện có. Chưa có nhạc/nguồn âm thanh trong game, vì vậy không tạo nút âm lượng không có tác dụng.
+
+File cấu hình: `%USERPROFILE%\.battleship\settings.properties` trên Windows,
+`~/.battleship/settings.properties` trên macOS/Linux. Tự khôi phục khi mở lại; file sai định dạng dùng mặc định và có thông báo trong Settings.
+Lưu file chạy riêng khỏi render thread; lỗi ghi được báo và khôi phục giá trị trước đó.
+Cấu hình chỉ chứa màn hình/độ nhạy, không lưu mật khẩu. Chỉ kích thước chọn bằng **APPLY & SAVE** được lưu, không tự lưu thao tác kéo giãn cửa sổ.
+Khi cần hai cấu hình độc lập để kiểm thử bằng Java trực tiếp, đặt `-Dbattleship.settingsFile=<đường-dẫn-file>` cho từng client.
+
+Demo trên một máy: khởi động Docker và database bằng các lệnh ở trên → build → chạy server và hai client trong ba terminal.
+Dùng hai tài khoản khác nhau, client A tạo phòng, client B nhập mã; hoặc kết bạn rồi **INVITE TO BATTLE → ACCEPT**.
+Cả hai Ready phòng → xếp 5 tàu → Ready đội hình → Battle. Mỗi phát hợp lệ đổi lượt; có 60 giây mỗi lượt.
+Thử chat chờ/trận, kết quả, **PLAY AGAIN** ở cả hai phía rồi một ván mới trong cùng phòng.
+**MAIN MENU** rời phòng nhưng không dừng server; **PROFILE → SIGN OUT** về đăng nhập. **EXIT** chỉ đóng client đó.
+Sau trận, mở/Refresh Leaderboard để đọc kết quả đã lưu; Profile chưa có trang lịch sử riêng.
+
+Nếu server báo `Address already in use`, đã có tiến trình giữ port (thường là server cũ).
+Dùng server đang chạy hoặc dừng đúng terminal server cũ; không chạy hai server cùng port.
+Có thể dùng `:backend:run --args="2210"` và `-PserverPort=2210` ở cả hai client.
+Không cần dừng hay xóa volume database khi chạy lại demo.
+
 ## Leaderboard
 
 Đăng nhập → **LEADERBOARD** trong Main Menu. Có **WINS**, **WIN RATE**, **MATCHES**,
@@ -371,7 +402,7 @@ Tài khoản và lịch sử trận đã ghi vẫn giữ trong PostgreSQL.
 
 ## Kiểm tra và xử lý lỗi
 
-`build` chạy kiểm tra luật chơi, mapping tọa độ và password hashing, không cần database.
+`build` chạy kiểm tra luật chơi, mapping tọa độ, password hashing và Settings (file cấu hình/độ nhạy), không cần database.
 Kiểm tra PostgreSQL/TCP chạy riêng khi database đã healthy và `.env` đã cấu hình:
 
 ```powershell
@@ -393,6 +424,7 @@ Các kiểm tra giao diện cần môi trường OpenGL:
 .\gradlew.bat :frontend:checkFriendsScreens
 .\gradlew.bat :frontend:checkGameInviteScreens
 .\gradlew.bat :frontend:checkChatScreens
+.\gradlew.bat :frontend:checkSettingsScreens
 ```
 
 | Vấn đề | Kiểm tra |
@@ -512,4 +544,12 @@ docker compose exec -T postgres psql -U battleship -d postgres -c "CREATE DATABA
 .\gradlew.bat :backend:checkChat -PchatDatabase=battleship_chat_test_manual
 # Backend riêng đang chạy tại localhost:2209, cần OpenGL:
 .\gradlew.bat :frontend:checkChatScreens
+.\gradlew.bat :frontend:checkSettingsScreens
 ```
+
+### Kiểm tra Settings
+
+`./gradlew :frontend:checkSettings` kiểm tra file cấu hình, dữ liệu sai và tác dụng độ nhạy camera không cần OpenGL.
+Khi đã có backend chạy, `./gradlew :frontend:checkSettingsScreens -PserverPort=2209`
+mở hai client desktop kiểm tra đổi cửa sổ/toàn màn hình, lưu, bỏ thay đổi và khởi động lại để đọc cấu hình.
+Bài kiểm tra dùng file riêng trong `build/pvp-verification`, không ghi cấu hình cá nhân.
