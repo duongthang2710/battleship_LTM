@@ -11,6 +11,8 @@ import com.battleship.frontend.friends.FriendsPanel;
 import com.battleship.shared.friends.FriendsAction;
 import com.battleship.shared.leaderboard.LeaderboardSort;
 import com.battleship.frontend.pvp.PvpRoomPanel;
+import com.battleship.frontend.pvp.GameInvitePanel;
+import com.battleship.shared.room.GameInviteStatus;
 import com.battleship.shared.room.RoomPlayer;
 import com.battleship.shared.room.RoomSnapshot;
 import com.battleship.shared.game.GamePhase;
@@ -58,6 +60,7 @@ public final class PvpRoomRenderChecks extends SimpleApplication {
     private String capture;
     private int captureFrames;
     private com.jme3.scene.Node board;
+    private long inviteCountdownStarted;
     private long fleetWaitStarted;
     private long finalTurnStarted;
     private int replayShots;
@@ -97,7 +100,8 @@ public final class PvpRoomRenderChecks extends SimpleApplication {
                         "-Dbattleship.accountOnly=" + Boolean.getBoolean("battleship.accountOnly"),
                         "-Dbattleship.disconnectOnly=" + Boolean.getBoolean("battleship.disconnectOnly"),
                         "-Dbattleship.leaderboardOnly=" + Boolean.getBoolean("battleship.leaderboardOnly"),
-                        "-Dbattleship.friendsOnly=" + Boolean.getBoolean("battleship.friendsOnly"), "-cp",
+                        "-Dbattleship.friendsOnly=" + Boolean.getBoolean("battleship.friendsOnly"),
+                        "-Dbattleship.gameInviteOnly=" + Boolean.getBoolean("battleship.gameInviteOnly"), "-cp",
                         System.getProperty("java.class.path"), "-Dbattleship.port=" + System.getProperty("battleship.port", "2209"),
                         PvpRoomRenderChecks.class.getName(), role, journal.toString())
                         .redirectErrorStream(true).redirectOutput(journal.resolve(role + ".log").toFile()).start();
@@ -110,7 +114,9 @@ public final class PvpRoomRenderChecks extends SimpleApplication {
                 Thread.sleep(100);
             }
             require(clients[0].exitValue() == 0 && clients[1].exitValue() == 0, "Both desktop clients completed");
-            System.out.println(Boolean.getBoolean("battleship.friendsOnly")
+            System.out.println(Boolean.getBoolean("battleship.gameInviteOnly")
+                    ? "PASS: two desktop invite clients; global decline, real 60-second expiry, reused room, accept/navigation, Ready/placement, TCP Battle shots and menus."
+                    : Boolean.getBoolean("battleship.friendsOnly")
                     ? "PASS: two desktop Friends clients; search, TCP invitation push, accept, online lists, confirmation/cancel/remove, empty state and menu/Exit."
                     : Boolean.getBoolean("battleship.leaderboardOnly")
                     ? "PASS: two desktop leaderboard clients; real TCP rows, loading, three sorts, page navigation, empty/eligibility, error/retry and stale responses after Back."
@@ -220,6 +226,12 @@ public final class PvpRoomRenderChecks extends SimpleApplication {
         click(panel.buttonCenter(action));
     }
     private void friendsScreens() throws Exception {
+        if (Boolean.getBoolean("battleship.gameInviteOnly") && stage >= 100) { gameInviteScreens(); return; }
+        if (Boolean.getBoolean("battleship.gameInviteOnly") && stage == 6) {
+            if (role.equals("B")) { friendAction(FriendsPanel.Action.BACK); stage = 100; }
+            else if (Files.exists(journal.resolve("friends-listed-B")) && capture == null) stage = 100;
+            return;
+        }
         var panel = screens.friendsPanel();
         var data = panel.data();
         if (stage == 1) {
@@ -299,6 +311,102 @@ public final class PvpRoomRenderChecks extends SimpleApplication {
                 case 7 -> { if (screens.mainMenu().visible()) { click(screens.mainMenu().buttonCenter(MainMenu.Action.EXIT)); stage = 8; } }
                 default -> { }
             }
+        }
+    }
+
+    private void inviteAction(GameInvitePanel.Action action) { click(screens.gameInvitePanel().buttonCenter(action)); }
+    private void gameInviteScreens() throws Exception {
+        var invite = screens.gameInvites().current();
+        var panel = screens.gameInvitePanel();
+        var friends = screens.friendsPanel();
+        var room = screens.pvp().room();
+        if (role.equals("A")) {
+            switch (stage) {
+                case 100 -> {
+                    if (Files.exists(journal.resolve("invite-menu-B"))) { friendAction(FriendsPanel.Action.INVITE); stage = 101; }
+                }
+                case 101 -> {
+                    if (invite != null && invite.status() == GameInviteStatus.DECLINED && Files.exists(journal.resolve("invite-declined-B"))) {
+                        require(room != null && room.players().size() == 1 && screens.roomPanel().visible(), "Sender auto-creates room and opens Waiting Room");
+                        code = room.roomCode(); inviteAction(GameInvitePanel.Action.DISMISS); action(PvpRoomPanel.Action.INVITE_FRIENDS); stage = 102;
+                    }
+                }
+                case 102 -> {
+                    if (friends.visible() && friends.data() != null && !friends.loading()) { friendAction(FriendsPanel.Action.INVITE); stage = 103; }
+                }
+                case 103 -> {
+                    if (invite != null && invite.status() == GameInviteStatus.PENDING) {
+                        require(invite.roomCode().equals(code) && panel.seconds() > 0 && panel.seconds() <= 60, "Invitation reuses room and shows countdown");
+                        inviteCountdownStarted = System.nanoTime(); capture = "game-invite-sent-A.png"; stage = 104;
+                    }
+                }
+                case 104 -> {
+                    if (invite != null && invite.status() == GameInviteStatus.EXPIRED) {
+                        require(System.nanoTime() - inviteCountdownStarted >= TimeUnit.SECONDS.toNanos(59) && panel.seconds() == 0,
+                                "Server expires the invitation after a real 60-second wait on sender");
+                        require(room.players().size() == 1, "Expiry never joins the recipient");
+                        inviteAction(GameInvitePanel.Action.DISMISS); action(PvpRoomPanel.Action.INVITE_FRIENDS); stage = 105;
+                    }
+                }
+                case 105 -> {
+                    if (friends.visible() && friends.data() != null && !friends.loading() && Files.exists(journal.resolve("invite-expired-B"))) {
+                        friendAction(FriendsPanel.Action.INVITE); stage = 106;
+                    }
+                }
+                default -> { }
+            }
+        } else {
+            switch (stage) {
+                case 100 -> { if (screens.mainMenu().visible()) { Files.writeString(journal.resolve("invite-menu-B"), "ok"); stage = 101; } }
+                case 101 -> {
+                    if (invite != null && invite.status() == GameInviteStatus.PENDING && panel.visible()) {
+                        require(screens.mainMenu().visible() && screens.pvp().room() == null, "Recipient receives invitation globally without leaving Main Menu");
+                        require(invite.inviter().displayName().equals(accountName("A")), "Invitation identifies the authenticated sender");
+                        capture = "game-invite-received-B.png"; inviteAction(GameInvitePanel.Action.DECLINE); stage = 102;
+                    }
+                }
+                case 102 -> {
+                    if (invite != null && invite.status() == GameInviteStatus.DECLINED) {
+                        inviteAction(GameInvitePanel.Action.DISMISS); Files.writeString(journal.resolve("invite-declined-B"), "ok"); stage = 103;
+                    }
+                }
+                case 103 -> {
+                    if (invite != null && invite.status() == GameInviteStatus.PENDING) {
+                        require(panel.seconds() > 0 && panel.seconds() <= 60, "Recipient countdown starts from server duration");
+                        inviteCountdownStarted = System.nanoTime(); stage = 104;
+                    }
+                }
+                case 104 -> {
+                    if (invite != null && invite.status() == GameInviteStatus.EXPIRED) {
+                        require(System.nanoTime() - inviteCountdownStarted >= TimeUnit.SECONDS.toNanos(59) && panel.seconds() == 0,
+                                "Recipient receives real server expiry, not a local winner/timeout decision");
+                        require(screens.pvp().room() == null && screens.mainMenu().visible(), "Expired invitation leaves recipient outside the room");
+                        capture = "game-invite-expired-B.png"; inviteAction(GameInvitePanel.Action.DISMISS);
+                        Files.writeString(journal.resolve("invite-expired-B"), "ok"); stage = 105;
+                    }
+                }
+                case 105 -> {
+                    if (invite != null && invite.status() == GameInviteStatus.PENDING) { inviteAction(GameInvitePanel.Action.ACCEPT); stage = 106; }
+                }
+                default -> { }
+            }
+        }
+        if (stage == 106 && invite != null && invite.status() == GameInviteStatus.ACCEPTED && room != null && room.players().size() == 2) {
+            require(screens.roomPanel().visible() && room.roomCode().equals(invite.roomCode()), "Accepted invitation opens the correct room on " + role);
+            require(room.players().getFirst().playerName().equals(accountName("A")) && room.players().get(1).playerName().equals(accountName("B")), "Both room names synchronized");
+            capture = "game-invite-room-" + role + ".png"; inviteAction(GameInvitePanel.Action.DISMISS);
+            action(PvpRoomPanel.Action.TOGGLE_READY); stage = 107;
+        } else if (stage == 107 && screens.networkPlacement()) {
+            checkPlacement(); screens.game().perform(PlacementHud.Action.READY); stage = 108;
+        } else if (stage == 108 && screens.game().state().phase() == GamePhase.BATTLE) {
+            Files.writeString(journal.resolve(role.toLowerCase() + "-battle"), "ok"); stage = 109;
+        } else if (stage == 109) {
+            fireWhenOurTurn();
+            if (screens.pvp().match() != null && screens.pvp().match().turnNumber() >= 3 && !screens.pvp().pending()) {
+                screens.pvp().returnToMainMenu(); stage = 110;
+            }
+        } else if (stage == 110 && screens.mainMenu().visible()) {
+            click(screens.mainMenu().buttonCenter(MainMenu.Action.EXIT)); stage = 111;
         }
     }
 
