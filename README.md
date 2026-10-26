@@ -432,6 +432,7 @@ Các kiểm tra giao diện cần môi trường OpenGL:
 | Không tìm thấy JDK 25 | Kiểm tra `java -version`, `JAVA_HOME` và Gradle JVM trong IDE |
 | Connection refused / timeout | Server đã chạy, đúng IP/port, firewall và đường mạng có cho phép TCP không |
 | Port đã được sử dụng | Dừng server cũ hoặc chọn port khác cho cả server/client |
+| Join đưa về đăng nhập | Xem lý do trên form và dòng `TCP ended ... reason=...` trong Terminal client; đối chiếu `Connection ended` ở server. Lỗi mã phòng thông thường không đăng xuất. Dùng cùng phiên bản source trên hai máy. |
 | Không tạo được OpenGL context | Cập nhật driver GPU; Windows có thể thử `.\gradlew.bat :frontend:runIntegrated` |
 
 Windows launcher ưu tiên GPU hiệu năng cao và thử onboard nếu khởi tạo OpenGL thất bại;
