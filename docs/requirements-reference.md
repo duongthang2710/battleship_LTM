@@ -32,6 +32,8 @@ Người dùng xác nhận giữ **5 loại tàu thẳng**, không chuyển sang
 | Hạm đội | Tài liệu dùng 17 ô, 5 nhóm liên thông D4. Code dùng 5 tàu thẳng kích thước 5/4/3/3/2, kiểm tra biên/chồng lấn; chưa đếm thành phần liên thông D4 giữa các tàu. Người dùng đã chọn giữ nguyên 5 loại tàu thẳng; không áp quy tắc D4 giữa các tàu. |
 | Phòng và chế độ | Có tạo/join bằng mã và Ready. Tài liệu còn ghép ngẫu nhiên/phòng công khai, PvAI và đầu hàng; chưa triển khai. |
 | Kết nối và kết quả UI | Đã bổ sung nhập IP/hostname/cổng trên form tài khoản, kiểm tra cổng, giữ trạng thái kết nối. Màn kết quả hiện lý do thắng/thua, giữ bố cục hiện tại. |
-| Database | Có `users`, `matches`, `match_players`; bổ sung `last_seen_at`, `mode`, `winner_slot`, `total_turn`, `player_type` bằng migration giữ dữ liệu. Chưa làm avatar/quản lý trạng thái tài khoản/AI level/friends/conversations/messages vì thuộc chức năng chưa triển khai. Giữ PK UUID. |
+| Database | Có `users`, `matches`, `match_players`; bổ sung `last_seen_at`, `mode`, `winner_slot`, `total_turn`, `player_type` bằng migration giữ dữ liệu. Chưa làm avatar/quản lý trạng thái tài khoản/AI level/conversations/messages vì thuộc chức năng chưa triển khai. Giữ PK UUID. |
 
 Các lượt tiếp theo đối chiếu thiết kế chung và phạm vi được giao; kiểm tra code/protocol trước khi sửa. Những chức năng chưa triển khai chỉ bổ sung khi được yêu cầu.
+
+Bạn bè đã được bổ sung theo yêu cầu riêng: lời mời, quan hệ một cặp duy nhất, online/offline qua phiên TCP và migration V003. Chưa có chat hoặc mời vào phòng.

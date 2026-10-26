@@ -9,6 +9,7 @@ bàn cờ và mô hình tàu 3D. Backend dùng **Java TCP Socket** để quản 
 ## Chức năng hiện có
 
 - **Bắt buộc đăng nhập:** mở ứng dụng → đăng ký/đăng nhập → Main Menu. Không còn chế độ Play Local.
+- **Friends:** tìm username, gửi/nhận/chấp nhận/từ chối/hủy lời mời, xóa bạn có xác nhận; cập nhật hai phía qua TCP và hiển thị online/offline.
 - **Leaderboard:** xếp hạng toàn server theo số trận thắng, tỷ lệ thắng hoặc số trận; 10 người/trang.
 - **PvP:** tạo phòng, tham gia bằng mã 6 ký tự, phòng chờ hai người, Ready/Not Ready,
   xếp tàu và đánh trận qua TCP.
@@ -20,7 +21,7 @@ bàn cờ và mô hình tàu 3D. Backend dùng **Java TCP Socket** để quản 
 Mỗi đội gồm Carrier (5 ô), Battleship (4 ô), Cruiser (3 ô), Submarine (3 ô)
 và Destroyer (2 ô). Tàu không được chồng lấn hoặc nằm ngoài bàn cờ.
 
-Các nút PVE / VS AI, Friends và Settings hiện chỉ có giao diện,
+Các nút PVE / VS AI và Settings hiện chỉ có giao diện,
 chưa thực hiện chức năng (riêng **Profile** hiện mở tài khoản để đăng nhập/đăng xuất).
 Đã có tài khoản và lưu kết quả PvP bằng PostgreSQL; chưa có chat hay khôi phục trận sau mất kết nối.
 
@@ -387,6 +388,7 @@ Các kiểm tra giao diện cần môi trường OpenGL:
 .\gradlew.bat :frontend:checkAccountScreens
 .\gradlew.bat :frontend:checkPvpDisconnect
 .\gradlew.bat :frontend:checkLeaderboardScreens
+.\gradlew.bat :frontend:checkFriendsScreens
 ```
 
 | Vấn đề | Kiểm tra |
@@ -414,3 +416,33 @@ docker compose exec -T postgres psql -U battleship -d postgres -c "CREATE DATABA
 Thay username `battleship` nếu `.env` dùng DB_USER khác. Test yêu cầu database mới/chưa có user;
 bao phủ dữ liệu rỗng/nhiều trận, đồng điểm, phân trang, chuỗi thắng, dữ liệu bị loại, timeout,
 kết quả mới qua TCP và lỗi truy vấn. Không chạy test này trên database vận hành.
+
+## Bạn bè qua TCP
+
+Mở **FRIENDS** sau khi đăng nhập. Ô tìm kiếm nhận username đầy đủ hoặc một phần
+(không phân biệt hoa/thường); danh sách phân trang 8 người. Các mục **FRIENDS**,
+**RECEIVED**, **SENT** hiển thị bạn bè, lời mời đang chờ nhận và trạng thái lời mời đã gửi.
+**REMOVE** cần xác nhận lần nữa; **KEEP FRIEND** hủy thao tác. Dấu `*` trên nút FRIENDS
+báo có thay đổi khi đang ở màn khác. Online/offline dựa trên phiên đã đăng nhập của server.
+
+Migration tự động `V003__friendships.sql` giữ một hàng cho mỗi cặp UUID có thứ tự;
+trạng thái PENDING / ACCEPTED / DECLINED / CANCELLED / REMOVED. Mục SENT giữ lời mời
+mới nhất của mỗi cặp, không phải toàn bộ lịch sử từng lần gửi. Nếu đã có lời mời ngược chiều,
+người nhận dùng **ACCEPT** / **DECLINE**, server không tạo lời mời thứ hai.
+Các thao tác khóa hàng và commit trong transaction trước khi đẩy `FRIENDS_CHANGED` cho hai phía.
+
+Client gửi `FRIENDS_REQUEST` (action, targetId, query, page); server lấy danh tính từ
+phiên xác thực và trả `FRIENDS_RESULT` hoặc `FRIENDS_ERROR`. UI không đọc database.
+Khởi động lại backend áp dụng migration, dùng frontend/backend cùng phiên bản protocol.
+Chưa có chat hoặc mời bạn vào phòng.
+
+Kiểm thử database riêng, mới và chưa có tài khoản (đổi DB_USER nếu cần):
+
+```powershell
+docker compose exec -T postgres psql -U battleship -d postgres -c "CREATE DATABASE battleship_friends_test_manual"
+.\gradlew.bat :backend:checkFriends -PfriendsDatabase=battleship_friends_test_manual
+```
+
+Test chạy TCP thật với nhiều tài khoản, kiểm tra transaction/lời mời hai chiều đồng thời,
+quyền truy cập, online/offline, persistence sau restart và lỗi database. Không chạy trên database vận hành.
+`checkFriendsScreens` mở hai client desktop thật với thao tác nhập tự động; cần backend riêng và OpenGL.
