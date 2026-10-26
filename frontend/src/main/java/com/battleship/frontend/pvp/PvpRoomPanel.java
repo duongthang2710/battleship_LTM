@@ -23,7 +23,7 @@ import java.util.Optional;
 
 public final class PvpRoomPanel {
     public enum Action {
-        CREATE_ROOM, SHOW_JOIN, JOIN_ROOM, BACK, TOGGLE_READY, LEAVE_ROOM, DISCONNECT, CONNECT
+        CREATE_ROOM, SHOW_JOIN, JOIN_ROOM, BACK, INVITE_FRIENDS, TOGGLE_READY, LEAVE_ROOM, DISCONNECT, CONNECT
     }
 
     private enum View { CHOICE, JOIN, WAITING }
@@ -146,6 +146,7 @@ public final class PvpRoomPanel {
 
     public boolean enabled(Action action) {
         return switch (action) {
+            case INVITE_FRIENDS -> connected && !busy && room != null && room.phase() == RoomPhase.WAITING && room.players().size() < 2;
             case BACK -> !busy;
             case CONNECT -> !connected && !connecting && !busy;
             case DISCONNECT -> connected && !busy;
@@ -218,7 +219,8 @@ public final class PvpRoomPanel {
             player(1, 208);
             boolean ready = room.players().stream().anyMatch(player -> player.clientId().equals(localClientId) && player.ready());
             button(34, 132, 372, 48, ready ? "NOT READY" : "READY", Action.TOGGLE_READY, true);
-            button(34, 28, 372, 42, "LEAVE ROOM", Action.LEAVE_ROOM, false);
+            button(34, 28, 180, 42, "INVITE FRIENDS", Action.INVITE_FRIENDS, false);
+            button(226, 28, 180, 42, "LEAVE ROOM", Action.LEAVE_ROOM, false);
         }
         statusLabel = centered(body, wrapStatus(status), 11, WIDTH / 2, 107, 0xB9C7DB);
         refreshButtons();

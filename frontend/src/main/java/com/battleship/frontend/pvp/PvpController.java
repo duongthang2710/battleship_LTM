@@ -34,6 +34,9 @@ public final class PvpController implements AutoCloseable {
     private final String playerName;
     private Consumer<Message> leaderboardListener = message -> { };
     private Consumer<Message> friendsListener = message -> { };
+    private Consumer<Message> gameInviteListener = message -> { };
+    private Runnable inviteFriendsAction = () -> { };
+    private String inviteRoomRequest;
     private String host;
     private int port;
     private RoomSnapshot room;
@@ -68,6 +71,17 @@ public final class PvpController implements AutoCloseable {
         port = Integer.getInteger("battleship.port", 2209);
         connection = new ConnectionManager(this::onMessage, this::onStatus);
     }
+
+    public void setGameInviteListener(Consumer<Message> listener) { gameInviteListener = listener; }
+    public void setInviteFriendsAction(Runnable action) { inviteFriendsAction = action; }
+    public String requestGameInvite(MessageType type, Object payload) {
+        if (account == null || pending()) return null;
+        Message message = Message.request(type, payload);
+        if (!connection.send(message)) return null;
+        if (type == MessageType.SEND_GAME_INVITE || type == MessageType.ACCEPT_GAME_INVITE) inviteRoomRequest = message.requestId();
+        return message.requestId();
+    }
+    public void showInvitedRoom() { if (room != null && room.phase() == RoomPhase.WAITING) showWaiting.run(); }
 
     public void setFriendsListener(Consumer<Message> listener) { friendsListener = listener; }
     public String requestFriends(com.battleship.shared.friends.FriendsRequest request) {
@@ -182,6 +196,7 @@ public final class PvpController implements AutoCloseable {
     public void handle(PvpRoomPanel.Action action) {
         if (!active || !panel.enabled(action)) return;
         switch (action) {
+            case INVITE_FRIENDS -> inviteFriendsAction.run();
             case CONNECT -> connect();
             case DISCONNECT -> disconnect();
             case SHOW_JOIN -> { joining = true; panel.showJoin(); setStatus("Enter a six-character room code."); }
@@ -213,6 +228,7 @@ public final class PvpController implements AutoCloseable {
     public void disconnect() {
         connection.disconnect();
         account = null;
+        inviteRoomRequest = null;
         room = null;
         match = null;
         rematch = null;
@@ -258,6 +274,7 @@ public final class PvpController implements AutoCloseable {
             }
         } else if (!state.connecting()) {
             account = null;
+            inviteRoomRequest = null;
             room = null;
             match = null;
             rematch = null;
@@ -276,6 +293,10 @@ public final class PvpController implements AutoCloseable {
 
     private void onMessage(Message message) {
         if (!active) return;
+        if (message.type() == MessageType.GAME_INVITE_UPDATED || message.type() == MessageType.GAME_INVITE_ERROR) {
+            if (message.requestId().equals(inviteRoomRequest)) inviteRoomRequest = null;
+            gameInviteListener.accept(message); return;
+        }
         if (message.type() == MessageType.FRIENDS_RESULT || message.type() == MessageType.FRIENDS_ERROR || message.type() == MessageType.FRIENDS_CHANGED) {
             friendsListener.accept(message); return;
         }
@@ -297,6 +318,7 @@ public final class PvpController implements AutoCloseable {
             case AUTH_FAILED -> {
                 leaderboardListener.accept(message);
                 friendsListener.accept(message);
+                gameInviteListener.accept(message);
                 AuthError error = message.payloadAs(AuthError.class);
                 if (error.code().equals("AUTH_REQUIRED")) account = null;
                 setStatus(error.message());
@@ -311,6 +333,11 @@ public final class PvpController implements AutoCloseable {
                 joining = false;
                 panel.showRoom(room, clientId);
                 setStatus(room.players().size() < 2 ? "Waiting for another admiral." : "Both admirals must be ready.");
+                if (message.requestId().equals(inviteRoomRequest)
+                        && (message.type() == MessageType.ROOM_CREATED || message.type() == MessageType.ROOM_JOINED)) {
+                    inviteRoomRequest = null;
+                    showWaiting.run();
+                }
                 LOG.info(message.type() + " code=" + room.roomCode() + " players=" + room.players().size());
                 if (message.type() == MessageType.PLAYER_LEFT) {
                     match = null;
@@ -398,6 +425,7 @@ public final class PvpController implements AutoCloseable {
         active = false;
         connection.close();
         account = null;
+        inviteRoomRequest = null;
         room = null;
         match = null;
         rematch = null;

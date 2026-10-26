@@ -12,6 +12,7 @@ public final class FriendsController {
     private final PvpController network;
     private final FriendsPanel panel;
     private final Runnable mainMenu;
+    private final Consumer<java.util.UUID> invite;
     private final Consumer<Boolean> notification;
     private FriendsAction tab = FriendsAction.FRIENDS;
     private int page;
@@ -19,7 +20,8 @@ public final class FriendsController {
     private long sentAt;
     private boolean active, dirty;
 
-    public FriendsController(PvpController network, FriendsPanel panel, Runnable mainMenu, Consumer<Boolean> notification) {
+    public FriendsController(PvpController network, FriendsPanel panel, Runnable mainMenu, Consumer<Boolean> notification, Consumer<java.util.UUID> invite) {
+        this.invite = invite;
         this.network = network; this.panel = panel; this.mainMenu = mainMenu; this.notification = notification;
         network.setFriendsListener(this::onMessage);
     }
@@ -46,6 +48,7 @@ public final class FriendsController {
             case PREVIOUS -> { page--; load(); }
             case NEXT -> { page++; load(); }
             case REFRESH -> { notice = ""; load(); }
+            case INVITE -> invite.accept(command.target());
             case REMOVE -> panel.confirm(command.target());
             case CANCEL_REMOVE -> panel.cancelConfirmation();
             default -> {

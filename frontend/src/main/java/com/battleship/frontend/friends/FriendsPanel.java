@@ -20,7 +20,7 @@ import java.util.*;
 
 public final class FriendsPanel {
     public enum Action { FRIENDS, RECEIVED, SENT, SEARCH, REFRESH, PREVIOUS, NEXT, BACK,
-                         SEND, ACCEPT, DECLINE, CANCEL, REMOVE, CONFIRM_REMOVE, CANCEL_REMOVE }
+                         SEND, ACCEPT, DECLINE, CANCEL, INVITE, REMOVE, CONFIRM_REMOVE, CANCEL_REMOVE }
     public record Command(Action action, UUID target) {}
     private static final float WIDTH = 1100, HEIGHT = 690;
     private static final int GOLD = 0xDEB663, IVORY = 0xF4EAD1, CYAN = 0x91CEFF, MUTED = 0xA3AEC2;
@@ -35,6 +35,7 @@ public final class FriendsPanel {
     private String query = "", status = "";
     private boolean visible, loading, focused;
     private int page;
+    private boolean inRoom;
     private UUID confirmation;
     private String confirmationName;
     private float scale = 1, left, bottom;
@@ -45,6 +46,7 @@ public final class FriendsPanel {
         display = assets.loadFont("fonts/CormorantGaramond.fnt"); body = assets.loadFont("fonts/Manrope.fnt");
         root.attachChild(card); resize(1440, 900); rebuild(); hide();
     }
+    public void setInRoom(boolean value) { inRoom = value; rebuild(); }
     public Node root() { return root; }
     public boolean visible() { return visible; }
     public boolean loading() { return loading; }
@@ -144,7 +146,7 @@ public final class FriendsPanel {
         if (data != null) for (int i = 0; i < data.entries().size(); i++) row(data.entries().get(i), i);
         text(body, status, 12, 32, 115, CYAN);
         text(body, "Sent shows the latest invitation for each player. All dates use your local time.", 10, 32, 84, MUTED);
-        button(32, 25, 180, "MAIN MENU", Action.BACK, null);
+        button(32, 25, 180, inRoom ? "WAITING ROOM" : "MAIN MENU", Action.BACK, null);
         button(228, 25, 120, "REFRESH", Action.REFRESH, null);
         button(730, 25, 100, "PREVIOUS", Action.PREVIOUS, null);
         button(968, 25, 100, "NEXT", Action.NEXT, null);
@@ -177,7 +179,10 @@ public final class FriendsPanel {
         text(body, caption, 11, 460, y + 29, state.equals("FRIEND") && entry.online() ? CYAN : GOLD);
         if (entry.requestedAt() != null) text(body, DATE.format(Instant.parse(entry.requestedAt())), 9, 460, y + 12, MUTED);
         switch (state) {
-            case "FRIEND" -> button(913, y, 140, "REMOVE", Action.REMOVE, entry.userId());
+            case "FRIEND" -> {
+                if (entry.online()) button(734, y, 174, "INVITE TO BATTLE", Action.INVITE, entry.userId());
+                button(913, y, 140, "REMOVE", Action.REMOVE, entry.userId());
+            }
             case "INCOMING" -> {
                 button(768, y, 140, "ACCEPT", Action.ACCEPT, entry.userId());
                 button(913, y, 140, "DECLINE", Action.DECLINE, entry.userId());

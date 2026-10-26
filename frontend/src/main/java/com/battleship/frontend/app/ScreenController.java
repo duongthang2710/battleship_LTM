@@ -2,6 +2,9 @@ package com.battleship.frontend.app;
 
 import com.battleship.frontend.camera.OrbitCamera;
 import com.battleship.frontend.friends.*;
+import com.battleship.frontend.pvp.GameInvitePanel;
+import com.battleship.frontend.pvp.GameInviteController;
+import com.battleship.frontend.pvp.GameInviteInput;
 import com.battleship.frontend.auth.AccountPanel;
 import com.battleship.frontend.auth.AccountInput;
 import com.battleship.frontend.leaderboard.LeaderboardPanel;
@@ -49,6 +52,9 @@ public final class ScreenController implements AutoCloseable {
     private final LeaderboardPanel leaderboardPanel;
     private final LeaderboardController leaderboard;
     private PointerInput leaderboardInput;
+    private final GameInvitePanel gameInvitePanel;
+    private final GameInviteController gameInvites;
+    private final GameInviteInput gameInviteInput;
     private final FriendsPanel friendsPanel;
     private final FriendsController friends;
     private PointerInput friendsPointer;
@@ -103,10 +109,19 @@ public final class ScreenController implements AutoCloseable {
         leaderboard = new LeaderboardController(pvp, leaderboardPanel, this::requestMainMenu);
         friendsPanel = new FriendsPanel(assets);
         gui.attachChild(friendsPanel.root());
-        friends = new FriendsController(pvp, friendsPanel, this::requestMainMenu, menu::friendsUpdated);
+        gameInvitePanel = new GameInvitePanel(assets);
+        gui.attachChild(gameInvitePanel.root());
+        gameInvites = new GameInviteController(pvp, gameInvitePanel);
+        gameInviteInput = new GameInviteInput(input, gameInvitePanel, gameInvites::handle);
+        friends = new FriendsController(pvp, friendsPanel, () -> {
+            if (pvp.room() != null) roomRequested = true; else requestMainMenu();
+        }, menu::friendsUpdated, gameInvites::send);
+        pvp.setInviteFriendsAction(() -> pendingAction = MainMenu.Action.FRIENDS);
         showAccount();
     }
 
+    public GameInvitePanel gameInvitePanel() { return gameInvitePanel; }
+    public GameInviteController gameInvites() { return gameInvites; }
     public FriendsPanel friendsPanel() { return friendsPanel; }
     public FriendsController friends() { return friends; }
     public LeaderboardPanel leaderboardPanel() { return leaderboardPanel; }
@@ -124,6 +139,7 @@ public final class ScreenController implements AutoCloseable {
         menu.resize(width, height);
         leaderboardPanel.resize(width, height);
         friendsPanel.resize(width, height);
+        gameInvitePanel.resize(width, height);
         accountPanel.resize(width, height);
         hud.resize(width, height);
         placementHud.resize(width, height);
@@ -136,6 +152,7 @@ public final class ScreenController implements AutoCloseable {
         pvp.update();
         leaderboard.update();
         friends.update();
+        gameInvites.update();
         accountPanel.sync(pvp.account(), pvp.status(), pvp.pending(), pvp.connected());
         if (pvp.account() == null) {
             pendingAction = null;
@@ -197,7 +214,7 @@ public final class ScreenController implements AutoCloseable {
 
     private void showFriends() {
         closeInputs(); menu.hide(); roomPanel.hide(); setGameHudVisible(false);
-        screen = Screen.FRIENDS; friends.show();
+        screen = Screen.FRIENDS; friendsPanel.setInRoom(pvp.room() != null); friends.show();
         friendsInput = new FriendsInput(input, friendsPanel, friends::handle);
         friendsPointer = new PointerInput(input, orbit, cursor -> friendsPanel.click(cursor).ifPresent(friends::handle));
     }
@@ -312,6 +329,7 @@ public final class ScreenController implements AutoCloseable {
 
     @Override public void close() {
         closeInputs();
+        gameInviteInput.close();
         pvp.close();
     }
 }
