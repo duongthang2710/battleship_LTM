@@ -34,6 +34,14 @@ public final class ConnectionManager implements AutoCloseable {
     }
 
     public com.battleship.backend.friends.FriendsService friends() { return friends; }
+    public com.battleship.shared.game.PlayerIdentity onlinePlayer(java.util.UUID accountId) {
+        for (ClientHandler client : clients.values()) {
+            AccountProfile account = client.account();
+            if (account != null && account.id().equals(accountId) && client.connected())
+                return new com.battleship.shared.game.PlayerIdentity(client.id(), account.displayName());
+        }
+        return null;
+    }
     private boolean online(java.util.UUID id) {
         return clients.values().stream().anyMatch(c -> { AccountProfile account = c.account(); return account != null && account.id().equals(id); });
     }

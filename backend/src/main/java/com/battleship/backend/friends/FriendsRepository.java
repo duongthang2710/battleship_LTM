@@ -123,6 +123,16 @@ public final class FriendsRepository {
         }
     }
 
+    public boolean areFriends(UUID a, UUID b) throws SQLException {
+        try (Connection connection = database.open(); PreparedStatement statement = connection.prepareStatement("""
+                SELECT 1 FROM friendships WHERE user_low = LEAST(?::uuid, ?::uuid)
+                AND user_high = GREATEST(?::uuid, ?::uuid) AND status = 'ACCEPTED'
+                """)) {
+            pair(statement, a, b); statement.setQueryTimeout(10);
+            try (ResultSet row = statement.executeQuery()) { return row.next(); }
+        }
+    }
+
     public List<UUID> friendIds(UUID account) throws SQLException {
         try (Connection connection = database.open(); PreparedStatement statement = connection.prepareStatement("""
                 SELECT CASE WHEN user_low = ? THEN user_high ELSE user_low END FROM friendships

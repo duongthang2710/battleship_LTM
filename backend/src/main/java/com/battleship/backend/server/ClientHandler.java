@@ -30,6 +30,7 @@ public final class ClientHandler implements Runnable, AutoCloseable {
         this.connections = connections;
     }
 
+    public boolean connected() { return !socket.isClosed(); }
     public String id() { return session.id(); }
     public AccountProfile account() { return session.account(); }
 
@@ -66,6 +67,7 @@ public final class ClientHandler implements Runnable, AutoCloseable {
                         send(Message.reply(MessageType.PONG, message.requestId(), null));
                         LOG.fine("PONG " + id());
                     }
+                    case SEND_GAME_INVITE, ACCEPT_GAME_INVITE, DECLINE_GAME_INVITE -> gameInvite(message);
                     case FRIENDS_REQUEST -> friends(message);
                     case LEADERBOARD_REQUEST -> leaderboard(message);
                     case REGISTER, LOGIN, LOGOUT -> authenticate(message);
@@ -83,6 +85,33 @@ public final class ClientHandler implements Runnable, AutoCloseable {
         } finally {
             close();
             connections.remove(id());
+        }
+    }
+
+    private void gameInvite(Message message) {
+        if (session.account() == null) {
+            send(Message.reply(MessageType.AUTH_FAILED, message.requestId(), new AuthError("AUTH_REQUIRED", "Sign in to invite friends.")));
+            return;
+        }
+        try {
+            if (message.type() == MessageType.SEND_GAME_INVITE) {
+                var request = message.payloadAs(com.battleship.shared.room.SendGameInvite.class);
+                if (request == null) throw new IllegalArgumentException("Choose a friend to invite.");
+                // JDBC runs on this connection's worker, outside the room/timer lock.
+                connections.friends().requireFriends(session.account().id(), request.friendId());
+                connections.rooms().invite(session.player(), request.friendId(), message.requestId());
+            } else {
+                var request = message.payloadAs(com.battleship.shared.room.GameInviteResponse.class);
+                if (request == null || request.inviteId() == null) throw new IllegalArgumentException("Missing invitation ID.");
+                connections.rooms().answerInvite(session.player(), request.inviteId(),
+                        message.type() == MessageType.ACCEPT_GAME_INVITE, message.requestId());
+            }
+        } catch (com.google.gson.JsonParseException | IllegalArgumentException exception) {
+            String reason = exception instanceof com.google.gson.JsonParseException ? "Malformed invitation request." : exception.getMessage();
+            send(Message.reply(MessageType.GAME_INVITE_ERROR, message.requestId(), new RoomError("INVITE_UNAVAILABLE", reason)));
+        } catch (java.sql.SQLException exception) {
+            LOG.warning("Could not verify friendship; SQL state=" + exception.getSQLState());
+            send(Message.reply(MessageType.GAME_INVITE_ERROR, message.requestId(), new RoomError("DATABASE_UNAVAILABLE", "Could not verify friendship. Please retry.")));
         }
     }
 

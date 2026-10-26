@@ -8,6 +8,7 @@ import com.battleship.shared.game.GamePhase;
 import com.battleship.shared.match.AttackRequest;
 import com.battleship.shared.match.FleetSubmission;
 import com.battleship.shared.room.JoinRoomRequest;
+import com.battleship.shared.room.GameInviteStatus;
 import com.battleship.shared.room.RoomError;
 import com.battleship.shared.room.RoomPhase;
 import com.battleship.shared.room.RoomPlayer;
@@ -32,16 +33,19 @@ public final class RoomManager implements AutoCloseable {
     private final Map<String, String> memberships = new HashMap<>();
     private final ConnectionManager connections;
     private final MatchRepository history;
+    private final GameInvites invitations;
     private final ScheduledExecutorService clock = Executors.newSingleThreadScheduledExecutor(
             Thread.ofPlatform().daemon(true).name("match-clock").factory());
 
     public RoomManager(ConnectionManager connections, MatchRepository history) {
         this.connections = connections;
         this.history = history;
+        invitations = new GameInvites(connections);
         clock.scheduleAtFixedRate(this::updateClocks, 200, 200, TimeUnit.MILLISECONDS);
     }
 
     private synchronized void updateClocks() {
+        invitations.expire();
         for (Room room : rooms.values()) {
             if (room.match == null) continue;
             if (room.match.expireTurn()) {
@@ -78,7 +82,56 @@ public final class RoomManager implements AutoCloseable {
     }
 
     public synchronized void disconnected(String clientId) {
+        invitations.invalidateClient(clientId, "Player signed out or disconnected. Invitation cancelled.");
         leave(clientId, null);
+    }
+
+    public synchronized void invite(PlayerIdentity player, java.util.UUID friendId, String requestId) {
+        invitations.expire();
+        var inviter = connections.account(player.clientId());
+        if (inviter == null) throw new IllegalArgumentException("Sign in to invite friends.");
+        PlayerIdentity recipient = connections.onlinePlayer(friendId);
+        if (recipient == null) throw new IllegalArgumentException("This friend is offline.");
+        Room room = rooms.get(memberships.get(player.clientId()));
+        if (room != null && room.players.containsKey(recipient.clientId()))
+            throw new IllegalArgumentException("You are already in the same room.");
+        if (room != null && (room.phase != RoomPhase.WAITING || room.match != null))
+            throw new IllegalArgumentException("This room has already started a match.");
+        if (room != null && room.players.size() >= 2) throw new IllegalArgumentException("This room is full.");
+        if (memberships.containsKey(recipient.clientId())) throw new IllegalArgumentException("This friend is already in another room.");
+        invitations.checkCapacity(room, recipient.clientId());
+        if (room == null) {
+            create(player, Message.reply(MessageType.CREATE_ROOM, requestId, null));
+            room = rooms.get(memberships.get(player.clientId()));
+        }
+        var recipientAccount = connections.account(recipient.clientId());
+        if (recipientAccount == null || !recipientAccount.id().equals(friendId)) throw new IllegalArgumentException("This friend is offline.");
+        var invite = invitations.add(room, player.clientId(), recipient.clientId(), inviter, recipientAccount);
+        invitations.publish(invite, GameInviteStatus.PENDING, player.clientId(), requestId, "PvP invitation sent. Waiting for a response.");
+    }
+
+    public synchronized void answerInvite(PlayerIdentity player, java.util.UUID inviteId, boolean accept, String requestId) {
+        invitations.expire();
+        var account = connections.account(player.clientId());
+        if (account == null) throw new IllegalArgumentException("Sign in to answer invitations.");
+        var invite = invitations.forRecipient(inviteId, player.clientId(), account.id());
+        if (!accept) {
+            invitations.finish(invite, GameInviteStatus.DECLINED, player.clientId(), requestId, "PvP invitation declined.");
+            return;
+        }
+        Room room = invite.room();
+        var sender = connections.account(invite.sender());
+        if (sender == null || !sender.id().equals(invite.inviter().id()) || rooms.get(room.code) != room
+                || !room.code.equals(memberships.get(invite.sender())) || room.phase != RoomPhase.WAITING || room.match != null
+                || room.players.size() >= 2 || memberships.containsKey(player.clientId())) {
+            invitations.finish(invite, GameInviteStatus.INVALIDATED, player.clientId(), requestId,
+                    "Invitation is no longer valid: player unavailable, room changed or room full.");
+            return;
+        }
+        addPlayer(room, player, requestId);
+        invitations.finish(invite, GameInviteStatus.ACCEPTED, player.clientId(), requestId, "Invitation accepted. Both admirals are in the waiting room.");
+        invitations.invalidateRoom(room, "Room is now full. Invitation cancelled.");
+        invitations.invalidateClient(player.clientId(), "Player joined another room. Invitation cancelled.");
     }
 
     private void create(PlayerIdentity player, Message message) {
@@ -94,6 +147,7 @@ public final class RoomManager implements AutoCloseable {
         rooms.put(code, room);
         memberships.put(player.clientId(), code);
         connections.send(player.clientId(), Message.reply(MessageType.ROOM_CREATED, message.requestId(), room.snapshot()));
+        invitations.invalidateClient(player.clientId(), "Player created another room. Invitation cancelled.");
         LOG.info("ROOM_CREATED code=" + code + " player=" + player.playerName());
     }
 
@@ -124,13 +178,19 @@ public final class RoomManager implements AutoCloseable {
             error(player, message, "ROOM_FULL", "This room already has two players.");
             return;
         }
+        addPlayer(room, player, message.requestId());
+        invitations.invalidateRoom(room, "Room is now full. Invitation cancelled.");
+        invitations.invalidateClient(player.clientId(), "Player joined another room. Invitation cancelled.");
+    }
+
+    private void addPlayer(Room room, PlayerIdentity player, String requestId) {
         room.players.put(player.clientId(), new RoomPlayer(player.clientId(), player.playerName(), false));
-        memberships.put(player.clientId(), code);
+        memberships.put(player.clientId(), room.code);
         RoomSnapshot snapshot = room.snapshot();
-        connections.send(player.clientId(), Message.reply(MessageType.ROOM_JOINED, message.requestId(), snapshot));
+        connections.send(player.clientId(), Message.reply(MessageType.ROOM_JOINED, requestId, snapshot));
         room.players.keySet().stream().filter(id -> !id.equals(player.clientId()))
                 .forEach(id -> connections.send(id, Message.request(MessageType.PLAYER_JOINED, snapshot)));
-        LOG.info("ROOM_JOINED code=" + code + " player=" + player.playerName());
+        LOG.info("ROOM_JOINED code=" + room.code + " player=" + player.playerName());
     }
 
     private void ready(PlayerIdentity player, Message message) {
@@ -158,6 +218,7 @@ public final class RoomManager implements AutoCloseable {
     }
 
     private void startPlacement(Room room) {
+        invitations.invalidateRoom(room, "Placement has started. Invitation cancelled.");
         room.phase = RoomPhase.PLACEMENT;
         room.rematchRequests.clear();
         room.rematchDeclined = false;
@@ -232,6 +293,7 @@ public final class RoomManager implements AutoCloseable {
     }
 
     private void leave(String clientId, String requestId) {
+        invitations.invalidateClient(clientId, "Player left the room. Invitation cancelled.");
         String code = memberships.remove(clientId);
         if (code == null) return;
         Room room = rooms.get(code);

@@ -13,6 +13,11 @@ public final class FriendsService {
         this.repository = repository; this.online = online;
     }
 
+    public void requireFriends(UUID actor, UUID target) throws SQLException {
+        if (target == null || actor.equals(target) || !repository.areFriends(actor, target))
+            throw new IllegalArgumentException("Only an existing friend can be invited to battle.");
+    }
+
     public FriendsResult handle(UUID actor, FriendsRequest request) throws SQLException {
         if (request == null || request.action() == null) throw new IllegalArgumentException("Missing friends action.");
         if (request.action().listing()) {
