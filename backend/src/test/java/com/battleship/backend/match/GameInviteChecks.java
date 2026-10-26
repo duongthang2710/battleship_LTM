@@ -16,7 +16,7 @@ import static com.battleship.backend.match.TcpMatchChecks.Peer;
 
 /** Real TCP and PostgreSQL in a fresh isolated database. Real 60s expiry is also checked by desktop clients. */
 public final class GameInviteChecks {
-    private static final Map<Peer, Deque<Message>> events = new ConcurrentHashMap<>();
+    static final Map<Peer, Deque<Message>> events = new ConcurrentHashMap<>();
 
     public static void main(String[] args) throws Exception {
         String name = System.getenv("DB_NAME");
@@ -150,16 +150,16 @@ public final class GameInviteChecks {
         return receive(peer, m -> m.type() == MessageType.GAME_INVITE_UPDATED
                 && m.payloadAs(GameInvite.class).inviteId().equals(id) && m.payloadAs(GameInvite.class).status() == status).payloadAs(GameInvite.class);
     }
-    private static Message request(Peer peer, MessageType type, Object payload, MessageType response) throws Exception {
+    static Message request(Peer peer, MessageType type, Object payload, MessageType response) throws Exception {
         Message message = Message.request(type, payload); MessageCodec.write(peer.output, message);
         return receive(peer, m -> m.requestId().equals(message.requestId()) && (m.type() == response
-                || m.type() == MessageType.GAME_INVITE_ERROR || m.type() == MessageType.ERROR || m.type() == MessageType.AUTH_FAILED));
+                || m.type() == MessageType.CHAT_ERROR || m.type() == MessageType.GAME_INVITE_ERROR || m.type() == MessageType.ERROR || m.type() == MessageType.AUTH_FAILED));
     }
     private static void rejected(Peer peer, MessageType type, Object payload, String reason) throws Exception {
         Message result = request(peer, type, payload, MessageType.GAME_INVITE_ERROR);
         require(result.type() == MessageType.GAME_INVITE_ERROR && result.payloadAs(RoomError.class).message().contains(reason), "Rejected " + type + ": " + result);
     }
-    private static Message receive(Peer peer, Predicate<Message> wanted) throws Exception {
+    static Message receive(Peer peer, Predicate<Message> wanted) throws Exception {
         var queue = events.computeIfAbsent(peer, ignored -> new ArrayDeque<>());
         for (var it = queue.iterator(); it.hasNext();) { Message m = it.next(); if (wanted.test(m)) { it.remove(); return m; } }
         for (;;) {
@@ -168,14 +168,14 @@ public final class GameInviteChecks {
             if (message.type() != MessageType.TURN_TIMER && message.type() != MessageType.FRIENDS_CHANGED) queue.addLast(message);
         }
     }
-    private static String create(Peer peer) throws Exception {
+    static String create(Peer peer) throws Exception {
         return request(peer, MessageType.CREATE_ROOM, null, MessageType.ROOM_CREATED).payloadAs(RoomSnapshot.class).roomCode();
     }
-    private static void join(Peer peer, String code) throws Exception {
+    static void join(Peer peer, String code) throws Exception {
         var result = request(peer, MessageType.JOIN_ROOM, new JoinRoomRequest(code), MessageType.ROOM_JOINED);
         require(result.type() == MessageType.ROOM_JOINED && result.payloadAs(RoomSnapshot.class).roomCode().equals(code), "Code-based join preserved");
     }
-    private static void leave(Peer peer) throws Exception { require(request(peer, MessageType.LEAVE_ROOM, null, MessageType.ROOM_LEFT).type() == MessageType.ROOM_LEFT, "Room leave succeeds"); }
+    static void leave(Peer peer) throws Exception { require(request(peer, MessageType.LEAVE_ROOM, null, MessageType.ROOM_LEFT).type() == MessageType.ROOM_LEFT, "Room leave succeeds"); }
     private static void drain(Peer... peers) throws Exception {
         for (Peer peer : peers) { request(peer, MessageType.PING, null, MessageType.PONG); events.get(peer).clear(); }
     }

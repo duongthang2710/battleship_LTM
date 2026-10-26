@@ -53,3 +53,13 @@ tasks.register('checkGameInvites', JavaExec) {
     onlyIf { providers.gradleProperty('inviteDatabase').isPresent() }
     environment 'DB_NAME', providers.gradleProperty('inviteDatabase').getOrElse('')
 }
+
+tasks.register('checkChat', JavaExec) {
+    group = 'verification'
+    dependsOn testClasses
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'com.battleship.backend.match.ChatChecks'
+    workingDir rootProject.projectDir
+    onlyIf { providers.gradleProperty('chatDatabase').isPresent() }
+    environment 'DB_NAME', providers.gradleProperty('chatDatabase').getOrElse('')
+}
