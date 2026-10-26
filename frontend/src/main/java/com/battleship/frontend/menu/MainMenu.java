@@ -51,6 +51,13 @@ public final class MainMenu {
     }
 
     public Node root() { return root; }
+    public void friendsUpdated(boolean updated) {
+        buttons.stream().filter(button -> button.action == Action.FRIENDS).forEach(button -> {
+            button.label.setText(updated ? "FRIENDS *" : "FRIENDS");
+            button.label.setLocalTranslation(button.x + (button.width - button.label.getLineWidth()) / 2,
+                    button.label.getLocalTranslation().y, button.label.getLocalTranslation().z);
+        });
+    }
 
     public void resize(int width, int height) {
         scale = Math.min(width / 1440f, height / 900f);
