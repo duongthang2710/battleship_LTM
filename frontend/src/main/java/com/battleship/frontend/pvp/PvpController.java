@@ -106,10 +106,11 @@ public final class PvpController implements AutoCloseable {
     }
 
     public AccountProfile account() { return account; }
-    public void openAccount() {
+    public void openAccount() { openAccount(true); }
+    public void openAccount(boolean connectIfNeeded) {
         active = true;
         accountView = true;
-        if (!connected()) connect();
+        if (connectIfNeeded && !connected()) connect();
     }
     public boolean connectTo(String serverHost, String serverPort) {
         if (account != null || room != null || pending()) return false;
@@ -264,6 +265,8 @@ public final class PvpController implements AutoCloseable {
             sentAt = System.nanoTime();
             panel.setBusy(true);
             setStatus("Waiting for server...");
+            if (type == MessageType.JOIN_ROOM)
+                LOG.info("JOIN_ROOM sent to " + host + ":" + port + "; clientId=" + clientId + "; requestId=" + pendingRequest);
             return true;
         } else {
             leaving = false;
@@ -284,6 +287,7 @@ public final class PvpController implements AutoCloseable {
                 handle(action);
             }
         } else if (!state.connecting()) {
+            if (account != null) LOG.warning("Authenticated TCP session ended: " + state.detail());
             account = null;
             inviteRoomRequest = null;
             room = null;
@@ -335,7 +339,10 @@ public final class PvpController implements AutoCloseable {
                 gameInviteListener.accept(message);
                 chatListener.accept(message);
                 AuthError error = message.payloadAs(AuthError.class);
-                if (error.code().equals("AUTH_REQUIRED")) account = null;
+                if (error.code().equals("AUTH_REQUIRED")) {
+                    LOG.warning("Server requires sign-in; requestId=" + message.requestId());
+                    account = null;
+                }
                 setStatus(error.message());
             }
             case ROOM_CREATED, ROOM_JOINED, PLAYER_JOINED, ROOM_UPDATED, PLAYER_LEFT -> {

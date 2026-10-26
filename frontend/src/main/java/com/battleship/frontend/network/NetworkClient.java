@@ -9,16 +9,20 @@ import java.io.DataOutputStream;
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.net.Socket;
+import java.util.logging.Logger;
 
 public final class NetworkClient implements AutoCloseable {
+    private static final Logger LOG = Logger.getLogger(NetworkClient.class.getName());
     private final Socket socket = new Socket();
     private final MessageHandler handler;
     private DataOutputStream output;
+    private volatile com.battleship.shared.protocol.MessageType lastSent;
 
     public NetworkClient(MessageHandler handler) { this.handler = handler; }
 
     public void connectAndRead(String host, int port, Message connectMessage) {
         String reason = "Server closed the connection";
+        com.battleship.shared.protocol.MessageType lastReceived = null;
         try {
             socket.connect(new InetSocketAddress(host, port), 3_000);
             socket.setTcpNoDelay(true);
@@ -30,12 +34,15 @@ public final class NetworkClient implements AutoCloseable {
             }
             Message message;
             while ((message = MessageCodec.read(input)) != null) {
+                lastReceived = message.type();
                 if (message.type() == com.battleship.shared.protocol.MessageType.DISCONNECT) break;
                 handler.onMessage(message);
             }
         } catch (IOException | RuntimeException exception) {
-            reason = exception.getMessage();
+            reason = exception.getClass().getSimpleName() + ": " + exception.getMessage();
         } finally {
+            LOG.info("TCP ended at " + host + ":" + port + "; lastSent=" + lastSent
+                    + "; lastReceived=" + lastReceived + "; reason=" + reason);
             close();
             handler.onDisconnected(reason);
         }
@@ -43,6 +50,7 @@ public final class NetworkClient implements AutoCloseable {
 
     public synchronized void send(Message message) throws IOException {
         if (output == null || socket.isClosed()) throw new IOException("Not connected");
+        lastSent = message.type();
         MessageCodec.write(output, message);
     }
 

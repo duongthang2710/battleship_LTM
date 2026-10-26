@@ -81,7 +81,10 @@ public final class ConnectionManager implements AutoCloseable {
             try {
                 writer.execute(() -> {
                     try { client.send(message); }
-                    catch (IOException exception) { client.close(); }
+                    catch (IOException exception) {
+                        LOG.warning("TCP write failed for " + message.type() + ": " + exception.getClass().getSimpleName());
+                        client.close();
+                    }
                 });
                 return true;
             } catch (RejectedExecutionException exception) {

@@ -187,6 +187,14 @@ tasks.register('checkSettings', JavaExec) {
 }
 tasks.named('check') { dependsOn 'checkSettings' }
 
+tasks.register('checkJoinConnection', JavaExec) {
+    group = 'verification'
+    dependsOn testClasses
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'com.battleship.frontend.pvp.JoinConnectionChecks'
+}
+tasks.named('check') { dependsOn 'checkJoinConnection' }
+
 tasks.register('checkSettingsScreens', JavaExec) {
     group = 'verification'
     description = 'Checks Settings, real window changes, persistence and desktop restart against a running backend.'

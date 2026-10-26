@@ -283,13 +283,14 @@ public final class ScreenController implements AutoCloseable {
     }
 
     private void showAccount() {
+        boolean firstScreen = screen == null;
         closeInputs();
         menu.hide();
         roomPanel.hide();
         setGameHudVisible(false);
         screen = Screen.ACCOUNT;
         loginRequired = pvp.account() == null;
-        pvp.openAccount();
+        pvp.openAccount(firstScreen);
         accountPanel.show();
         accountInput = new AccountInput(input, accountPanel, this::accountAction);
         accountPointer = new PointerInput(input, orbit, cursor -> accountPanel.click(cursor).ifPresent(this::accountAction));
