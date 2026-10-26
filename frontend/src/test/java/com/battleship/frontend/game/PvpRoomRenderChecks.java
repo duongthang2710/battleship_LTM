@@ -2,6 +2,7 @@ package com.battleship.frontend.game;
 
 import com.battleship.frontend.app.ScreenController;
 import com.battleship.frontend.camera.OrbitCamera;
+import com.battleship.frontend.settings.*;
 import com.battleship.frontend.effects.SceneEffects;
 import com.battleship.frontend.scene.BattleScene;
 import com.battleship.frontend.menu.MainMenu;
@@ -56,6 +57,10 @@ public final class PvpRoomRenderChecks extends SimpleApplication {
     private ScreenController screens;
     private BattleScene scene;
     private InjectedMouse mouse;
+    private DisplaySettings display;
+    private OrbitCamera orbit;
+    private int uiWidth = 1440, uiHeight = 900;
+    private String settingsClientId;
     private int stage;
     private int frames;
     private long started;
@@ -82,7 +87,10 @@ public final class PvpRoomRenderChecks extends SimpleApplication {
         AppSettings settings = new AppSettings(true);
         settings.setTitle("Battleship TCP verification - Client " + args[0]);
         settings.setRenderer(AppSettings.LWJGL_OPENGL32);
-        settings.setResolution(1440, 900);
+        var preferences = Boolean.getBoolean("battleship.settingsOnly") ? new SettingsStore().load().preferences() : ClientPreferences.defaults();
+        settings.setResolution(preferences.width(), preferences.height());
+        settings.setMinResolution(960, 600);
+        settings.setResizable(true);
         settings.setSamples(4);
         settings.setGammaCorrection(true);
         settings.setVSync(true);
@@ -104,6 +112,8 @@ public final class PvpRoomRenderChecks extends SimpleApplication {
                 String role = i == 0 ? "A" : "B";
                 clients[i] = new ProcessBuilder(java, "--enable-native-access=ALL-UNNAMED",
                         "-Dorg.lwjgl.system.SharedLibraryExtractPath=" + journal.resolve(role + "-natives"),
+                        "-Dbattleship.settingsOnly=" + Boolean.getBoolean("battleship.settingsOnly"),
+                        "-Dbattleship.settingsFile=" + journal.resolve(role + "-settings.properties"),
                         "-Dbattleship.accountOnly=" + Boolean.getBoolean("battleship.accountOnly"),
                         "-Dbattleship.disconnectOnly=" + Boolean.getBoolean("battleship.disconnectOnly"),
                         "-Dbattleship.leaderboardOnly=" + Boolean.getBoolean("battleship.leaderboardOnly"),
@@ -122,7 +132,20 @@ public final class PvpRoomRenderChecks extends SimpleApplication {
                 Thread.sleep(100);
             }
             require(clients[0].exitValue() == 0 && clients[1].exitValue() == 0, "Both desktop clients completed");
-            System.out.println(Boolean.getBoolean("battleship.chatOnly")
+            if (Boolean.getBoolean("battleship.settingsOnly")) {
+                clients[0] = new ProcessBuilder(java, "--enable-native-access=ALL-UNNAMED",
+                        "-Dorg.lwjgl.system.SharedLibraryExtractPath=" + journal.resolve("reload-natives"),
+                        "-Dbattleship.settingsOnly=true", "-Dbattleship.settingsReload=true",
+                        "-Dbattleship.settingsFile=" + journal.resolve("A-settings.properties"),
+                        "-Dbattleship.port=" + System.getProperty("battleship.port", "2209"),
+                        "-cp", System.getProperty("java.class.path"), PvpRoomRenderChecks.class.getName(), "A", journal.toString())
+                        .redirectErrorStream(true).redirectOutput(journal.resolve("reload.log").toFile()).start();
+                require(clients[0].waitFor(120, TimeUnit.SECONDS) && clients[0].exitValue() == 0, "Saved settings survive an actual desktop restart");
+                System.out.println(Files.readString(journal.resolve("reload.log")));
+            }
+            System.out.println(Boolean.getBoolean("battleship.settingsOnly")
+                    ? "PASS: desktop Settings, 960x600/1280x720, borderless fullscreen, save/reset/discard, live TCP session and application restart with restored preferences."
+                    : Boolean.getBoolean("battleship.chatOnly")
                     ? "PASS: two desktop chat clients; login/friend invitation, waiting messages, safe scrolling, Battle input isolation and timer, read-only game over, rematch chat reset and Main Menu."
                     : Boolean.getBoolean("battleship.gameInviteOnly")
                     ? "PASS: two desktop invite clients; global decline, real 60-second expiry, reused room, accept/navigation, Ready/placement, TCP Battle shots and menus."
@@ -155,12 +178,12 @@ public final class PvpRoomRenderChecks extends SimpleApplication {
         inputManager = new InputManager(mouse, keyboard, null, null);
         scene = new BattleScene(assetManager);
         rootNode.attachChild(scene.root());
-        OrbitCamera orbit = new OrbitCamera(cam);
+        orbit = new OrbitCamera(cam);
         scene.installOceanReflections(viewPort);
         SceneEffects.install(assetManager, viewPort, scene.keyLight());
         board = scene.beginLocalGameplay();
         screens = new ScreenController(assetManager, guiNode, inputManager, cam, orbit,
-                board, "Admiral " + role, this::stop);
+                board, "Admiral " + role, this::stop, Boolean.getBoolean("battleship.settingsOnly") ? (display = new DisplaySettings(this)) : null);
         screens.resize(1440, 900);
         started = System.nanoTime();
     }
@@ -168,6 +191,9 @@ public final class PvpRoomRenderChecks extends SimpleApplication {
     @Override public void simpleUpdate(float delta) {
         // Native minimized windows may report zero size; synthetic input still uses 1440x900.
         if (cam.getWidth() == 0 || cam.getHeight() == 0) cam.resize(1440, 900, true);
+        if (Boolean.getBoolean("battleship.settingsOnly") && (cam.getWidth() != uiWidth || cam.getHeight() != uiHeight)) {
+            uiWidth = cam.getWidth(); uiHeight = cam.getHeight(); screens.resize(uiWidth, uiHeight); orbit.update();
+        }
         scene.update(delta, cam);
         screens.update(delta, inputManager.getCursorPosition());
         if (++frames < 20) return;
@@ -180,6 +206,7 @@ public final class PvpRoomRenderChecks extends SimpleApplication {
                 require(!screens.mainMenu().visible(), "Requesting Main Menu cannot bypass login");
                 stage = -1;
             } else if (stage < 0) authenticate();
+            else if (Boolean.getBoolean("battleship.settingsOnly")) settingsScreens();
             else if (Boolean.getBoolean("battleship.friendsOnly")) friendsScreens();
             else if (Boolean.getBoolean("battleship.leaderboardOnly")) leaderboardScreens();
             else if (Boolean.getBoolean("battleship.disconnectOnly")) disconnectBattle();
@@ -210,6 +237,10 @@ public final class PvpRoomRenderChecks extends SimpleApplication {
             stage = -4;
         } else if (stage == -4 && screens.pvp().connected()) {
             require(!panel.editingServer(), "Valid endpoint reconnects asynchronously and returns to login");
+            if (Boolean.getBoolean("battleship.settingsReload")) {
+                type(accountName(role)); key(KeyInput.KEY_TAB, '\t'); type("RenderCheckPassword2026!");
+                click(panel.buttonCenter(AccountPanel.Action.SUBMIT)); stage = -3; return;
+            }
             click(panel.buttonCenter(AccountPanel.Action.SWITCH));
             type(accountName(role)); key(KeyInput.KEY_TAB, '\t');
             type("RenderCheckPassword2026!"); key(KeyInput.KEY_TAB, '\t');
@@ -225,7 +256,7 @@ public final class PvpRoomRenderChecks extends SimpleApplication {
             stage = -3;
         } else if (stage == -3 && screens.pvp().account() != null && screens.mainMenu().visible()) {
             require(screens.pvp().account().displayName().equals(accountName(role)), "Authenticated account controls displayed identity");
-            if (!Boolean.getBoolean("battleship.accountOnly") && !Boolean.getBoolean("battleship.leaderboardOnly") && !Boolean.getBoolean("battleship.friendsOnly")) click(screens.mainMenu().buttonCenter(MainMenu.Action.PVP));
+            if (!Boolean.getBoolean("battleship.settingsOnly") && !Boolean.getBoolean("battleship.accountOnly") && !Boolean.getBoolean("battleship.leaderboardOnly") && !Boolean.getBoolean("battleship.friendsOnly")) click(screens.mainMenu().buttonCenter(MainMenu.Action.PVP));
             stage = 1;
         }
     }
@@ -660,16 +691,108 @@ public final class PvpRoomRenderChecks extends SimpleApplication {
         }
     }
 
+    private void settingsAction(SettingsPanel.Action action) {
+        require(screens.settingsPanel().enabled(action), "Settings action enabled: " + action);
+        click(screens.settingsPanel().buttonCenter(action));
+    }
+    private void chooseSize(int width, int height) {
+        for (int i = 0; i < ClientPreferences.RESOLUTIONS.size(); i++) {
+            var draft = screens.settingsPanel().draft();
+            if (draft.width() == width && draft.height() == height) return;
+            settingsAction(SettingsPanel.Action.SIZE_NEXT);
+        }
+        throw new AssertionError("Required demo resolution unavailable");
+    }
+    private void settingsScreens() throws Exception {
+        var panel = screens.settingsPanel();
+        var controller = screens.settings();
+        switch (stage) {
+            case 1 -> {
+                if (!controller.ready()) return;
+                settingsClientId = screens.pvp().clientId();
+                click(screens.mainMenu().buttonCenter(MainMenu.Action.SETTINGS));
+                require(panel.visible() && panel.enabled(SettingsPanel.Action.MODE), "Native display controls enabled");
+                stage = 2;
+            }
+            case 2 -> {
+                if (Boolean.getBoolean("battleship.settingsReload")) {
+                    require(controller.current().equals(new ClientPreferences(1280, 720, true, 1.5f, .75f)), "Restart restores saved mode, size and sensitivities");
+                    if (!display.fullscreen() || uiWidth < 1280 || uiHeight < 720) return;
+                    capture = "settings-reloaded.png"; stage = 8; return;
+                }
+                chooseSize(960, 600); settingsAction(SettingsPanel.Action.SAVE); stage = 3;
+            }
+            case 3 -> {
+                if (controller.saving() || uiWidth != 960 || uiHeight != 600) return;
+                for (var action : SettingsPanel.Action.values()) {
+                    var point = panel.buttonCenter(action);
+                    require(point.x > 0 && point.x < uiWidth && point.y > 0 && point.y < uiHeight, "Settings hit target fits minimum window");
+                    if (panel.enabled(action)) require(panel.actionAt(point).orElseThrow() == action, "Scaled Settings hit target works");
+                }
+                capture = "settings-minimum-" + role + ".png"; stage = 4;
+            }
+            case 4 -> {
+                if (capture != null) return;
+                if (role.equals("B")) org.lwjgl.glfw.GLFW.glfwMaximizeWindow(((com.jme3.system.lwjgl.LwjglWindow) getContext()).getWindowHandle());
+                chooseSize(1280, 720);
+                settingsAction(SettingsPanel.Action.ROTATION_UP); settingsAction(SettingsPanel.Action.ROTATION_UP);
+                settingsAction(SettingsPanel.Action.ZOOM_DOWN);
+                if (role.equals("A")) settingsAction(SettingsPanel.Action.MODE);
+                settingsAction(SettingsPanel.Action.SAVE); stage = 5;
+            }
+            case 5 -> {
+                if (controller.saving() || display.fullscreen() != role.equals("A")) return;
+                var saved = controller.store().load();
+                require(saved.message().isEmpty() && saved.preferences().equals(controller.current()), "Async atomic save matches active preferences");
+                require(saved.preferences().rotation() == 1.5f && saved.preferences().zoom() == .75f, "Camera preferences saved");
+                require(screens.pvp().connected() && screens.pvp().clientId().equals(settingsClientId), "Display changes preserve the authenticated TCP connection");
+                if (role.equals("B")) {
+                    require(org.lwjgl.glfw.GLFW.glfwGetWindowAttrib(((com.jme3.system.lwjgl.LwjglWindow) getContext()).getWindowHandle(), org.lwjgl.glfw.GLFW.GLFW_MAXIMIZED) == org.lwjgl.glfw.GLFW.GLFW_FALSE,
+                            "Selecting a saved window size restores a maximized window");
+                    if (uiWidth != 1280 || uiHeight != 720) return;
+                }
+                if (role.equals("A") && uiWidth == 960) return;
+                capture = "settings-saved-" + role + ".png"; stage = 6;
+            }
+            case 6 -> {
+                if (capture != null) return;
+                settingsAction(SettingsPanel.Action.ROTATION_DOWN); settingsAction(SettingsPanel.Action.RESET);
+                require(panel.draft().equals(controller.current()), "Reset restores the last saved draft");
+                settingsAction(SettingsPanel.Action.ROTATION_DOWN); key(KeyInput.KEY_ESCAPE, (char) 0);
+                require(screens.mainMenu().visible() && !panel.visible(), "Escape returns to Main Menu");
+                click(screens.mainMenu().buttonCenter(MainMenu.Action.SETTINGS));
+                require(panel.draft().equals(controller.current()), "Back discards unsaved edits");
+                if (role.equals("A")) {
+                    settingsAction(SettingsPanel.Action.MODE); settingsAction(SettingsPanel.Action.SAVE); stage = 7;
+                } else stage = 8;
+            }
+            case 7 -> {
+                if (controller.saving() || display.fullscreen() || uiWidth != 1280 || uiHeight != 720) return;
+                require(display.windowSize().equals(new ClientPreferences.Resolution(1280, 720)), "Fullscreen restores the chosen window size");
+                settingsAction(SettingsPanel.Action.MODE); settingsAction(SettingsPanel.Action.SAVE); stage = 8;
+            }
+            case 8 -> {
+                if (capture != null || controller.saving()) return;
+                settingsAction(SettingsPanel.Action.BACK);
+                require(screens.mainMenu().visible() && screens.pvp().connected(), "Back preserves the menu and session");
+                click(screens.mainMenu().buttonCenter(MainMenu.Action.EXIT)); stage = 9;
+                System.out.println("PASS Settings client " + role + ": working display/camera controls, save/discard, TCP continuity and Exit; reload=" + Boolean.getBoolean("battleship.settingsReload"));
+            }
+            default -> { }
+        }
+    }
+
     private void accountNavigation() {
         AccountPanel panel = screens.accountPanel();
         switch (stage) {
             case 1 -> {
                 require(screens.mainMenu().visible() && MainMenu.Action.values().length == 9, "Authenticated menu has no Local Game action");
-                for (MainMenu.Action action : new MainMenu.Action[] {MainMenu.Action.PVE, MainMenu.Action.SETTINGS}) {
-                    click(screens.mainMenu().buttonCenter(action));
-                    require(screens.mainMenu().visible() && screens.pvp().room() == null, "Unimplemented menu action stays inert");
-                }
-                stage = 90;
+                click(screens.mainMenu().buttonCenter(MainMenu.Action.SETTINGS));
+                require(screens.settingsPanel().visible() && !screens.mainMenu().visible(), "Settings opens a real screen");
+                stage = 89;
+            }
+            case 89 -> {
+                if (screens.settings().ready()) { key(KeyInput.KEY_ESCAPE, (char) 0); stage = 90; }
             }
             case 90 -> {
                 if (screens.mainMenu().visible()) {
@@ -715,7 +838,7 @@ public final class PvpRoomRenderChecks extends SimpleApplication {
             }
             case 96 -> {
                 if (screens.mainMenu().visible()) {
-                    System.out.println("PASS account screens: mandatory login, no Local Game, inert planned actions, Profile logout, wrong-password gate, login again, room entry and Exit.");
+                    System.out.println("PASS account screens: mandatory login, no Local Game, Settings Back, Profile logout, wrong-password gate, login again, room entry and Exit.");
                     click(screens.mainMenu().buttonCenter(MainMenu.Action.EXIT)); stage = 97;
                 }
             }
@@ -1100,11 +1223,13 @@ public final class PvpRoomRenderChecks extends SimpleApplication {
         if (capture == null) return;
         if (++captureFrames < 3) return;
         try {
-            var buffer = BufferUtils.createByteBuffer(1440 * 900 * 4);
+            int width = Boolean.getBoolean("battleship.settingsOnly") ? cam.getWidth() : 1440;
+            int height = Boolean.getBoolean("battleship.settingsOnly") ? cam.getHeight() : 900;
+            var buffer = BufferUtils.createByteBuffer(width * height * 4);
             renderer.getRenderer().readFrameBufferWithFormat(null, buffer, Image.Format.BGRA8);
-            BufferedImage image = new BufferedImage(1440, 900, BufferedImage.TYPE_4BYTE_ABGR);
+            BufferedImage image = new BufferedImage(width, height, BufferedImage.TYPE_4BYTE_ABGR);
             Screenshots.convertScreenShot(buffer, image);
-            Path directory = Boolean.getBoolean("battleship.friendsOnly") ? journal.resolve("screenshots") : Path.of("docs");
+            Path directory = journal.resolve("screenshots");
             Files.createDirectories(directory);
             ImageIO.write(image, "png", directory.resolve(capture).toFile());
             capture = null;

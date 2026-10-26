@@ -177,3 +177,23 @@ tasks.register('checkChatScreens', JavaExec) {
     systemProperty 'battleship.friendsOnly', 'true'
     systemProperty 'battleship.chatOnly', 'true'
 }
+
+
+tasks.register('checkSettings', JavaExec) {
+    group = 'verification'
+    dependsOn testClasses
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'com.battleship.frontend.settings.SettingsChecks'
+}
+tasks.named('check') { dependsOn 'checkSettings' }
+
+tasks.register('checkSettingsScreens', JavaExec) {
+    group = 'verification'
+    description = 'Checks Settings, real window changes, persistence and desktop restart against a running backend.'
+    dependsOn testClasses
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'com.battleship.frontend.game.PvpRoomRenderChecks'
+    workingDir rootProject.projectDir
+    systemProperty 'battleship.port', providers.gradleProperty('serverPort').getOrElse('2209')
+    systemProperty 'battleship.settingsOnly', 'true'
+}

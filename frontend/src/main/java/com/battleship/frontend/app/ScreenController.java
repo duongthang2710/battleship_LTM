@@ -3,6 +3,7 @@ package com.battleship.frontend.app;
 import com.battleship.frontend.camera.OrbitCamera;
 import com.battleship.frontend.friends.*;
 import com.battleship.frontend.chat.*;
+import com.battleship.frontend.settings.*;
 import com.battleship.frontend.pvp.GameInvitePanel;
 import com.battleship.frontend.pvp.GameInviteController;
 import com.battleship.frontend.pvp.GameInviteInput;
@@ -38,11 +39,15 @@ import com.jme3.scene.Spatial.CullHint;
 
 /** Owns screen navigation and input lifetimes; game rules remain in GameEngine. */
 public final class ScreenController implements AutoCloseable {
-    private enum Screen { MAIN_MENU, ACCOUNT, LEADERBOARD, FRIENDS, PVP, PVP_PLACEMENT }
+    private enum Screen { MAIN_MENU, ACCOUNT, LEADERBOARD, FRIENDS, SETTINGS, PVP, PVP_PLACEMENT }
     private final InputManager input;
     private final OrbitCamera orbit;
     private final Runnable exit;
     private final MainMenu menu;
+    private final SettingsPanel settingsPanel;
+    private final SettingsController settings;
+    private PointerInput settingsPointer;
+    private SettingsInput settingsInput;
     private final BattleHud hud;
     private final PlacementHud placementHud;
     private final OwnBoardMinimap minimap;
@@ -79,10 +84,18 @@ public final class ScreenController implements AutoCloseable {
 
     public ScreenController(AssetManager assets, Node gui, InputManager input, Camera camera, OrbitCamera orbit,
                             Node board, String player, Runnable exit) {
+        this(assets, gui, input, camera, orbit, board, player, exit, null);
+    }
+
+    public ScreenController(AssetManager assets, Node gui, InputManager input, Camera camera, OrbitCamera orbit,
+                            Node board, String player, Runnable exit, DisplaySettings display) {
         this.input = input;
         this.orbit = orbit;
         this.exit = exit;
         menu = new MainMenu(assets);
+        settingsPanel = new SettingsPanel(assets);
+        settings = new SettingsController(settingsPanel, orbit, display, this::requestMainMenu);
+        gui.attachChild(settingsPanel.root());
         accountPanel = new AccountPanel(assets);
         gui.attachChild(accountPanel.root());
         hud = new BattleHud(assets, player);
@@ -128,6 +141,8 @@ public final class ScreenController implements AutoCloseable {
         showAccount();
     }
 
+    public SettingsPanel settingsPanel() { return settingsPanel; }
+    public SettingsController settings() { return settings; }
     public ChatPanel chatPanel() { return chatPanel; }
     public ChatController chat() { return chat; }
     public GameInvitePanel gameInvitePanel() { return gameInvitePanel; }
@@ -147,6 +162,7 @@ public final class ScreenController implements AutoCloseable {
 
     public void resize(int width, int height) {
         menu.resize(width, height);
+        settingsPanel.resize(width, height);
         leaderboardPanel.resize(width, height);
         friendsPanel.resize(width, height);
         gameInvitePanel.resize(width, height);
@@ -161,6 +177,7 @@ public final class ScreenController implements AutoCloseable {
 
     public void update(float delta, Vector2f cursor) {
         pvp.update();
+        settings.update();
         leaderboard.update();
         friends.update();
         gameInvites.update();
@@ -201,6 +218,7 @@ public final class ScreenController implements AutoCloseable {
             MainMenu.Action action = pendingAction;
             pendingAction = null;
             if (action == MainMenu.Action.EXIT) { exit.run(); return; }
+            else if (action == MainMenu.Action.SETTINGS) showSettings();
             else if (action == MainMenu.Action.PROFILE) showAccount();
             else if (action == MainMenu.Action.FRIENDS) showFriends();
             else if (action == MainMenu.Action.LEADERBOARD) showLeaderboard();
@@ -218,15 +236,22 @@ public final class ScreenController implements AutoCloseable {
         else if (screen == Screen.PVP) roomPanel.update(cursor);
         else if (screen == Screen.FRIENDS) friendsPanel.update(cursor);
         else if (screen == Screen.LEADERBOARD) leaderboardPanel.update(cursor);
-        else if (screen != Screen.ACCOUNT) game.update(delta, cursor);
+        else if (screen != Screen.ACCOUNT && screen != Screen.SETTINGS) game.update(delta, cursor);
     }
 
     private void menuClick(Vector2f cursor) {
         menu.actionAt(cursor).ifPresent(action -> {
-            if (action == MainMenu.Action.FRIENDS || action == MainMenu.Action.LEADERBOARD || action == MainMenu.Action.PROFILE || action == MainMenu.Action.EXIT
+            if (action == MainMenu.Action.SETTINGS || action == MainMenu.Action.FRIENDS || action == MainMenu.Action.LEADERBOARD || action == MainMenu.Action.PROFILE || action == MainMenu.Action.EXIT
                     || action == MainMenu.Action.PVP || action == MainMenu.Action.CREATE_ROOM
                     || action == MainMenu.Action.JOIN_ROOM) pendingAction = action;
         });
+    }
+
+    private void showSettings() {
+        closeInputs(); menu.hide(); roomPanel.hide(); setGameHudVisible(false);
+        screen = Screen.SETTINGS; settings.show();
+        settingsInput = new SettingsInput(input, settingsPanel, settings::handle);
+        settingsPointer = new PointerInput(input, orbit, cursor -> settingsPanel.actionAt(cursor).ifPresent(settings::handle));
     }
 
     private void showFriends() {
@@ -322,6 +347,9 @@ public final class ScreenController implements AutoCloseable {
     }
 
     private void closeInputs() {
+        settings.hide();
+        if (settingsPointer != null) { settingsPointer.close(); settingsPointer = null; }
+        if (settingsInput != null) { settingsInput.close(); settingsInput = null; }
         friends.hide();
         if (friendsPointer != null) { friendsPointer.close(); friendsPointer = null; }
         if (friendsInput != null) { friendsInput.close(); friendsInput = null; }
@@ -348,6 +376,7 @@ public final class ScreenController implements AutoCloseable {
         closeInputs();
         gameInviteInput.close();
         chatInput.close();
+        settings.close();
         pvp.close();
     }
 }

@@ -4,6 +4,8 @@ import com.battleship.frontend.camera.OrbitCamera;
 import com.battleship.frontend.effects.SceneEffects;
 import com.battleship.frontend.graphics.Materials;
 import com.battleship.frontend.scene.BattleScene;
+import com.battleship.frontend.settings.SettingsStore;
+import com.battleship.frontend.settings.DisplaySettings;
 import com.jme3.app.SimpleApplication;
 import com.jme3.system.AppSettings;
 import java.util.logging.Logger;
@@ -22,7 +24,8 @@ public final class BattleshipApplication extends SimpleApplication {
         AppSettings settings = new AppSettings(true);
         settings.setTitle("Battleship | Naval Strategy");
         settings.setRenderer(AppSettings.LWJGL_OPENGL32);
-        settings.setResolution(1440, 900);
+        var saved = new SettingsStore().load();
+        settings.setResolution(saved.preferences().width(), saved.preferences().height());
         settings.setMinResolution(960, 600);
         settings.setResizable(true);
         settings.setSamples(4);
@@ -50,9 +53,9 @@ public final class BattleshipApplication extends SimpleApplication {
         SceneEffects.install(assetManager, viewPort, battleScene.keyLight());
         String player = System.getProperty("battleship.player", "Captain");
         var board = battleScene.beginLocalGameplay();
-        screens = new ScreenController(assetManager, guiNode, inputManager, cam, orbit, board, player, this::stop);
+        screens = new ScreenController(assetManager, guiNode, inputManager, cam, orbit, board, player, this::stop, new DisplaySettings(this));
         resizeHud();
-        LOG.info("Main menu ready: PLAY opens local ship placement");
+        LOG.info("Account screen ready. Sign in to enter the PvP menu.");
     }
 
     @Override

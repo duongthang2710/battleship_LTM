@@ -16,22 +16,29 @@ public final class OrbitCamera {
     private float elevation = 0.50f;
     private float distance = 21;
     private float homeYaw = INITIAL_YAW;
+    private float rotationSensitivity = 1, zoomSensitivity = 1;
 
     public OrbitCamera(Camera camera) {
         this.camera = camera;
         update();
     }
 
+    public void setSensitivity(float rotation, float zoom) {
+        if (!Float.isFinite(rotation) || !Float.isFinite(zoom) || rotation < .5f || rotation > 2 || zoom < .5f || zoom > 2)
+            throw new IllegalArgumentException("Camera sensitivity must be between 50% and 200%.");
+        rotationSensitivity = rotation; zoomSensitivity = zoom;
+    }
+
     public void orbit(float dx, float dy) {
-        yaw -= dx * (1.92f / 1024);
-        elevation -= dy * (1.44f / 1024);
+        yaw -= dx * (1.92f / 1024) * rotationSensitivity;
+        elevation -= dy * (1.44f / 1024) * rotationSensitivity;
         yaw %= FastMath.TWO_PI;
         elevation = FastMath.clamp(elevation, MIN_ELEVATION, MAX_ELEVATION);
         update();
     }
 
     public void zoom(int wheelDelta) {
-        distance = FastMath.clamp(distance - wheelDelta * 0.24f, MIN_DISTANCE, MAX_DISTANCE);
+        distance = FastMath.clamp(distance - wheelDelta * 0.24f * zoomSensitivity, MIN_DISTANCE, MAX_DISTANCE);
         update();
     }
 
