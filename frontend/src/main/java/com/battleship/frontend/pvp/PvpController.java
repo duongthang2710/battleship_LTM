@@ -37,6 +37,7 @@ public final class PvpController implements AutoCloseable {
     private Consumer<Message> gameInviteListener = message -> { };
     private Runnable inviteFriendsAction = () -> { };
     private String inviteRoomRequest;
+    private Consumer<Message> chatListener = message -> { };
     private String host;
     private int port;
     private RoomSnapshot room;
@@ -70,6 +71,13 @@ public final class PvpController implements AutoCloseable {
         host = System.getProperty("battleship.host", "localhost");
         port = Integer.getInteger("battleship.port", 2209);
         connection = new ConnectionManager(this::onMessage, this::onStatus);
+    }
+
+    public void setChatListener(Consumer<Message> listener) { chatListener = listener; }
+    public String requestChat(com.battleship.shared.chat.ChatSend request) {
+        if (account == null || room == null) return null;
+        Message message = Message.request(MessageType.CHAT_SEND, request);
+        return connection.send(message) ? message.requestId() : null;
     }
 
     public void setGameInviteListener(Consumer<Message> listener) { gameInviteListener = listener; }
@@ -293,6 +301,9 @@ public final class PvpController implements AutoCloseable {
 
     private void onMessage(Message message) {
         if (!active) return;
+        if (message.type() == MessageType.CHAT_CONTEXT || message.type() == MessageType.CHAT_MESSAGE || message.type() == MessageType.CHAT_ERROR) {
+            chatListener.accept(message); return;
+        }
         if (message.type() == MessageType.GAME_INVITE_UPDATED || message.type() == MessageType.GAME_INVITE_ERROR) {
             if (message.requestId().equals(inviteRoomRequest)) inviteRoomRequest = null;
             gameInviteListener.accept(message); return;
@@ -319,6 +330,7 @@ public final class PvpController implements AutoCloseable {
                 leaderboardListener.accept(message);
                 friendsListener.accept(message);
                 gameInviteListener.accept(message);
+                chatListener.accept(message);
                 AuthError error = message.payloadAs(AuthError.class);
                 if (error.code().equals("AUTH_REQUIRED")) account = null;
                 setStatus(error.message());
@@ -347,6 +359,7 @@ public final class PvpController implements AutoCloseable {
             }
             case ROOM_LEFT -> {
                 room = null;
+                chatListener.accept(message);
                 match = null;
                 rematch = null;
                 leaving = false;

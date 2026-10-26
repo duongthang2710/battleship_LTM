@@ -2,6 +2,7 @@ package com.battleship.frontend.app;
 
 import com.battleship.frontend.camera.OrbitCamera;
 import com.battleship.frontend.friends.*;
+import com.battleship.frontend.chat.*;
 import com.battleship.frontend.pvp.GameInvitePanel;
 import com.battleship.frontend.pvp.GameInviteController;
 import com.battleship.frontend.pvp.GameInviteInput;
@@ -55,6 +56,9 @@ public final class ScreenController implements AutoCloseable {
     private final GameInvitePanel gameInvitePanel;
     private final GameInviteController gameInvites;
     private final GameInviteInput gameInviteInput;
+    private final ChatPanel chatPanel;
+    private final ChatController chat;
+    private final ChatInput chatInput;
     private final FriendsPanel friendsPanel;
     private final FriendsController friends;
     private PointerInput friendsPointer;
@@ -113,6 +117,10 @@ public final class ScreenController implements AutoCloseable {
         gui.attachChild(gameInvitePanel.root());
         gameInvites = new GameInviteController(pvp, gameInvitePanel);
         gameInviteInput = new GameInviteInput(input, gameInvitePanel, gameInvites::handle);
+        chatPanel = new ChatPanel(assets);
+        gui.attachChild(chatPanel.root());
+        chat = new ChatController(pvp, chatPanel);
+        chatInput = new ChatInput(input, chatPanel, chat::handle);
         friends = new FriendsController(pvp, friendsPanel, () -> {
             if (pvp.room() != null) roomRequested = true; else requestMainMenu();
         }, menu::friendsUpdated, gameInvites::send);
@@ -120,6 +128,8 @@ public final class ScreenController implements AutoCloseable {
         showAccount();
     }
 
+    public ChatPanel chatPanel() { return chatPanel; }
+    public ChatController chat() { return chat; }
     public GameInvitePanel gameInvitePanel() { return gameInvitePanel; }
     public GameInviteController gameInvites() { return gameInvites; }
     public FriendsPanel friendsPanel() { return friendsPanel; }
@@ -140,6 +150,7 @@ public final class ScreenController implements AutoCloseable {
         leaderboardPanel.resize(width, height);
         friendsPanel.resize(width, height);
         gameInvitePanel.resize(width, height);
+        chatPanel.resize(width, height);
         accountPanel.resize(width, height);
         hud.resize(width, height);
         placementHud.resize(width, height);
@@ -153,12 +164,14 @@ public final class ScreenController implements AutoCloseable {
         leaderboard.update();
         friends.update();
         gameInvites.update();
+        chat.update();
         accountPanel.sync(pvp.account(), pvp.status(), pvp.pending(), pvp.connected());
         if (pvp.account() == null) {
             pendingAction = null;
             menuRequested = roomRequested = false;
             placementRequested = null;
             loginRequired = true;
+            chatPanel.setMode(ChatPanel.Mode.HIDDEN);
             if (screen != Screen.ACCOUNT) {
                 game.useLocalMode();
                 game.restartLocalMatch();
@@ -197,6 +210,10 @@ public final class ScreenController implements AutoCloseable {
                 pvp.open(action);
             }
         }
+        boolean waitingChat = screen == Screen.PVP && pvp.room() != null && pvp.room().phase() == com.battleship.shared.room.RoomPhase.WAITING;
+        boolean battleChat = screen == Screen.PVP_PLACEMENT && (game.state().phase() == com.battleship.shared.game.GamePhase.BATTLE
+                || game.state().phase() == com.battleship.shared.game.GamePhase.GAME_OVER);
+        chatPanel.setMode(waitingChat ? ChatPanel.Mode.WAITING : battleChat ? ChatPanel.Mode.BATTLE : ChatPanel.Mode.HIDDEN);
         if (screen == Screen.MAIN_MENU) menu.update(cursor);
         else if (screen == Screen.PVP) roomPanel.update(cursor);
         else if (screen == Screen.FRIENDS) friendsPanel.update(cursor);
@@ -330,6 +347,7 @@ public final class ScreenController implements AutoCloseable {
     @Override public void close() {
         closeInputs();
         gameInviteInput.close();
+        chatInput.close();
         pvp.close();
     }
 }
