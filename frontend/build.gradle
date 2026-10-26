@@ -165,3 +165,15 @@ tasks.register('checkGameInviteScreens', JavaExec) {
     systemProperty 'battleship.friendsOnly', 'true'
     systemProperty 'battleship.gameInviteOnly', 'true'
 }
+
+tasks.register('checkChatScreens', JavaExec) {
+    group = 'verification'
+    description = 'Checks waiting and Battle chat with two independent desktop clients.'
+    dependsOn testClasses
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'com.battleship.frontend.game.PvpRoomRenderChecks'
+    workingDir rootProject.projectDir
+    systemProperty 'battleship.port', providers.gradleProperty('serverPort').getOrElse('2209')
+    systemProperty 'battleship.friendsOnly', 'true'
+    systemProperty 'battleship.chatOnly', 'true'
+}

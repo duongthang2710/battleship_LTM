@@ -12,6 +12,9 @@ import com.battleship.shared.friends.FriendsAction;
 import com.battleship.shared.leaderboard.LeaderboardSort;
 import com.battleship.frontend.pvp.PvpRoomPanel;
 import com.battleship.frontend.pvp.GameInvitePanel;
+import com.battleship.frontend.chat.ChatPanel;
+import com.battleship.shared.chat.ChatScope;
+import com.jme3.input.event.MouseMotionEvent;
 import com.battleship.shared.room.GameInviteStatus;
 import com.battleship.shared.room.RoomPlayer;
 import com.battleship.shared.room.RoomSnapshot;
@@ -60,6 +63,10 @@ public final class PvpRoomRenderChecks extends SimpleApplication {
     private String capture;
     private int captureFrames;
     private com.jme3.scene.Node board;
+    private UUID chatContextId;
+    private String chatAnchor;
+    private boolean chatBoardView;
+    private long chatRevision, chatRemaining, chatFirstBattleAt;
     private long inviteCountdownStarted;
     private long fleetWaitStarted;
     private long finalTurnStarted;
@@ -101,7 +108,8 @@ public final class PvpRoomRenderChecks extends SimpleApplication {
                         "-Dbattleship.disconnectOnly=" + Boolean.getBoolean("battleship.disconnectOnly"),
                         "-Dbattleship.leaderboardOnly=" + Boolean.getBoolean("battleship.leaderboardOnly"),
                         "-Dbattleship.friendsOnly=" + Boolean.getBoolean("battleship.friendsOnly"),
-                        "-Dbattleship.gameInviteOnly=" + Boolean.getBoolean("battleship.gameInviteOnly"), "-cp",
+                        "-Dbattleship.gameInviteOnly=" + Boolean.getBoolean("battleship.gameInviteOnly"),
+                        "-Dbattleship.chatOnly=" + Boolean.getBoolean("battleship.chatOnly"), "-cp",
                         System.getProperty("java.class.path"), "-Dbattleship.port=" + System.getProperty("battleship.port", "2209"),
                         PvpRoomRenderChecks.class.getName(), role, journal.toString())
                         .redirectErrorStream(true).redirectOutput(journal.resolve(role + ".log").toFile()).start();
@@ -114,7 +122,9 @@ public final class PvpRoomRenderChecks extends SimpleApplication {
                 Thread.sleep(100);
             }
             require(clients[0].exitValue() == 0 && clients[1].exitValue() == 0, "Both desktop clients completed");
-            System.out.println(Boolean.getBoolean("battleship.gameInviteOnly")
+            System.out.println(Boolean.getBoolean("battleship.chatOnly")
+                    ? "PASS: two desktop chat clients; login/friend invitation, waiting messages, safe scrolling, Battle input isolation and timer, read-only game over, rematch chat reset and Main Menu."
+                    : Boolean.getBoolean("battleship.gameInviteOnly")
                     ? "PASS: two desktop invite clients; global decline, real 60-second expiry, reused room, accept/navigation, Ready/placement, TCP Battle shots and menus."
                     : Boolean.getBoolean("battleship.friendsOnly")
                     ? "PASS: two desktop Friends clients; search, TCP invitation push, accept, online lists, confirmation/cancel/remove, empty state and menu/Exit."
@@ -226,6 +236,12 @@ public final class PvpRoomRenderChecks extends SimpleApplication {
         click(panel.buttonCenter(action));
     }
     private void friendsScreens() throws Exception {
+        if (Boolean.getBoolean("battleship.chatOnly") && stage >= 200) { chatScreens(); return; }
+        if (Boolean.getBoolean("battleship.chatOnly") && stage == 6) {
+            if (role.equals("B")) { friendAction(FriendsPanel.Action.BACK); stage = 200; }
+            else if (Files.exists(journal.resolve("friends-listed-B")) && capture == null) stage = 200;
+            return;
+        }
         if (Boolean.getBoolean("battleship.gameInviteOnly") && stage >= 100) { gameInviteScreens(); return; }
         if (Boolean.getBoolean("battleship.gameInviteOnly") && stage == 6) {
             if (role.equals("B")) { friendAction(FriendsPanel.Action.BACK); stage = 100; }
@@ -407,6 +423,127 @@ public final class PvpRoomRenderChecks extends SimpleApplication {
             }
         } else if (stage == 110 && screens.mainMenu().visible()) {
             click(screens.mainMenu().buttonCenter(MainMenu.Action.EXIT)); stage = 111;
+        }
+    }
+
+    private void chatSend(String text, boolean sendButton) {
+        var panel = screens.chatPanel();
+        require(panel.visible() && panel.writable(), "Chat is visible and writable");
+        if (panel.collapsed()) click(panel.buttonCenter(ChatPanel.Action.TOGGLE));
+        click(panel.inputCenter()); require(panel.focused(), "Chat input receives focus");
+        for (char c : text.toCharArray()) key(switch (c) {
+            case 'F' -> KeyInput.KEY_F; case 'C' -> KeyInput.KEY_C; case 'T' -> KeyInput.KEY_T; case 'R' -> KeyInput.KEY_R; default -> 0;
+        }, c);
+        if (text.startsWith("FCTR")) key(KeyInput.KEY_TAB, '\t');
+        if (sendButton) click(panel.buttonCenter(ChatPanel.Action.SEND)); else key(KeyInput.KEY_RETURN, '\n');
+    }
+    private void chatWheel(int delta) {
+        var point = screens.chatPanel().listCenter();
+        mouse.next = () -> inputManager.onMouseMotionEvent(new MouseMotionEvent((int) point.x, (int) point.y, 0, 0, delta, delta));
+        inputManager.update(1 / 60f); screens.update(0, point);
+    }
+    private void chatScreens() throws Exception {
+        var panel = screens.chatPanel(); var context = screens.chat().context();
+        var invite = screens.gameInvites().current();
+        switch (stage) {
+            case 200 -> {
+                if (role.equals("A") && Files.exists(journal.resolve("chat-menu-B"))) { friendAction(FriendsPanel.Action.INVITE); stage = 201; }
+                else if (role.equals("B") && screens.mainMenu().visible()) { Files.writeString(journal.resolve("chat-menu-B"), "ok"); stage = 201; }
+            }
+            case 201 -> {
+                if (role.equals("B") && invite != null && invite.status() == GameInviteStatus.PENDING && !screens.gameInvites().busy())
+                    inviteAction(GameInvitePanel.Action.ACCEPT);
+                if (invite != null && invite.status() == GameInviteStatus.ACCEPTED && screens.roomPanel().visible()
+                        && context != null && context.scope() == ChatScope.WAITING_ROOM && context.canSend()) {
+                    code = screens.pvp().room().roomCode(); chatContextId = context.contextId();
+                    inviteAction(GameInvitePanel.Action.DISMISS); chatSend("waiting-" + role, role.equals("A")); stage = 202;
+                }
+            }
+            case 202 -> {
+                if (panel.messages().size() >= 2 && !panel.busy()) {
+                    require(panel.messages().stream().map(m -> m.sender().username()).distinct().count() == 2, "Both authenticated names appear in waiting chat");
+                    chatSend("Long message " + role + " " + "ocean ".repeat(47), false); stage = 203;
+                }
+            }
+            case 203 -> { if (!panel.busy()) { chatSend("Another long message " + role + " " + "fleet ".repeat(45), false); stage = 204; } }
+            case 204 -> {
+                if (panel.messages().size() >= 6 && !panel.busy()) {
+                    Files.writeString(journal.resolve("chat-waiting-" + role), "ok"); capture = "chat-waiting-" + role + ".png"; stage = 205;
+                }
+            }
+            case 205 -> {
+                if (role.equals("A") && Files.exists(journal.resolve("chat-waiting-B"))) {
+                    var cameraBefore = cam.getLocation().clone(); chatWheel(120);
+                    require(!panel.atBottom() && cameraBefore.equals(cam.getLocation()), "Scrolling older chat does not zoom camera");
+                    chatAnchor = panel.firstVisibleText(); Files.writeString(journal.resolve("chat-scrolled-A"), "ok"); stage = 206;
+                } else if (role.equals("B") && Files.exists(journal.resolve("chat-scrolled-A"))) {
+                    chatSend("new-while-reading", false); stage = 206;
+                }
+            }
+            case 206 -> {
+                if (role.equals("A") && panel.messages().size() >= 7) {
+                    require(chatAnchor.equals(panel.firstVisibleText()) && !panel.atBottom(), "New message preserves reader's scroll anchor");
+                    click(panel.buttonCenter(ChatPanel.Action.LATEST)); require(panel.atBottom(), "Latest resumes following messages");
+                    click(panel.inputCenter()); key(KeyInput.KEY_RETURN, '\n');
+                    require(panel.status().contains("Enter a message"), "Empty input shows a clear error without sending");
+                    Files.writeString(journal.resolve("chat-scroll-ok"), "ok"); action(PvpRoomPanel.Action.TOGGLE_READY); stage = 207;
+                } else if (role.equals("B") && Files.exists(journal.resolve("chat-scroll-ok"))) { action(PvpRoomPanel.Action.TOGGLE_READY); stage = 207; }
+            }
+            case 207 -> {
+                if (screens.networkPlacement() && screens.game().state().phase() == GamePhase.PLACEMENT) {
+                    require(context != null && !context.contextId().equals(chatContextId) && !panel.visible() && panel.messages().isEmpty(), "Match starts a fresh chat context; placement input stays available");
+                    chatContextId = context.contextId(); prepareReplay(); stage = 208;
+                }
+            }
+            case 208 -> {
+                if (screens.game().state().phase() == GamePhase.BATTLE && context != null && context.canSend()) {
+                    require(panel.collapsed() && panel.messages().stream().allMatch(m -> m.contextId().equals(context.contextId()) && m.text().startsWith("FCTR")), "Battle chat starts collapsed with only live messages from this match");
+                    chatBoardView = screens.game().enemyView(); chatRevision = screens.pvp().match().revision(); chatRemaining = screens.pvp().remainingTurnMillis(); chatFirstBattleAt = System.nanoTime();
+                    var cameraBefore = cam.getRotation().clone(); chatSend("FCTR [] <tag> \\#ff0000# " + role, false);
+                    require(chatBoardView == screens.game().enemyView() && cameraBefore.equals(cam.getRotation()), "F/C/T/R/Tab while typing never reach gameplay or camera");
+                    stage = 209;
+                }
+            }
+            case 209 -> {
+                if (panel.messages().size() >= 2 && !panel.busy()) {
+                    require(screens.pvp().match().revision() == chatRevision && screens.pvp().match().turnNumber() == 1
+                            && screens.pvp().remainingTurnMillis() <= chatRemaining + 150, "Battle chat preserves shots, turn and countdown");
+                    require(textShown(guiNode, "\\ #ff0000#"), "Color-tag input is rendered as safe literal text");
+                    for (int row = 0; row < 10; row++) for (int column = 0; column < 10; column++) {
+                        var projected = cam.getScreenCoordinates(new BoardCoordinates(board).worldCenter(new Coordinate(row, column), .185f));
+                        require(!panel.contains(new Vector2f(projected.x, projected.y)), "Expanded chat does not cover a target cell at the player view");
+                    }
+                    capture = "chat-battle-" + role + ".png";
+                    click(panel.buttonCenter(ChatPanel.Action.TOGGLE)); stage = 210;
+                }
+            }
+            case 210 -> {
+                if (playReplay()) {
+                    require(context != null && !context.canSend() && panel.messages().size() == 2, "Finished match keeps displayed chat but disables sending");
+                    click(panel.buttonCenter(ChatPanel.Action.TOGGLE)); capture = "chat-game-over-" + role + ".png"; stage = 211;
+                }
+            }
+            case 211 -> { if (capture == null) { key(KeyInput.KEY_RETURN, '\n'); stage = 212; } }
+            case 212 -> {
+                if (screens.game().state().phase() == GamePhase.PLACEMENT) {
+                    require(context != null && !context.contextId().equals(chatContextId) && panel.messages().isEmpty() && panel.draft().isEmpty(), "Rematch discards old messages and input state");
+                    chatContextId = context.contextId(); prepareReplay(); stage = 213;
+                }
+            }
+            case 213 -> { if (screens.game().state().phase() == GamePhase.BATTLE && context != null && context.canSend() && System.nanoTime() - chatFirstBattleAt >= TimeUnit.SECONDS.toNanos(5)) { chatSend("round-two-" + role, false); stage = 214; } }
+            case 214 -> {
+                if (panel.messages().size() >= 2 && !panel.busy()) {
+                    require(panel.messages().stream().allMatch(m -> m.contextId().equals(chatContextId) && m.text().startsWith("round-two")), "Only fresh messages in the second match");
+                    screens.pvp().returnToMainMenu(); stage = 215;
+                }
+            }
+            case 215 -> {
+                if (screens.mainMenu().visible()) {
+                    require(!panel.visible() && panel.messages().isEmpty() && screens.chat().context() == null, "Leaving room clears chat");
+                    click(screens.mainMenu().buttonCenter(MainMenu.Action.EXIT)); stage = 216;
+                }
+            }
+            default -> { }
         }
     }
 
