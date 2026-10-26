@@ -142,3 +142,14 @@ tasks.register('checkLeaderboardScreens', JavaExec) {
     systemProperty 'battleship.port', providers.gradleProperty('serverPort').getOrElse('2209')
     systemProperty 'battleship.leaderboardOnly', 'true'
 }
+
+tasks.register('checkFriendsScreens', JavaExec) {
+    group = 'verification'
+    description = 'Checks Friends TCP interactions with two independent desktop clients.'
+    dependsOn testClasses
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'com.battleship.frontend.game.PvpRoomRenderChecks'
+    workingDir rootProject.projectDir
+    systemProperty 'battleship.port', providers.gradleProperty('serverPort').getOrElse('2209')
+    systemProperty 'battleship.friendsOnly', 'true'
+}

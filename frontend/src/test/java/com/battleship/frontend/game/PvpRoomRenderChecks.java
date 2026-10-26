@@ -7,6 +7,8 @@ import com.battleship.frontend.scene.BattleScene;
 import com.battleship.frontend.menu.MainMenu;
 import com.battleship.frontend.auth.AccountPanel;
 import com.battleship.frontend.leaderboard.LeaderboardPanel;
+import com.battleship.frontend.friends.FriendsPanel;
+import com.battleship.shared.friends.FriendsAction;
 import com.battleship.shared.leaderboard.LeaderboardSort;
 import com.battleship.frontend.pvp.PvpRoomPanel;
 import com.battleship.shared.room.RoomPlayer;
@@ -94,7 +96,8 @@ public final class PvpRoomRenderChecks extends SimpleApplication {
                         "-Dorg.lwjgl.system.SharedLibraryExtractPath=" + journal.resolve(role + "-natives"),
                         "-Dbattleship.accountOnly=" + Boolean.getBoolean("battleship.accountOnly"),
                         "-Dbattleship.disconnectOnly=" + Boolean.getBoolean("battleship.disconnectOnly"),
-                        "-Dbattleship.leaderboardOnly=" + Boolean.getBoolean("battleship.leaderboardOnly"), "-cp",
+                        "-Dbattleship.leaderboardOnly=" + Boolean.getBoolean("battleship.leaderboardOnly"),
+                        "-Dbattleship.friendsOnly=" + Boolean.getBoolean("battleship.friendsOnly"), "-cp",
                         System.getProperty("java.class.path"), "-Dbattleship.port=" + System.getProperty("battleship.port", "2209"),
                         PvpRoomRenderChecks.class.getName(), role, journal.toString())
                         .redirectErrorStream(true).redirectOutput(journal.resolve(role + ".log").toFile()).start();
@@ -107,7 +110,9 @@ public final class PvpRoomRenderChecks extends SimpleApplication {
                 Thread.sleep(100);
             }
             require(clients[0].exitValue() == 0 && clients[1].exitValue() == 0, "Both desktop clients completed");
-            System.out.println(Boolean.getBoolean("battleship.leaderboardOnly")
+            System.out.println(Boolean.getBoolean("battleship.friendsOnly")
+                    ? "PASS: two desktop Friends clients; search, TCP invitation push, accept, online lists, confirmation/cancel/remove, empty state and menu/Exit."
+                    : Boolean.getBoolean("battleship.leaderboardOnly")
                     ? "PASS: two desktop leaderboard clients; real TCP rows, loading, three sorts, page navigation, empty/eligibility, error/retry and stale responses after Back."
                     : Boolean.getBoolean("battleship.disconnectOnly")
                     ? "PASS: two desktop clients, editable server address, opponent departure, private final victory/reason, rematch disabled, menu/login."
@@ -159,6 +164,7 @@ public final class PvpRoomRenderChecks extends SimpleApplication {
                 require(!screens.mainMenu().visible(), "Requesting Main Menu cannot bypass login");
                 stage = -1;
             } else if (stage < 0) authenticate();
+            else if (Boolean.getBoolean("battleship.friendsOnly")) friendsScreens();
             else if (Boolean.getBoolean("battleship.leaderboardOnly")) leaderboardScreens();
             else if (Boolean.getBoolean("battleship.disconnectOnly")) disconnectBattle();
             else if (Boolean.getBoolean("battleship.accountOnly")) accountNavigation();
@@ -203,8 +209,96 @@ public final class PvpRoomRenderChecks extends SimpleApplication {
             stage = -3;
         } else if (stage == -3 && screens.pvp().account() != null && screens.mainMenu().visible()) {
             require(screens.pvp().account().displayName().equals(accountName(role)), "Authenticated account controls displayed identity");
-            if (!Boolean.getBoolean("battleship.accountOnly") && !Boolean.getBoolean("battleship.leaderboardOnly")) click(screens.mainMenu().buttonCenter(MainMenu.Action.PVP));
+            if (!Boolean.getBoolean("battleship.accountOnly") && !Boolean.getBoolean("battleship.leaderboardOnly") && !Boolean.getBoolean("battleship.friendsOnly")) click(screens.mainMenu().buttonCenter(MainMenu.Action.PVP));
             stage = 1;
+        }
+    }
+
+    private void friendAction(FriendsPanel.Action action) {
+        var panel = screens.friendsPanel();
+        require(panel.enabled(action), "Friends action enabled: " + action);
+        click(panel.buttonCenter(action));
+    }
+    private void friendsScreens() throws Exception {
+        var panel = screens.friendsPanel();
+        var data = panel.data();
+        if (stage == 1) {
+            click(screens.mainMenu().buttonCenter(MainMenu.Action.FRIENDS));
+            require(panel.visible() && panel.loading(), "Friends opens with a loading state");
+            stage = 2; return;
+        }
+        if (stage == 2 && data != null) {
+            require(data.entries().isEmpty(), "New account has no invented friends");
+            Files.writeString(journal.resolve("friends-ready-" + role), "ok");
+            if (!Files.exists(journal.resolve("friends-ready-" + (role.equals("A") ? "B" : "A")))) return;
+            if (role.equals("A")) {
+                click(panel.searchCenter()); type(accountName("B")); key(KeyInput.KEY_RETURN, '\n');
+            } else friendAction(FriendsPanel.Action.RECEIVED);
+            stage = 3; return;
+        }
+        if (role.equals("A")) {
+            switch (stage) {
+                case 3 -> {
+                    if (data != null && data.action() == FriendsAction.SEARCH && !data.entries().isEmpty()) {
+                        require(data.total() == 1 && data.entries().getFirst().username().equals(accountName("B").toLowerCase()), "Typed username maps to the correct account");
+                        friendAction(FriendsPanel.Action.SEND); stage = 4;
+                    }
+                }
+                case 4 -> {
+                    if (data != null && data.entries().getFirst().relationship().equals("FRIEND")) {
+                        friendAction(FriendsPanel.Action.FRIENDS); stage = 5;
+                    }
+                }
+                case 5 -> {
+                    if (data != null && data.action() == FriendsAction.FRIENDS && data.entries().size() == 1) {
+                        require(data.entries().getFirst().online(), "Friend is online on client A");
+                        capture = "friends-A.png"; Files.writeString(journal.resolve("friends-listed-A"), "ok"); stage = 6;
+                    }
+                }
+                case 6 -> {
+                    if (Files.exists(journal.resolve("friends-listed-B")) && capture == null) {
+                        friendAction(FriendsPanel.Action.REMOVE);
+                        require(panel.confirming() && panel.data().entries().size() == 1, "First click only asks for confirmation");
+                        friendAction(FriendsPanel.Action.CANCEL_REMOVE);
+                        require(!panel.confirming() && panel.data().entries().size() == 1, "Cancelling preserves the friendship");
+                        friendAction(FriendsPanel.Action.REMOVE); friendAction(FriendsPanel.Action.CONFIRM_REMOVE); stage = 7;
+                    }
+                }
+                case 7 -> {
+                    if (data != null && data.entries().isEmpty() && Files.exists(journal.resolve("friends-removed-B"))) {
+                        panel.setError("Friends service unavailable. Please retry.");
+                        require(panel.status().contains("unavailable") && panel.enabled(FriendsPanel.Action.REFRESH), "Error component supports retry");
+                        friendAction(FriendsPanel.Action.REFRESH); stage = 8;
+                    }
+                }
+                case 8 -> { if (data != null && data.entries().isEmpty()) { friendAction(FriendsPanel.Action.BACK); stage = 9; } }
+                case 9 -> { if (screens.mainMenu().visible()) { click(screens.mainMenu().buttonCenter(MainMenu.Action.EXIT)); stage = 10; } }
+                default -> { }
+            }
+        } else {
+            switch (stage) {
+                case 3 -> {
+                    if (data != null && data.action() == FriendsAction.RECEIVED && data.entries().size() == 1) {
+                        require(data.entries().getFirst().requestedAt() != null, "Incoming invitation includes time");
+                        friendAction(FriendsPanel.Action.ACCEPT); stage = 4;
+                    }
+                }
+                case 4 -> { if (data != null && data.entries().isEmpty()) { friendAction(FriendsPanel.Action.FRIENDS); stage = 5; } }
+                case 5 -> {
+                    if (data != null && data.action() == FriendsAction.FRIENDS && data.entries().size() == 1) {
+                        require(data.entries().getFirst().online(), "Friend is online on client B");
+                        capture = "friends-B.png"; Files.writeString(journal.resolve("friends-listed-B"), "ok"); stage = 6;
+                    }
+                }
+                case 6 -> {
+                    if (data != null && data.entries().isEmpty()) {
+                        require(!panel.loading(), "Server push refreshes both clients after removal");
+                        Files.writeString(journal.resolve("friends-removed-B"), "ok"); friendAction(FriendsPanel.Action.BACK); stage = 7;
+                    }
+                }
+                case 7 -> { if (screens.mainMenu().visible()) { click(screens.mainMenu().buttonCenter(MainMenu.Action.EXIT)); stage = 8; } }
+                default -> { }
+            }
         }
     }
 
@@ -765,7 +859,7 @@ public final class PvpRoomRenderChecks extends SimpleApplication {
             renderer.getRenderer().readFrameBufferWithFormat(null, buffer, Image.Format.BGRA8);
             BufferedImage image = new BufferedImage(1440, 900, BufferedImage.TYPE_4BYTE_ABGR);
             Screenshots.convertScreenShot(buffer, image);
-            Path directory = Path.of("docs");
+            Path directory = Boolean.getBoolean("battleship.friendsOnly") ? journal.resolve("screenshots") : Path.of("docs");
             Files.createDirectories(directory);
             ImageIO.write(image, "png", directory.resolve(capture).toFile());
             capture = null;
