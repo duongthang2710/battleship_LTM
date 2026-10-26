@@ -71,7 +71,7 @@ public final class ClientHandler implements Runnable, AutoCloseable {
                     case FRIENDS_REQUEST -> friends(message);
                     case LEADERBOARD_REQUEST -> leaderboard(message);
                     case REGISTER, LOGIN, LOGOUT -> authenticate(message);
-                    case CREATE_ROOM, JOIN_ROOM, LEAVE_ROOM, READY, NOT_READY, SUBMIT_FLEET, ATTACK, REMATCH_REQUEST, REMATCH_DECLINE -> {
+                    case CHAT_SEND, CREATE_ROOM, JOIN_ROOM, LEAVE_ROOM, READY, NOT_READY, SUBMIT_FLEET, ATTACK, REMATCH_REQUEST, REMATCH_DECLINE -> {
                         if (session.account() == null) send(Message.reply(MessageType.AUTH_FAILED, message.requestId(),
                                 new AuthError("AUTH_REQUIRED", "Sign in before entering a PvP room.")));
                         else connections.rooms().handle(session.player(), message);

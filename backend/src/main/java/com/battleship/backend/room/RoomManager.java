@@ -2,6 +2,8 @@ package com.battleship.backend.room;
 
 import com.battleship.backend.server.ConnectionManager;
 import com.battleship.backend.match.MatchService;
+import com.battleship.backend.chat.ChatService;
+import com.battleship.shared.chat.*;
 import com.battleship.backend.match.MatchRepository;
 import com.battleship.shared.game.Side;
 import com.battleship.shared.game.GamePhase;
@@ -34,6 +36,7 @@ public final class RoomManager implements AutoCloseable {
     private final ConnectionManager connections;
     private final MatchRepository history;
     private final GameInvites invitations;
+    private final ChatService chat = new ChatService();
     private final ScheduledExecutorService clock = Executors.newSingleThreadScheduledExecutor(
             Thread.ofPlatform().daemon(true).name("match-clock").factory());
 
@@ -65,6 +68,7 @@ public final class RoomManager implements AutoCloseable {
     // Keep mutations and notifications ordered even when both clients act together.
     public synchronized void handle(PlayerIdentity player, Message message) {
         switch (message.type()) {
+            case CHAT_SEND -> chat(player, message);
             case CREATE_ROOM -> create(player, message);
             case JOIN_ROOM -> join(player, message);
             case LEAVE_ROOM -> {
@@ -84,6 +88,7 @@ public final class RoomManager implements AutoCloseable {
     public synchronized void disconnected(String clientId) {
         invitations.invalidateClient(clientId, "Player signed out or disconnected. Invitation cancelled.");
         leave(clientId, null);
+        chat.disconnected(clientId);
     }
 
     public synchronized void invite(PlayerIdentity player, java.util.UUID friendId, String requestId) {
@@ -147,6 +152,7 @@ public final class RoomManager implements AutoCloseable {
         rooms.put(code, room);
         memberships.put(player.clientId(), code);
         connections.send(player.clientId(), Message.reply(MessageType.ROOM_CREATED, message.requestId(), room.snapshot()));
+        sendChatContext(room, player.clientId());
         invitations.invalidateClient(player.clientId(), "Player created another room. Invitation cancelled.");
         LOG.info("ROOM_CREATED code=" + code + " player=" + player.playerName());
     }
@@ -188,6 +194,7 @@ public final class RoomManager implements AutoCloseable {
         memberships.put(player.clientId(), room.code);
         RoomSnapshot snapshot = room.snapshot();
         connections.send(player.clientId(), Message.reply(MessageType.ROOM_JOINED, requestId, snapshot));
+        sendChatContext(room, player.clientId());
         room.players.keySet().stream().filter(id -> !id.equals(player.clientId()))
                 .forEach(id -> connections.send(id, Message.request(MessageType.PLAYER_JOINED, snapshot)));
         LOG.info("ROOM_JOINED code=" + room.code + " player=" + player.playerName());
@@ -220,6 +227,7 @@ public final class RoomManager implements AutoCloseable {
     private void startPlacement(Room room) {
         invitations.invalidateRoom(room, "Placement has started. Invitation cancelled.");
         room.phase = RoomPhase.PLACEMENT;
+        room.chat = new RoomChat(ChatScope.MATCH, false);
         room.rematchRequests.clear();
         room.rematchDeclined = false;
         // A fresh match also discards the old deadline, shot history and winner.
@@ -228,6 +236,7 @@ public final class RoomManager implements AutoCloseable {
         room.historyFinished = false;
         room.accountIds = Map.of();
         broadcast(room, MessageType.START_PLACEMENT);
+        room.players.keySet().forEach(id -> sendChatContext(room, id));
         LOG.info("START_PLACEMENT code=" + room.code);
     }
 
@@ -290,6 +299,7 @@ public final class RoomManager implements AutoCloseable {
         recordMatch(room);
         for (String id : room.players.keySet()) connections.send(id, Message.reply(event,
                 id.equals(actorId) ? requestId : java.util.UUID.randomUUID().toString(), room.match.snapshot(id)));
+        syncChat(room);
     }
 
     private void leave(String clientId, String requestId) {
@@ -312,8 +322,10 @@ public final class RoomManager implements AutoCloseable {
         } else {
             room.phase = RoomPhase.WAITING;
             room.match = null;
+            if (room.chat.scope != ChatScope.WAITING_ROOM) room.chat = new RoomChat(ChatScope.WAITING_ROOM, true);
             room.players.replaceAll((id, player) -> new RoomPlayer(id, player.playerName(), false));
             broadcast(room, MessageType.PLAYER_LEFT);
+            room.players.keySet().forEach(id -> sendChatContext(room, id));
         }
         LOG.info("PLAYER_LEFT code=" + code + " player=" + clientId);
     }
@@ -337,6 +349,52 @@ public final class RoomManager implements AutoCloseable {
             history.finish(room.historyId, java.time.Instant.now(), room.match.endReason().name(),
                     room.match.winnerSlot(), room.match.totalTurns(), room.match.statistics(room.accountIds));
         }
+    }
+
+    private boolean chatAllowed(Room room) {
+        return room.match == null ? room.phase == RoomPhase.WAITING : room.match.phase() == GamePhase.BATTLE;
+    }
+
+    private void sendChatContext(Room room, String clientId) {
+        connections.send(clientId, Message.request(MessageType.CHAT_CONTEXT, room.chat.view(room.code)));
+    }
+
+    private void syncChat(Room room) {
+        boolean writable = chatAllowed(room);
+        if (room.chat.writable == writable) return;
+        room.chat.writable = writable;
+        room.players.keySet().forEach(id -> sendChatContext(room, id));
+    }
+
+    private void chat(PlayerIdentity player, Message message) {
+        Room room = rooms.get(memberships.get(player.clientId()));
+        var account = connections.account(player.clientId());
+        if (room == null || !room.players.containsKey(player.clientId()) || account == null) {
+            chatError(player, message, "NOT_IN_ROOM", "Join a room before sending a message."); return;
+        }
+        try {
+            ChatSend request = message.payloadAs(ChatSend.class);
+            if (request == null || !room.chat.id.equals(request.contextId())) {
+                chatError(player, message, "CHAT_CONTEXT_CHANGED", "Chat belongs to an earlier room or match."); return;
+            }
+            if (!chatAllowed(room)) {
+                chatError(player, message, "CHAT_READ_ONLY", "Chat is read-only until Battle starts, or after the match ends."); return;
+            }
+            String text = chat.accept(player.clientId(), request.text());
+            var delivered = room.chat.message(account, text);
+            for (String id : room.players.keySet()) connections.send(id, Message.reply(MessageType.CHAT_MESSAGE,
+                    id.equals(player.clientId()) ? message.requestId() : java.util.UUID.randomUUID().toString(), delivered));
+        } catch (com.google.gson.JsonParseException exception) {
+            chatError(player, message, "INVALID_CHAT", "Malformed chat message.");
+        } catch (IllegalArgumentException exception) {
+            chatError(player, message, "INVALID_CHAT", exception.getMessage());
+        } catch (IllegalStateException exception) {
+            chatError(player, message, "CHAT_RATE_LIMIT", exception.getMessage());
+        }
+    }
+
+    private void chatError(PlayerIdentity player, Message message, String code, String reason) {
+        connections.send(player.clientId(), Message.reply(MessageType.CHAT_ERROR, message.requestId(), new RoomError(code, reason)));
     }
 
     private boolean alreadyInRoom(PlayerIdentity player, Message message) {

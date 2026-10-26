@@ -284,7 +284,7 @@ public final class TcpMatchChecks {
         Message read(MessageType type) throws IOException {
             Message message;
             do { message = MessageCodec.read(input); }
-            while (message != null && message.type() == MessageType.TURN_TIMER);
+            while (message != null && (message.type() == MessageType.TURN_TIMER || message.type() == MessageType.CHAT_CONTEXT));
             require(message != null && message.type() == type, "Expected " + type + ", received " + message);
             return message;
         }

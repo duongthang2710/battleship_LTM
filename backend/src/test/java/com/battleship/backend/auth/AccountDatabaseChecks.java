@@ -103,7 +103,7 @@ public final class AccountDatabaseChecks {
         void send(MessageType type, Object payload) throws IOException { MessageCodec.write(output, Message.request(type, payload)); }
         Message read(MessageType type) throws IOException {
             Message message;
-            do { message = MessageCodec.read(input); } while (message != null && message.type() == MessageType.TURN_TIMER);
+            do { message = MessageCodec.read(input); } while (message != null && (message.type() == MessageType.TURN_TIMER || message.type() == MessageType.CHAT_CONTEXT));
             require(message != null && message.type() == type, "Expected " + type + ", got " + (message == null ? "EOF" : message.type()));
             return message;
         }

@@ -117,7 +117,7 @@ public final class FriendsChecks {
         for (;;) {
             var reply = next(peer);
             if (reply.requestId().equals(message.requestId())) return reply;
-            require(reply.type() == MessageType.FRIENDS_CHANGED || reply.type() == MessageType.TURN_TIMER, "Unexpected TCP event");
+            require(reply.type() == MessageType.FRIENDS_CHANGED || reply.type() == MessageType.TURN_TIMER || reply.type() == MessageType.CHAT_CONTEXT, "Unexpected TCP event");
         }
     }
     private static Message request(Peer peer, FriendsRequest request) throws IOException { return exchange(peer, Message.request(MessageType.FRIENDS_REQUEST, request)); }
