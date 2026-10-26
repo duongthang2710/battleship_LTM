@@ -86,7 +86,7 @@ public final class MainMenuFlowChecks extends SimpleApplication {
             require(!screens.mainMenu().visible() && screens.accountPanel().visible(), "Main Menu request cannot bypass authentication");
             require(!screens.accountPanel().enabled(AccountPanel.Action.BACK), "Login has no unauthenticated back route");
             MainMenu menu = new MainMenu(assetManager);
-            require(MainMenu.Action.values().length == 9, "Nine non-local menu actions include Leaderboard");
+            require(MainMenu.Action.values().length == 8, "Eight implemented non-local menu actions");
             for (int[] size : new int[][] {{1440, 900}, {960, 600}}) {
                 menu.resize(size[0], size[1]);
                 for (MainMenu.Action action : MainMenu.Action.values())

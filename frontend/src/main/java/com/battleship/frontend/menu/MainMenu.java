@@ -20,7 +20,7 @@ import java.util.Optional;
 
 public final class MainMenu {
     public enum Action {
-        PVP, PVE, LEADERBOARD, CREATE_ROOM, JOIN_ROOM, FRIENDS, PROFILE, SETTINGS, EXIT
+        PVP, LEADERBOARD, CREATE_ROOM, JOIN_ROOM, FRIENDS, PROFILE, SETTINGS, EXIT
     }
 
     private static final float WIDTH = 400;
@@ -131,8 +131,7 @@ public final class MainMenu {
         divider(469);
         button(28, 380, 344, 66, "PVP", Action.PVP, true);
         centered(body, "ONLINE MATCH", 10, WIDTH / 2, 398, CYAN);
-        button(28, 311, 165, 52, "PVE / VS AI", Action.PVE, false);
-        button(207, 311, 165, 52, "LEADERBOARD", Action.LEADERBOARD, false);
+        button(28, 311, 344, 52, "LEADERBOARD", Action.LEADERBOARD, false);
         button(28, 247, 165, 52, "CREATE ROOM", Action.CREATE_ROOM, false);
         button(207, 247, 165, 52, "JOIN ROOM", Action.JOIN_ROOM, false);
         button(28, 183, 165, 52, "FRIENDS", Action.FRIENDS, false);

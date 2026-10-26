@@ -786,7 +786,7 @@ public final class PvpRoomRenderChecks extends SimpleApplication {
         AccountPanel panel = screens.accountPanel();
         switch (stage) {
             case 1 -> {
-                require(screens.mainMenu().visible() && MainMenu.Action.values().length == 9, "Authenticated menu has no Local Game action");
+                require(screens.mainMenu().visible() && MainMenu.Action.values().length == 8, "Authenticated menu has no Local Game action");
                 click(screens.mainMenu().buttonCenter(MainMenu.Action.SETTINGS));
                 require(screens.settingsPanel().visible() && !screens.mainMenu().visible(), "Settings opens a real screen");
                 stage = 89;
@@ -838,7 +838,7 @@ public final class PvpRoomRenderChecks extends SimpleApplication {
             }
             case 96 -> {
                 if (screens.mainMenu().visible()) {
-                    System.out.println("PASS account screens: mandatory login, no Local Game, Settings Back, Profile logout, wrong-password gate, login again, room entry and Exit.");
+                    System.out.println("PASS account screens: mandatory login, no Local Game or dummy actions, Settings Back, Profile logout, wrong-password gate, login again, room entry and Exit.");
                     click(screens.mainMenu().buttonCenter(MainMenu.Action.EXIT)); stage = 97;
                 }
             }

@@ -132,7 +132,10 @@ public final class PvpController implements AutoCloseable {
     public void register(String username, String password, String confirmation) {
         send(MessageType.REGISTER, new RegisterRequest(username, password, confirmation));
     }
-    public void logout() { if (room == null) send(MessageType.LOGOUT, null); }
+    public void logout() {
+        if (room == null) send(MessageType.LOGOUT, null);
+        else setStatus("Leave your current room before signing out.");
+    }
     public void hide() { panel.hide(); }
 
     public RoomSnapshot room() { return room; }

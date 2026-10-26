@@ -129,7 +129,7 @@ public final class PlacementHud {
             button(54, top - 97, 219, 31, enemyView ? "Your fleet [Tab]" : "Target enemy [Tab]",
                     Action.TOGGLE_BOARD, true, false);
             text(body, state.phase() == GamePhase.GAME_OVER ? "Use Tab to inspect your fleet."
-                    : "Click a target cell to fire.", 11, 55, top - 114, CYAN);
+                    : "Click a target cell to fire.", 11, 55, top - 106, CYAN);
             if (networkPlacement) button(54, top - 151, 219, 28, "Leave Room", Action.LEAVE_ROOM, true, false);
             else if (state.phase() != GamePhase.GAME_OVER)
                 text(body, "Local: fire both fleets in turn.", 10, 55, top - 137, 0xB6BDCF);
