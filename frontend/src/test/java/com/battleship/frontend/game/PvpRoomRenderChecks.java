@@ -648,7 +648,10 @@ public final class PvpRoomRenderChecks extends SimpleApplication {
                 else if (Files.exists(journal.resolve("code"))) { join(Files.readString(journal.resolve("code"))); stage = 2; }
             }
             case 2 -> {
-                if (role.equals("A") && room != null) Files.writeString(journal.resolve("code"), room.roomCode());
+                if (role.equals("A") && room != null && !Files.exists(journal.resolve("code"))) {
+                    Files.writeString(journal.resolve("code.tmp"), room.roomCode());
+                    Files.move(journal.resolve("code.tmp"), journal.resolve("code"), java.nio.file.StandardCopyOption.ATOMIC_MOVE);
+                }
                 if (twoPlayers() && !screens.pvp().pending()) { action(PvpRoomPanel.Action.TOGGLE_READY); stage = 3; }
             }
             case 3 -> {
@@ -678,7 +681,9 @@ public final class PvpRoomRenderChecks extends SimpleApplication {
                     stage = 50;
                 } else if (role.equals("B") && Files.exists(journal.resolve("A-disconnect-victory"))) {
                     require(screens.accountPanel().visible() && !screens.mainMenu().visible(), "Disconnected client returns to mandatory login");
-                    System.out.println("PASS client B: explicit disconnect during Battle returns to login."); stop(); stage = 7;
+                    require(!screens.pvp().connected() && screens.pvp().status().startsWith("Disconnected."),
+                            "Login navigation preserves disconnect status without silently reconnecting");
+                    System.out.println("PASS client B: explicit disconnect during Battle returns to login with the reason retained, without automatic reconnect."); stop(); stage = 7;
                 }
             }
             case 50 -> { if (capture == null) { screens.pvp().returnToMainMenu(); stage = 6; } }
@@ -1190,6 +1195,7 @@ public final class PvpRoomRenderChecks extends SimpleApplication {
     }
 
     private void join(String code) {
+        require(code.length() == 6, "Test must publish a complete room code before Join");
         action(PvpRoomPanel.Action.SHOW_JOIN);
         for (char character : code.toCharArray()) key(character == 'R' ? KeyInput.KEY_R : 0, character);
         require(screens.roomPanel().roomCode().equals(code), "Room code typed through RoomCodeInput");
