@@ -58,7 +58,7 @@ public final class Database {
             connection.setAutoCommit(false);
             try {
                 statement.execute("SELECT pg_advisory_xact_lock(2209001)");
-                for (String migration : new String[] {"V001__accounts_and_matches.sql", "V002__match_summary.sql"}) {
+                for (String migration : new String[] {"V001__accounts_and_matches.sql", "V002__match_summary.sql", "V003__friendships.sql"}) {
                     try (var resource = Database.class.getResourceAsStream("/db/" + migration)) {
                         if (resource == null) throw new IOException("Missing database migration: " + migration);
                         statement.execute(new String(resource.readAllBytes(), StandardCharsets.UTF_8));
