@@ -7,7 +7,7 @@ import com.battleship.shared.auth.AccountProfile;
 public final class ClientSession {
     private final String id = UUID.randomUUID().toString();
     private PlayerIdentity player;
-    private AccountProfile account;
+    private volatile AccountProfile account;
 
     public AccountProfile account() { return account; }
     public void authenticate(AccountProfile value) {

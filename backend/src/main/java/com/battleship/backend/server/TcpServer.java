@@ -23,7 +23,8 @@ public final class TcpServer implements AutoCloseable {
         database.migrate();
         server = new ServerSocket(port);
         connections = new ConnectionManager(new AuthService(new UserRepository(database)), new MatchRepository(database),
-                new com.battleship.backend.leaderboard.LeaderboardRepository(database));
+                new com.battleship.backend.leaderboard.LeaderboardRepository(database),
+                new com.battleship.backend.friends.FriendsRepository(database));
     }
     public int port() { return server.getLocalPort(); }
 

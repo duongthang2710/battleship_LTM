@@ -33,6 +33,7 @@ public final class PvpController implements AutoCloseable {
     private final Consumer<String> matchErrors;
     private final String playerName;
     private Consumer<Message> leaderboardListener = message -> { };
+    private Consumer<Message> friendsListener = message -> { };
     private String host;
     private int port;
     private RoomSnapshot room;
@@ -66,6 +67,13 @@ public final class PvpController implements AutoCloseable {
         host = System.getProperty("battleship.host", "localhost");
         port = Integer.getInteger("battleship.port", 2209);
         connection = new ConnectionManager(this::onMessage, this::onStatus);
+    }
+
+    public void setFriendsListener(Consumer<Message> listener) { friendsListener = listener; }
+    public String requestFriends(com.battleship.shared.friends.FriendsRequest request) {
+        if (account == null) return null;
+        Message message = Message.request(MessageType.FRIENDS_REQUEST, request);
+        return connection.send(message) ? message.requestId() : null;
     }
 
     public void setLeaderboardListener(Consumer<Message> listener) { leaderboardListener = listener; }
@@ -268,6 +276,9 @@ public final class PvpController implements AutoCloseable {
 
     private void onMessage(Message message) {
         if (!active) return;
+        if (message.type() == MessageType.FRIENDS_RESULT || message.type() == MessageType.FRIENDS_ERROR || message.type() == MessageType.FRIENDS_CHANGED) {
+            friendsListener.accept(message); return;
+        }
         if (message.type() == MessageType.LEADERBOARD_RESULT || message.type() == MessageType.LEADERBOARD_ERROR) {
             leaderboardListener.accept(message);
             return;
@@ -285,6 +296,7 @@ public final class PvpController implements AutoCloseable {
             case LOGOUT_OK -> { account = null; setStatus("Signed out."); }
             case AUTH_FAILED -> {
                 leaderboardListener.accept(message);
+                friendsListener.accept(message);
                 AuthError error = message.payloadAs(AuthError.class);
                 if (error.code().equals("AUTH_REQUIRED")) account = null;
                 setStatus(error.message());

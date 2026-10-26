@@ -66,6 +66,7 @@ public final class ClientHandler implements Runnable, AutoCloseable {
                         send(Message.reply(MessageType.PONG, message.requestId(), null));
                         LOG.fine("PONG " + id());
                     }
+                    case FRIENDS_REQUEST -> friends(message);
                     case LEADERBOARD_REQUEST -> leaderboard(message);
                     case REGISTER, LOGIN, LOGOUT -> authenticate(message);
                     case CREATE_ROOM, JOIN_ROOM, LEAVE_ROOM, READY, NOT_READY, SUBMIT_FLEET, ATTACK, REMATCH_REQUEST, REMATCH_DECLINE -> {
@@ -82,6 +83,27 @@ public final class ClientHandler implements Runnable, AutoCloseable {
         } finally {
             close();
             connections.remove(id());
+        }
+    }
+
+    private void friends(Message message) {
+        if (session.account() == null) {
+            send(Message.reply(MessageType.AUTH_FAILED, message.requestId(), new AuthError("AUTH_REQUIRED", "Sign in to use Friends.")));
+            return;
+        }
+        try {
+            var request = message.payloadAs(com.battleship.shared.friends.FriendsRequest.class);
+            var result = connections.friends().handle(session.account().id(), request);
+            send(Message.reply(MessageType.FRIENDS_RESULT, message.requestId(), result));
+            if (!request.action().listing()) connections.notifyFriends(java.util.List.of(session.account().id(), request.targetId()),
+                    "Friends list or invitations updated.");
+        } catch (com.google.gson.JsonParseException | IllegalArgumentException exception) {
+            String reason = exception instanceof com.google.gson.JsonParseException ? "Malformed friends request." : exception.getMessage();
+            send(Message.reply(MessageType.FRIENDS_ERROR, message.requestId(), new com.battleship.shared.friends.FriendsNotice(reason)));
+        } catch (java.sql.SQLException exception) {
+            LOG.warning("Friends request failed; SQL state=" + exception.getSQLState());
+            send(Message.reply(MessageType.FRIENDS_ERROR, message.requestId(),
+                    new com.battleship.shared.friends.FriendsNotice("Friends service unavailable. Please retry.")));
         }
     }
 
@@ -110,7 +132,9 @@ public final class ClientHandler implements Runnable, AutoCloseable {
             if (message.type() == MessageType.LOGOUT) {
                 connections.rooms().disconnected(id());
                 connections.auth().logout(id(), session.account());
+                AccountProfile previous = session.account();
                 session.authenticate(null);
+                connections.presenceChanged(previous);
                 send(Message.reply(MessageType.LOGOUT_OK, message.requestId(), null));
             } else if (session.account() != null) {
                 send(Message.reply(MessageType.AUTH_FAILED, message.requestId(),
@@ -121,6 +145,7 @@ public final class ClientHandler implements Runnable, AutoCloseable {
             } else {
                 AccountProfile account = connections.auth().login(id(), message.payloadAs(LoginRequest.class));
                 session.authenticate(account);
+                connections.presenceChanged(account);
                 send(Message.reply(MessageType.AUTH_SUCCESS, message.requestId(), account));
             }
         } catch (com.google.gson.JsonParseException | IllegalArgumentException exception) {
