@@ -265,15 +265,18 @@ public final class TcpMatchChecks {
         final String id;
         final java.util.UUID accountId;
         final String username;
-        Peer(int port, String name) throws Exception {
+        Peer(int port, String name) throws Exception { this(port, name, null); }
+        Peer(int port, String name, String existingUsername) throws Exception {
             socket = new Socket("localhost", port); socket.setTcpNoDelay(true); socket.setSoTimeout(5_000);
             input = new DataInputStream(socket.getInputStream()); output = new DataOutputStream(socket.getOutputStream());
             send(MessageType.CONNECT, new ConnectRequest(name));
             id = read(MessageType.CONNECT_OK).payloadAs(ConnectResponse.class).player().clientId();
-            username = "tcp_" + java.util.UUID.randomUUID().toString().substring(0, 12).replace("-", "");
+            username = existingUsername == null ? "tcp_" + java.util.UUID.randomUUID().toString().substring(0, 12).replace("-", "") : existingUsername;
             String password = "TcpCheckPassword2026!";
-            send(MessageType.REGISTER, new com.battleship.shared.auth.RegisterRequest(username, password, password));
-            read(MessageType.REGISTER_OK);
+            if (existingUsername == null) {
+                send(MessageType.REGISTER, new com.battleship.shared.auth.RegisterRequest(username, password, password));
+                read(MessageType.REGISTER_OK);
+            }
             send(MessageType.LOGIN, new com.battleship.shared.auth.LoginRequest(username, password));
             accountId = read(MessageType.AUTH_SUCCESS).payloadAs(com.battleship.shared.auth.AccountProfile.class).id();
         }

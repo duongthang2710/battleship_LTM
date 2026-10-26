@@ -33,3 +33,13 @@ tasks.register('checkLeaderboard', JavaExec) {
     onlyIf { providers.gradleProperty('leaderboardDatabase').isPresent() }
     environment 'DB_NAME', providers.gradleProperty('leaderboardDatabase').getOrElse('')
 }
+
+tasks.register('checkFriends', JavaExec) {
+    group = 'verification'
+    dependsOn testClasses
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'com.battleship.backend.match.FriendsChecks'
+    workingDir rootProject.projectDir
+    onlyIf { providers.gradleProperty('friendsDatabase').isPresent() }
+    environment 'DB_NAME', providers.gradleProperty('friendsDatabase').getOrElse('')
+}
