@@ -9,6 +9,8 @@ bàn cờ và mô hình tàu 3D. Backend dùng **Java TCP Socket** để quản 
 ## Chức năng hiện có
 
 - **Bắt buộc đăng nhập:** mở ứng dụng → đăng ký/đăng nhập → Main Menu. Không còn chế độ Play Local.
+- **Chat phòng/trận:** tin nhắn trực tiếp trong Waiting Room và Battle; tự tách nội dung giữa các ván.
+- **Mời bạn vào PvP:** mời bạn online, Accept/Decline, thời hạn 60 giây; tự tạo hoặc dùng lại phòng chờ.
 - **Friends:** tìm username, gửi/nhận/chấp nhận/từ chối/hủy lời mời, xóa bạn có xác nhận; cập nhật hai phía qua TCP và hiển thị online/offline.
 - **Leaderboard:** xếp hạng toàn server theo số trận thắng, tỷ lệ thắng hoặc số trận; 10 người/trang.
 - **PvP:** tạo phòng, tham gia bằng mã 6 ký tự, phòng chờ hai người, Ready/Not Ready,
@@ -23,7 +25,7 @@ và Destroyer (2 ô). Tàu không được chồng lấn hoặc nằm ngoài bà
 
 Các nút PVE / VS AI và Settings hiện chỉ có giao diện,
 chưa thực hiện chức năng (riêng **Profile** hiện mở tài khoản để đăng nhập/đăng xuất).
-Đã có tài khoản và lưu kết quả PvP bằng PostgreSQL; chưa có chat hay khôi phục trận sau mất kết nối.
+Đã có tài khoản và lưu kết quả PvP bằng PostgreSQL; có chat trong phòng/trận; chưa có chat riêng hoặc khôi phục trận sau mất kết nối.
 
 Kết thúc trận hiển thị Victory/Defeat theo từng người. **PLAY AGAIN** trong PvP
 gửi yêu cầu đến server: một người đồng ý thì chờ trên màn kết quả, cả hai đồng ý
@@ -389,6 +391,8 @@ Các kiểm tra giao diện cần môi trường OpenGL:
 .\gradlew.bat :frontend:checkPvpDisconnect
 .\gradlew.bat :frontend:checkLeaderboardScreens
 .\gradlew.bat :frontend:checkFriendsScreens
+.\gradlew.bat :frontend:checkGameInviteScreens
+.\gradlew.bat :frontend:checkChatScreens
 ```
 
 | Vấn đề | Kiểm tra |
@@ -434,7 +438,7 @@ Các thao tác khóa hàng và commit trong transaction trước khi đẩy `FRI
 Client gửi `FRIENDS_REQUEST` (action, targetId, query, page); server lấy danh tính từ
 phiên xác thực và trả `FRIENDS_RESULT` hoặc `FRIENDS_ERROR`. UI không đọc database.
 Khởi động lại backend áp dụng migration, dùng frontend/backend cùng phiên bản protocol.
-Chưa có chat hoặc mời bạn vào phòng.
+Đã hỗ trợ mời bạn vào phòng PvP; đã có chat phòng/trận PvP, chưa có chat riêng.
 
 Kiểm thử database riêng, mới và chưa có tài khoản (đổi DB_USER nếu cần):
 
@@ -446,3 +450,66 @@ docker compose exec -T postgres psql -U battleship -d postgres -c "CREATE DATABA
 Test chạy TCP thật với nhiều tài khoản, kiểm tra transaction/lời mời hai chiều đồng thời,
 quyền truy cập, online/offline, persistence sau restart và lỗi database. Không chạy trên database vận hành.
 `checkFriendsScreens` mở hai client desktop thật với thao tác nhập tự động; cần backend riêng và OpenGL.
+
+## Mời bạn vào trận PvP
+
+Trong **FRIENDS**, chọn **INVITE TO BATTLE** bên cạnh bạn đang online. Nếu chưa có
+phòng, server tạo phòng; nếu đang ở phòng chờ còn một chỗ, server dùng lại phòng đó.
+Trong Waiting Room có **INVITE FRIENDS** để mở danh sách bạn mà không rời phòng.
+Người nhận thấy thông báo ở góc trên, gồm tài khoản người mời, **ACCEPT**, **DECLINE**
+và đồng hồ 60 giây. Accept hợp lệ đưa cả hai đến cùng Waiting Room; Ready, đặt tàu
+và Battle tiếp tục theo luồng hiện có. Join bằng room code vẫn hoạt động.
+
+Server giữ lời mời trong RAM, gắn với phiên đăng nhập, người nhận và đối tượng phòng
+cụ thể. Không có migration mới. `SEND_GAME_INVITE` chỉ nhận friendId;
+`ACCEPT_GAME_INVITE` / `DECLINE_GAME_INVITE` chỉ nhận inviteId. Server tự xác định
+người gửi và phòng, kiểm tra quan hệ bạn bè qua PostgreSQL trước khi gửi.
+`GAME_INVITE_UPDATED` mang trạng thái PENDING / ACCEPTED / DECLINED / EXPIRED /
+INVALIDATED; `GAME_INVITE_ERROR` báo thao tác bị từ chối.
+
+Mọi thay đổi phòng, Accept và hết hạn dùng cùng khóa RoomManager và clock hiện có.
+Không giữ chỗ riêng cho lời mời: nếu có người join trước, lời mời bị vô hiệu hóa.
+Rời phòng, vào phòng khác, đăng xuất/mất kết nối cũng hủy lời mời liên quan.
+Lời mời đã xử lý không sử dụng lại; restart server xóa lời mời của phiên cũ.
+Mỗi phòng/người nhận tối đa 8 lời mời đang chờ; không gửi trùng cho cùng người trong cùng phòng.
+Đồng hồ client chỉ hiển thị, server quyết định thời hạn chính thức.
+
+Kiểm thử server dùng database mới riêng (đổi DB_USER nếu cần):
+
+```powershell
+docker compose exec -T postgres psql -U battleship -d postgres -c "CREATE DATABASE battleship_invite_test_manual"
+.\gradlew.bat :backend:checkGameInvites -PinviteDatabase=battleship_invite_test_manual
+# Backend riêng đang chạy tại localhost:2209; hai cửa sổ desktop, có chờ hết hạn thật 60 giây:
+.\gradlew.bat :frontend:checkGameInviteScreens
+```
+
+## Chat trong phòng và trận PvP
+
+Waiting Room hiển thị chat ở bên phải; Battle dùng sidebar trái, ban đầu thu gọn.
+Bấm **+ / -** để mở/thu gọn. Click ô nhập hoặc Enter để focus, Enter / **SEND** để gửi,
+Esc để bỏ focus. Cuộn chuột hoặc **UP/DN** để đọc tin cũ; nút **NEW** trở về cuối danh sách.
+Tin mới tự cuộn khi đang xem cuối, giữ vị trí khi đang đọc tin cũ.
+Khi đang gõ, các phím gameplay/camera không được kích hoạt.
+
+Mỗi tin tối đa **300 Unicode code points**, không nhận tin rỗng, whitespace-only,
+ký tự điều khiển hoặc định dạng ẩn. Server cho tối đa **5 tin / 5 giây / phiên kết nối**;
+đổi phòng hoặc chơi lại không reset giới hạn này. UI không diễn giải mã màu do người dùng nhập;
+glyph không có trong font hiện tại được hiển thị bằng `?`.
+
+Không lưu chat vào PostgreSQL, không tải lịch sử cho người mới tham gia. Client giữ tối đa
+100 tin đã nhận trong ngữ cảnh hiện tại. Khi bắt đầu đặt tàu, server tạo ngữ cảnh MATCH mới,
+ẩn chat trong Placement và mở gửi khi vào Battle. Kết thúc trận giữ nội dung để đọc nhưng khóa gửi.
+Chơi lại cấp ngữ cảnh mới, xóa tin/draft/trạng thái gửi cũ. Rời phòng hoặc đăng xuất xóa chat trên client.
+
+Protocol dùng `CHAT_SEND`, `CHAT_CONTEXT`, `CHAT_MESSAGE`, `CHAT_ERROR` trên socket hiện có.
+Client chỉ gửi contextId + text; server lấy phòng từ membership và tên từ tài khoản đã xác thực,
+gắn sequence/thời gian UTC, gửi cho đúng thành viên. Context UUID chặn gói tin của phòng/ván cũ.
+Xử lý chat không thay đổi GameEngine, lượt bắn, revision hoặc deadline trận đấu.
+
+```powershell
+# Database kiểm thử mới, riêng biệt; thay DB_USER nếu cần:
+docker compose exec -T postgres psql -U battleship -d postgres -c "CREATE DATABASE battleship_chat_test_manual"
+.\gradlew.bat :backend:checkChat -PchatDatabase=battleship_chat_test_manual
+# Backend riêng đang chạy tại localhost:2209, cần OpenGL:
+.\gradlew.bat :frontend:checkChatScreens
+```

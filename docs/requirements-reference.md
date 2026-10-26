@@ -36,4 +36,4 @@ Người dùng xác nhận giữ **5 loại tàu thẳng**, không chuyển sang
 
 Các lượt tiếp theo đối chiếu thiết kế chung và phạm vi được giao; kiểm tra code/protocol trước khi sửa. Những chức năng chưa triển khai chỉ bổ sung khi được yêu cầu.
 
-Bạn bè đã được bổ sung theo yêu cầu riêng: lời mời, quan hệ một cặp duy nhất, online/offline qua phiên TCP và migration V003. Chưa có chat hoặc mời vào phòng.
+Bạn bè đã được bổ sung theo yêu cầu riêng: lời mời, quan hệ một cặp duy nhất, online/offline qua phiên TCP và migration V003. Đã tích hợp mời bạn online vào phòng PvP qua TCP, lời mời trong RAM hết hạn sau 60 giây; đã có chat trong phòng chờ và trận PvP theo yêu cầu riêng. Chat riêng giữa bạn bè chưa triển khai.
