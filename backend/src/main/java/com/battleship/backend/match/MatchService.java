@@ -23,16 +23,19 @@ public final class MatchService {
     private MatchEndReason endReason;
 
     public MatchService(List<RoomPlayer> players) {
-        this(players, System::nanoTime);
+        this(players, GameMode.CLASSIC, System::nanoTime);
     }
 
-    MatchService(List<RoomPlayer> players, LongSupplier nanoTime) {
+    public MatchService(List<RoomPlayer> players, GameMode mode) { this(players, mode, System::nanoTime); }
+    MatchService(List<RoomPlayer> players, LongSupplier nanoTime) { this(players, GameMode.CLASSIC, nanoTime); }
+    MatchService(List<RoomPlayer> players, GameMode mode, LongSupplier nanoTime) {
         this.nanoTime = nanoTime;
         RoomPlayer first = players.get(0);
         RoomPlayer second = players.get(1);
         firstSide = first.side();
         engine = new GameEngine(new Player(first.clientId(), first.playerName(), new Board()),
                 new Player(second.clientId(), second.playerName(), new Board()));
+        engine.setMode(mode);
     }
 
     public GamePhase phase() { return engine.state().phase(); }
@@ -42,7 +45,10 @@ public final class MatchService {
         for (var ship : request.ships()) {
             if (ship == null || ship.type() == null || ship.position() == null || ship.orientation() == null)
                 throw new IllegalArgumentException("Missing or unknown ship data.");
+            if (ship.cells() != null && engine.mode() != GameMode.DESIGNER)
+                throw new IllegalArgumentException("Custom ships require Fleet designer mode.");
         }
+        if (request.ships().size() != ShipType.values().length) throw new IllegalArgumentException("Exactly five ships required.");
         engine.submitFleet(clientId, request.ships().stream().map(ship -> ship.ship()).toList());
         revision++;
         if (phase() == GamePhase.BATTLE) startTurn();

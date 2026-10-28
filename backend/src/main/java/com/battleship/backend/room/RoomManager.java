@@ -147,7 +147,12 @@ public final class RoomManager implements AutoCloseable {
             for (int i = 0; i < 6; i++) builder.append(CODE_ALPHABET.charAt(random.nextInt(CODE_ALPHABET.length())));
             code = builder.toString();
         } while (rooms.containsKey(code));
-        Room room = new Room(code);
+        com.battleship.shared.game.GameMode mode;
+        try {
+            mode = message.payload().has("mode") ? com.battleship.shared.game.GameMode.valueOf(message.payload().get("mode").getAsString())
+                    : com.battleship.shared.game.GameMode.CLASSIC;
+        } catch (RuntimeException invalid) { error(player, message, "INVALID_MODE", "Choose Classic or Fleet designer."); return; }
+        Room room = new Room(code, mode);
         room.players.put(player.clientId(), new RoomPlayer(player.clientId(), player.playerName(), false));
         rooms.put(code, room);
         memberships.put(player.clientId(), code);
@@ -231,7 +236,7 @@ public final class RoomManager implements AutoCloseable {
         room.rematchRequests.clear();
         room.rematchDeclined = false;
         // A fresh match also discards the old deadline, shot history and winner.
-        room.match = new MatchService(room.snapshot().players());
+        room.match = new MatchService(room.snapshot().players(), room.mode);
         room.historyId = null;
         room.historyFinished = false;
         room.accountIds = Map.of();

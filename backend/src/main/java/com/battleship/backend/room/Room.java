@@ -12,6 +12,7 @@ import java.util.Set;
 
 final class Room {
     final String code;
+    final com.battleship.shared.game.GameMode mode;
     final Map<String, RoomPlayer> players = new LinkedHashMap<>();
     RoomPhase phase = RoomPhase.WAITING;
     MatchService match;
@@ -22,9 +23,10 @@ final class Room {
     final Set<String> rematchRequests = new HashSet<>();
     boolean rematchDeclined;
 
-    Room(String code) { this.code = code; }
+    Room(String code) { this(code, com.battleship.shared.game.GameMode.CLASSIC); }
+    Room(String code, com.battleship.shared.game.GameMode mode) { this.code = code; this.mode = mode; }
 
-    RoomSnapshot snapshot() { return new RoomSnapshot(code, players.values().stream().toList(), phase); }
+    RoomSnapshot snapshot() { return new RoomSnapshot(code, players.values().stream().toList(), phase, mode); }
 
     RematchState rematchState() {
         return new RematchState(code, rematchRequests.stream().toList(), rematchDeclined,
