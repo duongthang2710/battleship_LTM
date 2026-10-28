@@ -1,6 +1,7 @@
 package com.battleship.frontend.game;
 
 import com.battleship.frontend.graphics.Materials;
+import com.battleship.frontend.ui.UiTypography;
 import com.jme3.asset.AssetManager;
 import com.jme3.font.BitmapFont;
 import com.jme3.font.BitmapText;
@@ -49,15 +50,15 @@ public final class BattleHud {
     public BattleHud(AssetManager assets, String playerName) {
         this.playerName = playerName;
         materials = new Materials(assets);
-        display = assets.loadFont("fonts/CormorantGaramond.fnt");
-        body = assets.loadFont("fonts/Manrope.fnt");
+        display = UiTypography.display(assets);
+        body = UiTypography.body(assets);
         root.attachChild(layout);
     }
 
     public Node root() { return root; }
 
     public void resize(int width, int height) {
-        float scale = Math.min(width / 1440f, height / 900f);
+        float scale = UiTypography.scale(width, height);
         float w = width / scale, h = height / scale;
         uiScale = scale;
         logicalWidth = w;
@@ -79,9 +80,11 @@ public final class BattleHud {
         text(body, "TURN STATUS", 10, 55, 109, GOLD);
         statusTitleText = text(display, statusTitle, 26, 54, 91, IVORY);
         statusDetailText = text(body, statusDetail, 10, 56, 62, 0xB6BDCF);
-        ornatePanel(w - 374, 43, 338, 69);
-        controlsText = text(body, controlHints, 10, w - 355, 92, IVORY);
+        ornatePanel(w - 374, 43, 338, 85);
+        controlsText = text(body, controlHints, 10, w - 355, 116, IVORY);
         connectionText = text(body, connectionStatus, 11, w - 355, 65, GOLD);
+        UiTypography.fit(playerText, 155); UiTypography.fit(opponentText, 165);
+        UiTypography.fit(statusDetailText, 254);
         buildClock(w, h);
     }
 
@@ -93,7 +96,7 @@ public final class BattleHud {
                 || inside(x, y, 36, 43, 294, 85)
                 || (turnClock.getCullHint() != com.jme3.scene.Spatial.CullHint.Always
                     && inside(x, y, logicalWidth / 2 - 132, logicalHeight - 116, 264, 80))
-                || inside(x, y, logicalWidth - 374, 43, 338, 69);
+                || inside(x, y, logicalWidth - 374, 43, 338, 85);
     }
 
     private void buildClock(float width, float height) {
@@ -113,11 +116,11 @@ public final class BattleHud {
             turnClock.attachChild(quad);
         }
         clockPlayer = new BitmapText(body);
-        clockPlayer.setSize(11);
+        clockPlayer.setSize(UiTypography.bodySize(11));
         clockPlayer.setColor(Materials.rgb(GOLD));
         turnClock.attachChild(clockPlayer);
-        clockTime = new BitmapText(display);
-        clockTime.setSize(39);
+        clockTime = new BitmapText(body);
+        clockTime.setSize(36);
         turnClock.attachChild(clockTime);
         clockSeconds = -1;
         hideTurnClock();
@@ -134,6 +137,7 @@ public final class BattleHud {
         clockSeconds = seconds;
         String name = player.length() > 24 ? player.substring(0, 23) + "." : player;
         clockPlayer.setText("TURN: " + name);
+        UiTypography.fit(clockPlayer, 244);
         clockPlayer.setLocalTranslation((264 - clockPlayer.getLineWidth()) / 2, 64, 2);
         clockTime.setText(String.format(java.util.Locale.ROOT, "%02d:%02d", seconds / 60, seconds % 60));
         clockTime.setColor(Materials.rgb(seconds <= 10 ? 0xF5A38E : IVORY));
@@ -160,19 +164,19 @@ public final class BattleHud {
 
     public void setPlayerName(String name) {
         playerName = name;
-        if (playerText != null) playerText.setText(name);
+        if (playerText != null) { playerText.setText(name); UiTypography.fit(playerText, 155); }
     }
 
     public void setOpponentName(String name) {
         opponentName = name;
-        if (opponentText != null) opponentText.setText(name);
+        if (opponentText != null) { opponentText.setText(name); UiTypography.fit(opponentText, 165); }
     }
 
     public void setGameStatus(String title, String detail) {
         statusTitle = title;
         statusDetail = detail;
         if (statusTitleText != null) statusTitleText.setText(title);
-        if (statusDetailText != null) statusDetailText.setText(detail);
+        if (statusDetailText != null) { statusDetailText.setText(detail); UiTypography.fit(statusDetailText, 254); }
     }
 
     public void setControlHints(String hints) {
@@ -216,8 +220,8 @@ public final class BattleHud {
 
     private BitmapText text(BitmapFont font, String value, float size, float x, float y, int color) {
         BitmapText text = new BitmapText(font);
-        text.setText(value);
-        text.setSize(size);
+        text.setText(UiTypography.normalize(value));
+        text.setSize(font == body ? UiTypography.bodySize(size) : size);
         text.setColor(Materials.rgb(color));
         text.setLocalTranslation(x, y, 2);
         layout.attachChild(text);

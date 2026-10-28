@@ -1,6 +1,7 @@
 package com.battleship.frontend.leaderboard;
 
 import com.battleship.frontend.graphics.Materials;
+import com.battleship.frontend.ui.UiTypography;
 import com.battleship.shared.leaderboard.*;
 import com.jme3.asset.AssetManager;
 import com.jme3.font.BitmapFont;
@@ -38,8 +39,8 @@ public final class LeaderboardPanel {
 
     public LeaderboardPanel(AssetManager assets) {
         materials = new Materials(assets);
-        display = assets.loadFont("fonts/CormorantGaramond.fnt");
-        body = assets.loadFont("fonts/Manrope.fnt");
+        display = UiTypography.display(assets);
+        body = UiTypography.body(assets);
         root.attachChild(card); resize(1440, 900); rebuild(); hide();
     }
     public Node root() { return root; }
@@ -59,7 +60,7 @@ public final class LeaderboardPanel {
     }
     public void setError(String message) { data = null; loading = false; status = message; rebuild(); }
     public void resize(int width, int height) {
-        scale = Math.min(width / 1440f, height / 900f);
+        scale = UiTypography.scale(width, height);
         left = (width - WIDTH * scale) / 2; bottom = (height - HEIGHT * scale) / 2;
         card.setLocalScale(scale); card.setLocalTranslation(left, bottom, 0);
     }
@@ -127,10 +128,10 @@ public final class LeaderboardPanel {
             Geometry crest = rect(73, y + 5, 17, 17, new ColorRGBA(.12f, .17f, .23f, 1), 92);
             crest.rotate(0, 0, FastMath.QUARTER_PI);
         }
-        BitmapText rank = text(display, Long.toString(entry.rank()), 21, 0, y + 29, accent);
+        BitmapText rank = text(body, Long.toString(entry.rank()), 17, 0, y + 29, accent);
         rank.setLocalTranslation(73 - rank.getLineWidth() / 2, y + 29, 94);
-        text(body, entry.displayName(), 13, 132, y + 31, IVORY);
-        text(body, "@" + entry.username(), 9, 132, y + 13, MUTED);
+        text(body, entry.displayName(), 13, 132, y + 34, IVORY);
+        text(body, "@" + entry.username(), 9, 132, y + 16, MUTED);
         number(entry.matches(), 526, y); number(entry.wins(), 634, y); number(entry.losses(), 738, y);
         text(body, String.format(Locale.ROOT, "%.1f%%", entry.winRate()), 14, 825, y + 25, CYAN);
         text(body, entry.currentWinStreak() == null ? "-" : Long.toString(entry.currentWinStreak()), 14, 997, y + 25, accent);
@@ -140,7 +141,7 @@ public final class LeaderboardPanel {
         Material fill = materials.flat(new ColorRGBA(.025f, .055f, .095f, 1));
         rect(x, y, width, 36, fill, 91); frame(x, y, width, 36, 0x516275);
         BitmapText label = text(body, caption, 11, 0, y + 23, IVORY);
-        label.setLocalTranslation(x + (width - label.getLineWidth()) / 2, y + 23, 94);
+        UiTypography.centerIn(label, x, y, width, 36);
         buttons.add(new Button(x, y, width, action, fill, label));
     }
     private void refreshButtons() {
@@ -163,7 +164,7 @@ public final class LeaderboardPanel {
         geometry.setMaterial(m); geometry.setLocalTranslation(x, y, z); card.attachChild(geometry); return geometry;
     }
     private BitmapText text(BitmapFont font, String value, float size, float x, float y, int color) {
-        BitmapText label = new BitmapText(font); label.setText(value); label.setSize(size); label.setColor(Materials.rgb(color));
+        BitmapText label = new BitmapText(font); label.setText(UiTypography.normalize(value)); label.setSize(font == body ? UiTypography.bodySize(size) : size); label.setColor(Materials.rgb(color));
         label.setLocalTranslation(x, y, 94); card.attachChild(label); return label;
     }
     private record Button(float x, float y, float width, Action action, Material fill, BitmapText label) {}

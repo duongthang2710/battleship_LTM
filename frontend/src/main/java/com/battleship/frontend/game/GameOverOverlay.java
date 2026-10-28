@@ -1,6 +1,8 @@
 package com.battleship.frontend.game;
 
 import com.battleship.frontend.graphics.Materials;
+import com.battleship.frontend.ui.UiTypography;
+import com.battleship.frontend.ui.UiShapes;
 import com.battleship.shared.game.GameState;
 import com.jme3.asset.AssetManager;
 import com.jme3.font.BitmapFont;
@@ -46,8 +48,8 @@ public final class GameOverOverlay {
 
     public GameOverOverlay(AssetManager assets) {
         materials = new Materials(assets);
-        display = assets.loadFont("fonts/CormorantGaramond.fnt");
-        body = assets.loadFont("fonts/Manrope.fnt");
+        display = UiTypography.display(assets);
+        body = UiTypography.body(assets);
         root.attachChild(layout);
         build();
         resize(1440, 900);
@@ -58,7 +60,7 @@ public final class GameOverOverlay {
 
     public void setNetworkMode(boolean value) {
         restartLabel.setText("PLAY AGAIN");
-        restartLabel.setLocalTranslation(BUTTON_X + (BUTTON_WIDTH - restartLabel.getLineWidth()) / 2, BUTTON_Y + 24, 42);
+        UiTypography.centerIn(restartLabel, BUTTON_X, BUTTON_Y, BUTTON_WIDTH, BUTTON_HEIGHT);
         setRematchStatus("", true, false);
         setEndReason(null);
     }
@@ -79,12 +81,12 @@ public final class GameOverOverlay {
         restartLabel.setColor(Materials.rgb(canPlay ? IVORY : 0x8793A9));
         if (rematchStatus == null) return;
         rematchStatus.setText(status.length() > 48 ? status.substring(0, 45) + "..." : status);
-        center(rematchStatus, 80);
+        center(rematchStatus, 86);
         declineLabel.setCullHint(canDecline ? CullHint.Inherit : CullHint.Always);
     }
 
     public void resize(int width, int height) {
-        scale = Math.min(width / 1440f, height / 900f);
+        scale = UiTypography.scale(width, height);
         left = (width - WIDTH * scale) / 2;
         bottom = (height - HEIGHT * scale) / 2;
         layout.setLocalScale(scale);
@@ -118,7 +120,7 @@ public final class GameOverOverlay {
     }
 
     public boolean declineAt(Vector2f screen) {
-        return visible && declineEnabled && inside(screen, BUTTON_X, 66, 66, 18);
+        return visible && declineEnabled && inside(screen, BUTTON_X, 72, 80, 22);
     }
 
     public boolean mainMenuAt(Vector2f screen) {
@@ -142,18 +144,18 @@ public final class GameOverOverlay {
         resultReason = text(body, "WINNER", 10, 131, GOLD);
         winner = text(display, "", 25, 108, IVORY);
         panel(BUTTON_X, BUTTON_Y, BUTTON_WIDTH, BUTTON_HEIGHT,
-                new ColorRGBA(0.025f, 0.055f, 0.095f, 1), 40);
+                new ColorRGBA(0.025f, 0.055f, 0.095f, 1), 40).setMesh(UiShapes.chamfered(BUTTON_WIDTH, BUTTON_HEIGHT, 10));
         frame(BUTTON_X, BUTTON_Y, BUTTON_WIDTH, BUTTON_HEIGHT);
         restartLabel = text(body, "Restart", 13, BUTTON_Y + 24, IVORY);
         setNetworkMode(false);
         panel(MENU_BUTTON_X, BUTTON_Y, BUTTON_WIDTH, BUTTON_HEIGHT,
-                new ColorRGBA(0.025f, 0.055f, 0.095f, 1), 40);
+                new ColorRGBA(0.025f, 0.055f, 0.095f, 1), 40).setMesh(UiShapes.chamfered(BUTTON_WIDTH, BUTTON_HEIGHT, 10));
         frame(MENU_BUTTON_X, BUTTON_Y, BUTTON_WIDTH, BUTTON_HEIGHT);
         BitmapText menu = text(body, "MAIN MENU", 13, BUTTON_Y + 24, IVORY);
-        menu.setLocalTranslation(MENU_BUTTON_X + (BUTTON_WIDTH - menu.getLineWidth()) / 2, BUTTON_Y + 24, 42);
-        rematchStatus = text(body, "", 10, 80, IVORY);
-        declineLabel = text(body, "DECLINE", 10, 80, GOLD);
-        declineLabel.setLocalTranslation(BUTTON_X, 80, 42);
+        UiTypography.centerIn(menu, MENU_BUTTON_X, BUTTON_Y, BUTTON_WIDTH, BUTTON_HEIGHT);
+        rematchStatus = text(body, "", 10, 86, IVORY);
+        declineLabel = text(body, "DECLINE", 10, 86, GOLD);
+        UiTypography.centerIn(declineLabel, BUTTON_X, 72, 80, 22);
         declineLabel.setCullHint(CullHint.Always);
     }
 
@@ -179,8 +181,8 @@ public final class GameOverOverlay {
 
     private BitmapText text(BitmapFont font, String value, float size, float y, int color) {
         BitmapText label = new BitmapText(font);
-        label.setText(value);
-        label.setSize(size);
+        label.setText(UiTypography.normalize(value));
+        label.setSize(font == body ? UiTypography.bodySize(size) : size);
         label.setColor(Materials.rgb(color));
         center(label, y);
         layout.attachChild(label);
@@ -188,6 +190,7 @@ public final class GameOverOverlay {
     }
 
     private void center(BitmapText label, float y) {
+        UiTypography.fit(label, WIDTH - 64);
         label.setLocalTranslation((WIDTH - label.getLineWidth()) / 2, y, 42);
     }
 

@@ -1,6 +1,7 @@
 package com.battleship.frontend.pvp;
 
 import com.battleship.frontend.graphics.Materials;
+import com.battleship.frontend.ui.UiTypography;
 import com.battleship.shared.room.*;
 import com.jme3.asset.AssetManager;
 import com.jme3.font.*;
@@ -25,7 +26,7 @@ public final class GameInvitePanel {
     private float scale = 1, left, bottom;
 
     public GameInvitePanel(AssetManager assets) {
-        materials = new Materials(assets); display = assets.loadFont("fonts/CormorantGaramond.fnt"); body = assets.loadFont("fonts/Manrope.fnt");
+        materials = new Materials(assets); display = UiTypography.display(assets); body = UiTypography.body(assets);
         root.attachChild(card); resize(1440, 900); hide();
     }
     public Node root() { return root; }
@@ -33,7 +34,7 @@ public final class GameInvitePanel {
     public long seconds() { return seconds; }
     public void hide() { visible = false; root.setCullHint(Spatial.CullHint.Always); }
     public void resize(int width, int height) {
-        scale = Math.min(width / 1440f, height / 900f);
+        scale = UiTypography.scale(width, height);
         left = width - (WIDTH + 36) * scale; bottom = height - (HEIGHT + 36) * scale;
         card.setLocalScale(scale); card.setLocalTranslation(left, bottom, 0);
     }
@@ -82,7 +83,7 @@ public final class GameInvitePanel {
     private void button(Action action, float x, String caption) {
         buttons.put(action, x); rect(x, 22, 176, 38, new ColorRGBA(.025f, .055f, .095f, 1));
         frame(x, 22, 176, 38, busy ? 0x516275 : 0xDEB663);
-        text(body, caption, 12, x + 55, 47, busy ? 0x69788D : 0xF4EAD1);
+        UiTypography.centerIn(text(body, caption, 12, x, 22, busy ? 0x69788D : 0xF4EAD1), x, 22, 176, 38);
     }
     private void frame(float x, float y, float w, float h, int color) {
         ColorRGBA c = Materials.rgb(color);
@@ -94,7 +95,7 @@ public final class GameInvitePanel {
         geometry.setLocalTranslation(x, y, 200 + card.getQuantity() * .01f); card.attachChild(geometry);
     }
     private BitmapText text(BitmapFont font, String value, float size, float x, float y, int color) {
-        BitmapText label = new BitmapText(font); label.setText(value); label.setSize(size); label.setColor(Materials.rgb(color));
+        BitmapText label = new BitmapText(font); label.setText(UiTypography.normalize(value)); label.setSize(font == body ? UiTypography.bodySize(size) : size); label.setColor(Materials.rgb(color));
         label.setLocalTranslation(x, y, 205); card.attachChild(label); return label;
     }
 }

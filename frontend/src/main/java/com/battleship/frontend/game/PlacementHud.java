@@ -1,6 +1,8 @@
 package com.battleship.frontend.game;
 
 import com.battleship.frontend.graphics.Materials;
+import com.battleship.frontend.ui.UiTypography;
+import com.battleship.frontend.ui.UiShapes;
 import com.battleship.shared.game.GamePhase;
 import com.battleship.shared.game.GameState;
 import com.battleship.shared.game.ShipOrientation;
@@ -50,8 +52,8 @@ public final class PlacementHud {
 
     public PlacementHud(AssetManager assets) {
         materials = new Materials(assets);
-        display = assets.loadFont("fonts/CormorantGaramond.fnt");
-        body = assets.loadFont("fonts/Manrope.fnt");
+        display = UiTypography.display(assets);
+        body = UiTypography.body(assets);
         root.attachChild(layout);
     }
 
@@ -71,7 +73,7 @@ public final class PlacementHud {
     }
 
     public void resize(int width, int height) {
-        scale = Math.min(width / 1440f, height / 900f);
+        scale = UiTypography.scale(width, height);
         top = height / scale - 148;
         layout.setLocalScale(scale);
         rebuild();
@@ -122,21 +124,21 @@ public final class PlacementHud {
         panel(36, top - panelHeight, 255, panelHeight,
                 new ColorRGBA(0.003f, 0.007f, 0.021f, 0.89f));
         frame(36, top - panelHeight, 255, panelHeight, GOLD);
-        text(display, placing ? "Assemble your fleet"
+        text(display, placing ? "Assemble fleet"
                 : state.phase() == GamePhase.GAME_OVER ? "Battle complete" : networkPlacement ? "PVP battle" : "Local battle", 25, 54, top - 18, IVORY);
         if (!placing) {
-            text(body, enemyView ? "ENEMY WATERS" : "YOUR FLEET", 10, 55, top - 51, GOLD);
+            text(body, enemyView ? "ENEMY WATERS" : "YOUR FLEET", 10, 55, top - 46, GOLD);
             button(54, top - 97, 219, 31, enemyView ? "Your fleet [Tab]" : "Target enemy [Tab]",
                     Action.TOGGLE_BOARD, true, false);
             text(body, state.phase() == GamePhase.GAME_OVER ? "Use Tab to inspect your fleet."
-                    : "Click a target cell to fire.", 11, 55, top - 106, CYAN);
-            if (networkPlacement) button(54, top - 151, 219, 28, "Leave Room", Action.LEAVE_ROOM, true, false);
+                    : "Click a target cell to fire.", 11, 55, top - 101, CYAN);
+            if (networkPlacement) button(54, top - 151, 219, 28, "Leave", Action.LEAVE_ROOM, true, false);
             else if (state.phase() != GamePhase.GAME_OVER)
                 text(body, "Local: fire both fleets in turn.", 10, 55, top - 137, 0xB6BDCF);
             return;
         }
         int placed = state.player().board().ships().size();
-        text(body, placed + " / 5 SHIPS PLACED", 10, 55, top - 48, GOLD);
+        text(body, placed + " / 5 SHIPS PLACED", 10, 55, top - 40, GOLD);
         ShipType[] types = ShipType.values();
         Action[] selectionActions = {Action.SELECT_CARRIER, Action.SELECT_BATTLESHIP,
                 Action.SELECT_CRUISER, Action.SELECT_SUBMARINE, Action.SELECT_DESTROYER};
@@ -145,24 +147,23 @@ public final class PlacementHud {
             float y = top - 90 - i * 33;
             button(54, y, 219, 28, "[" + (i + 1) + "] " + type.displayName(),
                     selectionActions[i], !networkLocked, type == selected);
-            text(body, state.player().board().ship(type) == null ? type.length() + " cells" : "Placed",
-                    10, 229, y + 18, state.player().board().ship(type) == null ? 0xB6BDCF : CYAN);
+            UiTypography.centerIn(text(body, state.player().board().ship(type) == null ? type.length() + " cells" : "Placed",
+                    10, 209, y, state.player().board().ship(type) == null ? 0xB6BDCF : CYAN), 209, y, 64, 28);
         }
         text(body, orientation == ShipOrientation.HORIZONTAL ? "HORIZONTAL  /  T TO ROTATE" : "VERTICAL  /  T TO ROTATE",
-                10, 55, top - 240, CYAN);
+                10, 55, top - 231, CYAN);
         button(54, top - 281, 106, 27, "Rotate [T]", Action.ROTATE, selected != null && !networkLocked, false);
-        button(167, top - 281, 106, 27, "Remove [Del]", Action.REMOVE,
+        button(167, top - 281, 106, 27, "Remove", Action.REMOVE,
                 selected != null && state.player().board().ship(selected) != null && !networkLocked, false);
         button(54, top - 313, 106, 27, "Reset [C]", Action.RESET, !networkLocked, false);
         button(167, top - 313, 106, 27, "Random [F]", Action.RANDOM, !networkLocked, false);
         if (networkPlacement) {
-            button(54, top - 350, 106, 30, "Ready [Enter]", Action.READY, state.canReady() && !networkLocked, false);
-            button(167, top - 350, 106, 30, "Leave Room", Action.LEAVE_ROOM, true, false);
+            button(54, top - 350, 106, 30, "Ready", Action.READY, state.canReady() && !networkLocked, false);
+            button(167, top - 350, 106, 30, "Leave", Action.LEAVE_ROOM, true, false);
         } else {
-            button(54, top - 350, 219, 30, "Ready [Enter]", Action.READY, state.canReady(), false);
+            button(54, top - 350, 219, 30, "Ready", Action.READY, state.canReady(), false);
         }
         String note = message.isBlank() ? "Hover to preview. Click to place." : message;
-        if (note.length() > 36) note = note.substring(0, 33) + "...";
         text(body, note, 10, 55, top - 369, 0xB6BDCF);
     }
 
@@ -170,9 +171,11 @@ public final class PlacementHud {
                         Action action, boolean enabled, boolean selected) {
         ColorRGBA fill = selected ? new ColorRGBA(0.09f, 0.105f, 0.115f, 0.98f)
                 : new ColorRGBA(0.009f, 0.022f, 0.044f, enabled ? 0.9f : 0.55f);
-        panel(x, y, width, height, fill);
+        panel(x, y, width, height, fill).setMesh(UiShapes.chamfered(width, height, 7));
         frame(x, y, width, height, enabled ? (selected ? GOLD : 0x617D94) : 0x394659);
-        text(body, label, 12, x + 10, y + height - 7, enabled ? IVORY : 0x6E7989);
+        boolean fleetChoice = action.name().startsWith("SELECT_");
+        UiTypography.centerIn(text(body, label, 12, x, y, enabled ? IVORY : 0x6E7989),
+                x, y, fleetChoice ? width - 64 : width, height);
         buttons.add(new Button(x, y, width, height, action, enabled));
     }
 
@@ -196,13 +199,15 @@ public final class PlacementHud {
         geometry.setLocalTranslation(x, y, 11);
     }
 
-    private void text(BitmapFont font, String value, float size, float x, float y, int color) {
+    private BitmapText text(BitmapFont font, String value, float size, float x, float y, int color) {
         BitmapText label = new BitmapText(font);
-        label.setText(value);
-        label.setSize(size);
+        label.setText(UiTypography.normalize(value));
+        label.setSize(font == body ? UiTypography.bodySize(size) : size);
         label.setColor(Materials.rgb(color));
         label.setLocalTranslation(x, y, 12);
+        if (size <= 11) UiTypography.fit(label, 219);
         layout.attachChild(label);
+        return label;
     }
 
     private Geometry panel(float x, float y, float width, float height, ColorRGBA color) {

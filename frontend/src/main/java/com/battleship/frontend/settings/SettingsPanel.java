@@ -1,6 +1,7 @@
 package com.battleship.frontend.settings;
 
 import com.battleship.frontend.graphics.Materials;
+import com.battleship.frontend.ui.UiTypography;
 import com.jme3.asset.AssetManager;
 import com.jme3.font.*;
 import com.jme3.material.RenderState.BlendMode;
@@ -26,7 +27,7 @@ public final class SettingsPanel {
     private float scale = 1, left, bottom;
 
     public SettingsPanel(AssetManager assets) {
-        materials = new Materials(assets); display = assets.loadFont("fonts/CormorantGaramond.fnt"); body = assets.loadFont("fonts/Manrope.fnt");
+        materials = new Materials(assets); display = UiTypography.display(assets); body = UiTypography.body(assets);
         root.attachChild(card); resize(1440, 900); rebuild(); hide();
     }
     public Node root() { return root; }
@@ -40,7 +41,7 @@ public final class SettingsPanel {
     }
     public void message(String value, boolean busy) { status = value; this.busy = busy; rebuild(); }
     public void resize(int width, int height) {
-        scale = Math.min(width / 1440f, height / 900f); left = (width - WIDTH * scale) / 2; bottom = (height - HEIGHT * scale) / 2;
+        scale = UiTypography.scale(width, height); left = (width - WIDTH * scale) / 2; bottom = (height - HEIGHT * scale) / 2;
         card.setLocalScale(scale); card.setLocalTranslation(left, bottom, 0);
     }
     public boolean enabled(Action action) {
@@ -99,8 +100,9 @@ public final class SettingsPanel {
         text(body, "No music or sound sources are present in this build.", 13, 32, 174, MUTED);
         text(body, "Volume controls are unavailable until audio is added.", 13, 32, 155, MUTED);
         text(display, "Controls", 27, 565, 535, IVORY);
-        String[] controls = {"Left drag: orbit  /  Wheel: zoom", "R: restore your default view", "", "Placement", "1-5: select ship  /  Click: place", "Drag a placed ship to move it", "T: rotate  /  Delete: remove", "C: reset  /  F: random fleet", "Enter: confirm a complete fleet", "", "Battle", "Click enemy cell: fire  /  Tab: switch board", "Both players Ready to begin", "60 seconds per turn; expiry loses the match", "", "Chat", "Enter: focus / send  /  Esc: leave input", "Wheel, PgUp/PgDn: read older messages", "+ / -: expand or collapse Battle chat"};
-        for (int i = 0; i < controls.length; i++) text(body, controls[i], 13, 567, 499 - i * 20, i == 3 || i == 10 || i == 15 ? GOLD : IVORY);
+        String[] controls = {"Left drag: orbit / Wheel: zoom", "R: restore default view", "PLACEMENT", "1-5: select / Click: place", "Drag a placed ship to move it", "T: rotate / Delete: remove", "C: reset / F: random fleet", "Enter: confirm complete fleet", "BATTLE", "Click enemy cell: fire", "Tab: switch board / 60s per turn", "CHAT", "Enter: focus / send", "Esc: leave input", "Wheel / PgUp / PgDn: history", "Click + / -: expand / collapse"};
+        for (int i = 0; i < controls.length; i++) text(body, controls[i], 13, 567, 499 - i * 22.5f,
+                controls[i].equals("PLACEMENT") || controls[i].equals("BATTLE") || controls[i].equals("CHAT") ? GOLD : IVORY);
         text(body, status.length() > 132 ? status.substring(0, 129) + "..." : status, 12, 32, 100, CYAN);
         button(Action.SAVE, 32, 28, 240, "APPLY & SAVE"); button(Action.RESET, 290, 28, 200, "RESET TO SAVED"); button(Action.BACK, 840, 28, 208, "BACK");
     }
@@ -110,7 +112,7 @@ public final class SettingsPanel {
     }
     private void button(Action action, float x, float y, float w, String value) {
         buttons.add(new Button(action, x, y, w)); rect(x, y, w, 36, new ColorRGBA(.025f, .055f, .095f, 1)); frame(x, y, w, 36, enabled(action) ? 0x516275 : 0x334050);
-        var label = text(body, value, 13, 0, y + 24, enabled(action) ? IVORY : 0x69788D); label.setLocalTranslation(x + (w - label.getLineWidth()) / 2, y + 24, 94);
+        var label = text(body, value, 13, 0, y + 24, enabled(action) ? IVORY : 0x69788D); UiTypography.centerIn(label, x, y, w, 36);
     }
     private void frame(float x, float y, float w, float h, int color) {
         ColorRGBA c = Materials.rgb(color); rect(x, y, w, .8f, c); rect(x, y + h, w, .8f, c); rect(x, y, .8f, h, c); rect(x + w, y, .8f, h, c);
@@ -120,6 +122,6 @@ public final class SettingsPanel {
         Geometry geometry = new Geometry("Settings detail", new Quad(w, h)); geometry.setMaterial(material); geometry.setLocalTranslation(x, y, 90 + card.getQuantity() * .001f); card.attachChild(geometry);
     }
     private BitmapText text(BitmapFont font, String value, float size, float x, float y, int color) {
-        var label = new BitmapText(font); label.setText(value); label.setSize(size); label.setColor(Materials.rgb(color)); label.setLocalTranslation(x, y, 94); card.attachChild(label); return label;
+        var label = new BitmapText(font); label.setText(UiTypography.normalize(value)); label.setSize(font == body ? UiTypography.bodySize(size) : size); label.setColor(Materials.rgb(color)); label.setLocalTranslation(x, y, 94); card.attachChild(label); return label;
     }
 }

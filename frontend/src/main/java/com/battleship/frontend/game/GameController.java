@@ -439,8 +439,8 @@ public final class GameController {
         controls.setNetworkLocked(placementLocked());
         controls.update(state(), message, enemyView);
         hud.setControlHints(state().phase() == GamePhase.PLACEMENT
-                ? "DRAG SHIP: MOVE / DRAG SEA: ORBIT / CLICK: PLACE / R: RESET"
-                : "LEFT DRAG: ORBIT / CLICK: FIRE / SCROLL: ZOOM / R: RESET");
+                ? "Drag ship: move / Click: place\nDrag sea: orbit / Scroll: zoom / R: reset"
+                : "Click: fire / Tab: switch board\nDrag sea: orbit / Scroll: zoom / R: reset");
         if (state().phase() == GamePhase.PLACEMENT) {
             hud.setGameStatus(submitted ? "Waiting for opponent" : "Deploy your fleet", state().player().board().ships().size()
                     + "/5 ships - " + (networkPlacement ? ownSide + " fleet" : "cyan valid / red blocked"));

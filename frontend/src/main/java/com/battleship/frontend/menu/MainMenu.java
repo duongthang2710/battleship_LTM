@@ -1,6 +1,8 @@
 package com.battleship.frontend.menu;
 
 import com.battleship.frontend.graphics.Materials;
+import com.battleship.frontend.ui.UiTypography;
+import com.battleship.frontend.ui.UiShapes;
 import com.jme3.asset.AssetManager;
 import com.jme3.font.BitmapFont;
 import com.jme3.font.BitmapText;
@@ -42,8 +44,8 @@ public final class MainMenu {
 
     public MainMenu(AssetManager assets) {
         materials = new Materials(assets);
-        display = assets.loadFont("fonts/CormorantGaramond.fnt");
-        body = assets.loadFont("fonts/Manrope.fnt");
+        display = UiTypography.display(assets);
+        body = UiTypography.body(assets);
         root.attachChild(layout);
         build();
         resize(1440, 900);
@@ -54,13 +56,12 @@ public final class MainMenu {
     public void friendsUpdated(boolean updated) {
         buttons.stream().filter(button -> button.action == Action.FRIENDS).forEach(button -> {
             button.label.setText(updated ? "FRIENDS *" : "FRIENDS");
-            button.label.setLocalTranslation(button.x + (button.width - button.label.getLineWidth()) / 2,
-                    button.label.getLocalTranslation().y, button.label.getLocalTranslation().z);
+            UiTypography.centerIn(button.label, button.x, button.y, button.width, button.height);
         });
     }
 
     public void resize(int width, int height) {
-        scale = Math.min(width / 1440f, height / 900f);
+        scale = UiTypography.scale(width, height);
         left = 56 * scale;
         bottom = (height - HEIGHT * scale) / 2;
         layout.setLocalScale(scale);
@@ -130,7 +131,7 @@ public final class MainMenu {
         centered(body, "FANTASY NAVAL STRATEGY", 10, WIDTH / 2, 492, GOLD);
         divider(469);
         button(28, 380, 344, 66, "PVP", Action.PVP, true);
-        centered(body, "ONLINE MATCH", 10, WIDTH / 2, 398, CYAN);
+        UiTypography.centerIn(centered(body, "ONLINE MATCH", 10, WIDTH / 2, 398, CYAN), 28, 382, 344, 25);
         button(28, 311, 344, 52, "LEADERBOARD", Action.LEADERBOARD, false);
         button(28, 247, 165, 52, "CREATE ROOM", Action.CREATE_ROOM, false);
         button(207, 247, 165, 52, "JOIN ROOM", Action.JOIN_ROOM, false);
@@ -146,11 +147,12 @@ public final class MainMenu {
                         Action action, boolean primary) {
         Material fill = materials.flat(primary ? new ColorRGBA(0.029f, 0.068f, 0.109f, 0.97f)
                 : new ColorRGBA(0.009f, 0.022f, 0.044f, 0.9f));
-        panel(x, y, width, height, fill, 62);
+        panel(x, y, width, height, fill, 62).setMesh(UiShapes.chamfered(width, height, 10));
         Material border = materials.flat(Materials.rgb(primary ? GOLD : 0x516275));
         frame(x, y, width, height, border, 63);
         BitmapText label = centered(primary ? display : body, caption, primary ? 28 : 12,
                 x + width / 2, y + (primary ? 55 : 32), primary ? IVORY : 0xCFD5E1);
+        UiTypography.centerIn(label, x, y + (primary ? 22 : 0), width, height - (primary ? 22 : 0));
         buttons.add(new Button(x, y, width, height, action, fill, border, label));
     }
 
@@ -211,8 +213,8 @@ public final class MainMenu {
 
     private BitmapText centered(BitmapFont font, String value, float size, float x, float y, int color) {
         BitmapText label = new BitmapText(font);
-        label.setText(value);
-        label.setSize(size);
+        label.setText(UiTypography.normalize(value));
+        label.setSize(font == body ? UiTypography.bodySize(size) : size);
         label.setColor(Materials.rgb(color));
         label.setLocalTranslation(x - label.getLineWidth() / 2, y, 65);
         layout.attachChild(label);
