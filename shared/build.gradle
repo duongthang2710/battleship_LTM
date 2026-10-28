@@ -7,3 +7,11 @@ tasks.register('gameChecks', JavaExec) {
 }
 tasks.named('check') { dependsOn tasks.named('gameChecks') }
 tasks.named('test') { failOnNoDiscoveredTests = false } // Game rules checks run through JavaExec.
+
+
+tasks.register('designerChecks', JavaExec) {
+    dependsOn testClasses
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'com.battleship.shared.game.DesignerChecks'
+}
+tasks.named('check') { dependsOn 'designerChecks' }

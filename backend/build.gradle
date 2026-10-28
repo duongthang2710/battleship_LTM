@@ -63,3 +63,21 @@ tasks.register('checkChat', JavaExec) {
     onlyIf { providers.gradleProperty('chatDatabase').isPresent() }
     environment 'DB_NAME', providers.gradleProperty('chatDatabase').getOrElse('')
 }
+
+
+tasks.register('checkDesigner', JavaExec) {
+    dependsOn testClasses
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'com.battleship.backend.match.DesignerMatchChecks'
+}
+tasks.named('check') { dependsOn 'checkDesigner' }
+
+
+tasks.register('checkDesignerTcp', JavaExec) {
+    group = 'verification'
+    dependsOn testClasses
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'com.battleship.backend.match.DesignerTcpChecks'
+    workingDir rootProject.projectDir
+    onlyIf { providers.gradleProperty('databaseChecks').isPresent() }
+}

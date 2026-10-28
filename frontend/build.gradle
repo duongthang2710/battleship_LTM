@@ -235,3 +235,14 @@ tasks.register('checkUiFeedback', JavaExec) {
     mainClass = 'com.battleship.frontend.ui.UiFeedbackChecks'
 }
 tasks.named('check') { dependsOn 'checkUiFeedback' }
+
+
+tasks.register('checkDesignerRendering', JavaExec) {
+    group = 'verification'
+    dependsOn testClasses
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'com.battleship.frontend.game.DesignerRenderChecks'
+    workingDir rootProject.projectDir
+    jvmArgs '--enable-native-access=ALL-UNNAMED'
+    if (hostOs.contains('mac')) jvmArgs '-XstartOnFirstThread'
+}

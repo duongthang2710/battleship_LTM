@@ -67,7 +67,11 @@ public final class UiFeedbackChecks {
             keys.onKeyEvent(new KeyInputEvent(KeyInput.KEY_BACK, '\0', false, true));
             require(chat.draft().equals("Hel"), "Chat supports held Backspace");
         }
-        var room = new PvpRoomPanel(assets); room.setConnection(true, false); room.showJoin();
+        var room = new PvpRoomPanel(assets); room.setConnection(true, false); room.showChoice();
+        require(room.selectedMode() == com.battleship.shared.game.GameMode.CLASSIC, "Classic remains the default");
+        require(room.actionAt(room.buttonCenter(PvpRoomPanel.Action.TOGGLE_MODE)).orElseThrow() == PvpRoomPanel.Action.TOGGLE_MODE, "Mode selection hit target");
+        room.toggleMode(); require(room.selectedMode() == com.battleship.shared.game.GameMode.DESIGNER, "Room creator can choose designer");
+        room.showJoin();
         for (char c : "ABC234".toCharArray()) room.inputCharacter(c);
         room.updateCaret(.6f); require(!room.caretVisible(), "Join caret blinks off");
         room.updateCaret(.5f); require(room.caretVisible(), "Join caret blinks on");
