@@ -67,7 +67,12 @@ public final class Board {
     public PlacementResult validatePlacement(ShipType type, Coordinate position, ShipOrientation orientation) {
         if (type == null || position == null || orientation == null)
             return PlacementResult.rejected(Failure.INVALID_ARGUMENT, List.of());
-        List<Coordinate> cells = new Ship(type, position, orientation).occupiedCells();
+        return validatePlacement(type, new Ship(type, position, orientation).occupiedCells());
+    }
+
+    public PlacementResult validatePlacement(ShipType type, List<Coordinate> cells) {
+        var shape = ShipShapes.validate(type, cells);
+        if (shape != PlacementResult.Failure.NONE) return PlacementResult.rejected(shape, cells == null || cells.stream().anyMatch(Objects::isNull) ? List.of() : cells);
         if (!attacks.isEmpty()) return PlacementResult.rejected(Failure.PHASE_CLOSED, cells);
         if (!cells.stream().allMatch(Board::inBounds)) return PlacementResult.rejected(Failure.OUT_OF_BOUNDS, cells);
         if (cells.stream().anyMatch(cell -> ships().stream()
@@ -83,6 +88,11 @@ public final class Board {
     public Board withPlacement(ShipType type, Coordinate position, ShipOrientation orientation) {
         if (!canPlace(type, position, orientation)) throw new IllegalArgumentException("Invalid ship placement");
         return new Board(fleet.withShip(new Ship(type, position, orientation)), attacks);
+    }
+
+    public Board withShip(Ship ship) {
+        if (!validatePlacement(ship.type(), ship.occupiedCells()).success()) throw new IllegalArgumentException("Invalid ship placement");
+        return new Board(fleet.withShip(ship), attacks);
     }
 
     public Board withoutShip(ShipType type) {

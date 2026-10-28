@@ -11,6 +11,13 @@ public final class GameEngine {
     private static final int MAX_PLACEMENT_ATTEMPTS = 10_000;
     private final Random random;
     private GameState state;
+    private GameMode mode = GameMode.CLASSIC;
+    public GameMode mode() { return mode; }
+    public void setMode(GameMode mode) {
+        if (state.phase() != GamePhase.PLACEMENT || !state.player().board().ships().isEmpty() || !state.enemy().board().ships().isEmpty())
+            throw new IllegalStateException("Choose mode before placing ships");
+        this.mode = Objects.requireNonNull(mode);
+    }
 
     public GameEngine(String playerName) { this(playerName, new Random()); }
 
@@ -43,13 +50,15 @@ public final class GameEngine {
         for (Ship ship : ships) {
             if (ship == null) throw new IllegalArgumentException("Missing ship data.");
             if (board.ship(ship.type()) != null) throw new IllegalArgumentException("Each ship type must appear once.");
-            PlacementResult validation = board.validatePlacement(ship.type(), ship.position(), ship.orientation());
+            if (mode == GameMode.CLASSIC && ship.custom()) throw new IllegalArgumentException("Custom ships require Fleet designer mode.");
+            if (mode == GameMode.DESIGNER) ship = new Ship(ship.type(), ship.occupiedCells());
+            PlacementResult validation = board.validatePlacement(ship.type(), ship.occupiedCells());
             if (!validation.success()) throw new IllegalArgumentException(switch (validation.reason()) {
                 case OUT_OF_BOUNDS -> ship.type().displayName() + " is outside the board.";
                 case OVERLAP -> ship.type().displayName() + " overlaps another ship.";
                 default -> "Invalid ship data.";
             });
-            board = board.withPlacement(ship.type(), ship.position(), ship.orientation());
+            board = board.withShip(ship);
         }
         if (!board.fleet().isComplete()) throw new IllegalArgumentException("Fleet is incomplete");
         Player player = first ? state.player().withBoard(board) : state.player();
@@ -75,6 +84,17 @@ public final class GameEngine {
         return result;
     }
 
+    public PlacementResult validateDesignedShip(ShipType type, List<Coordinate> cells) {
+        if (state.phase() != GamePhase.PLACEMENT) return closed();
+        if (mode != GameMode.DESIGNER) return PlacementResult.rejected(Failure.MODE_MISMATCH, List.of());
+        return state.player().board().validatePlacement(type, cells);
+    }
+    public PlacementResult placeDesignedShip(ShipType type, List<Coordinate> cells) {
+        PlacementResult result = validateDesignedShip(type, cells);
+        if (result.success()) updatePlacement(state.player().board().withShip(new Ship(type, cells)));
+        return result;
+    }
+
     public PlacementResult removeShip(ShipType type) {
         if (state.phase() != GamePhase.PLACEMENT) return closed();
         if (type == null) return PlacementResult.rejected(Failure.INVALID_ARGUMENT, List.of());
@@ -88,8 +108,9 @@ public final class GameEngine {
         if (state.phase() != GamePhase.PLACEMENT) return closed();
         if (type == null) return PlacementResult.rejected(Failure.INVALID_ARGUMENT, List.of());
         Ship ship = state.player().board().ship(type);
-        return ship == null ? PlacementResult.rejected(Failure.SHIP_NOT_FOUND, List.of())
-                : placeShip(type, ship.position(), ship.orientation().rotate());
+        if (ship == null) return PlacementResult.rejected(Failure.SHIP_NOT_FOUND, List.of());
+        if (!ship.custom()) return placeShip(type, ship.position(), ship.orientation().rotate());
+        return placeDesignedShip(type, ship.rotated().occupiedCells());
     }
 
     public PlacementResult resetFleet() {
@@ -136,7 +157,9 @@ public final class GameEngine {
         if (hover == null) return PlacementResult.rejected(Failure.INVALID_ARGUMENT, List.of());
         PlacementState placement = state.placement();
         Coordinate anchor = hover.offset(-placement.grabOffset().row(), -placement.grabOffset().column());
-        return state.player().board().validatePlacement(placement.selectedType(), anchor, placement.orientation());
+        Ship selected = state.player().board().ship(placement.selectedType());
+        return selected != null && selected.custom() ? state.player().board().validatePlacement(selected.type(), selected.translatedTo(anchor).occupiedCells())
+                : state.player().board().validatePlacement(placement.selectedType(), anchor, placement.orientation());
     }
 
     public PlacementResult clickPlacement(Coordinate coordinate) {
@@ -153,7 +176,9 @@ public final class GameEngine {
         }
         boolean existed = board.ship(placement.selectedType()) != null;
         Coordinate anchor = coordinate.offset(-placement.grabOffset().row(), -placement.grabOffset().column());
-        PlacementResult result = placeShip(placement.selectedType(), anchor, placement.orientation());
+        Ship selected = board.ship(placement.selectedType());
+        PlacementResult result = selected != null && selected.custom() ? placeDesignedShip(selected.type(), selected.translatedTo(anchor).occupiedCells())
+                : placeShip(placement.selectedType(), anchor, placement.orientation());
         if (result.success()) {
             updateSelection(new PlacementState(placement.selectedType(), placement.orientation(), false, new Coordinate(0, 0)));
             if (!existed) {
@@ -169,6 +194,11 @@ public final class GameEngine {
         if (state.phase() != GamePhase.PLACEMENT) return closed();
         PlacementState placement = state.placement();
         Ship placed = state.player().board().ship(placement.selectedType());
+        if (placed != null && placed.custom()) {
+            PlacementResult result = rotateShip(placed.type());
+            selectShip(placed.type());
+            return result;
+        }
         if (placed != null && !placement.moving()) {
             PlacementResult result = rotateShip(placed.type());
             updateSelection(new PlacementState(placed.type(), placed.orientation().rotate(), !result.success(), new Coordinate(0, 0)));
@@ -268,6 +298,20 @@ public final class GameEngine {
     }
 
     private Board randomFleet() {
+        if (mode == GameMode.DESIGNER) {
+            Board designed = new Board();
+            for (ShipType type : ShipType.values()) {
+                boolean placed = false;
+                var catalog = ShipShapes.all(type.length());
+                for (int attempt = 0; attempt < MAX_PLACEMENT_ATTEMPTS && !placed; attempt++) {
+                    int row = random.nextInt(Board.SIZE), column = random.nextInt(Board.SIZE);
+                    var cells = catalog.get(random.nextInt(catalog.size())).stream().map(c -> c.offset(row, column)).toList();
+                    if (designed.validatePlacement(type, cells).success()) { designed = designed.withShip(new Ship(type, cells)); placed = true; }
+                }
+                if (!placed) throw new IllegalStateException("Could not generate designed fleet");
+            }
+            return designed;
+        }
         Board board = placeRandom(new Board(), 0, new int[] {0});
         if (board == null) throw new IllegalStateException("Could not generate a valid fleet");
         return board;
