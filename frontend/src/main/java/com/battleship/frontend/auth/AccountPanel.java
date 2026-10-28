@@ -1,10 +1,13 @@
 package com.battleship.frontend.auth;
 
 import com.battleship.frontend.graphics.Materials;
+import com.battleship.frontend.ui.UiTypography;
 import com.battleship.shared.auth.AccountProfile;
 import com.jme3.asset.AssetManager;
 import com.jme3.font.BitmapFont;
 import com.jme3.font.BitmapText;
+import com.jme3.font.Rectangle;
+import com.jme3.font.LineWrapMode;
 import com.jme3.material.Material;
 import com.jme3.material.RenderState.BlendMode;
 import com.jme3.math.ColorRGBA;
@@ -34,6 +37,8 @@ public final class AccountPanel {
     private boolean editingServer;
     private final BitmapText[] fields = new BitmapText[3];
     private BitmapText statusLabel;
+    private Geometry caret;
+    private float blinkTime;
     private boolean register, visible, busy, connected;
     private AccountProfile account;
     private String status = "";
@@ -42,8 +47,8 @@ public final class AccountPanel {
 
     public AccountPanel(AssetManager assets) {
         materials = new Materials(assets);
-        display = assets.loadFont("fonts/CormorantGaramond.fnt");
-        body = assets.loadFont("fonts/Manrope.fnt");
+        display = UiTypography.display(assets);
+        body = UiTypography.body(assets);
         root.attachChild(card);
         resize(1440, 900);
         rebuild();
@@ -67,7 +72,7 @@ public final class AccountPanel {
     public String username() { return values[0]; }
     public String password() { return values[1]; }
     public String confirmation() { return values[2]; }
-    public void show() { focused = 0; visible = true; root.setCullHint(CullHint.Never); rebuild(); }
+    public void show() { blinkTime = 0; focused = 0; visible = true; root.setCullHint(CullHint.Never); rebuild(); }
     public void hide() { visible = false; root.setCullHint(CullHint.Always); clearSecrets(); }
     public void switchMode() { register = !register; focused = 0; clearSecrets(); rebuild(); }
     public void clearSecrets() { values[1] = values[2] = ""; refreshFields(); }
@@ -84,7 +89,7 @@ public final class AccountPanel {
         }
     }
     public void resize(int width, int height) {
-        scale = Math.min(width / 1440f, height / 900f);
+        scale = UiTypography.scale(width, height);
         left = 56 * scale;
         bottom = (height - 620 * scale) / 2;
         card.setLocalScale(scale);
@@ -96,7 +101,7 @@ public final class AccountPanel {
             case EXIT -> !busy && account == null;
             case SWITCH -> !busy && account == null && !editingServer;
             case SERVER -> !busy && account == null;
-            case CONNECT -> !busy && account == null && (editingServer || !connected);
+            case CONNECT -> !busy && account == null && editingServer;
             case LOGOUT -> !busy && account != null && connected;
             case SUBMIT -> !editingServer && !busy && connected && account == null && !values[0].isBlank()
                     && !values[1].isEmpty() && (!register || !values[2].isEmpty());
@@ -105,11 +110,11 @@ public final class AccountPanel {
     public Optional<Action> click(Vector2f cursor) {
         if (!visible) return Optional.empty();
         float x = (cursor.x - left) / scale, y = (cursor.y - bottom) / scale;
-        if (!editingServer && account == null && enabled(Action.SERVER) && x >= 30 && x <= 410 && y >= 480 && y <= 508)
+        if (!editingServer && account == null && enabled(Action.SERVER) && x >= 274 && x <= 410 && y >= 566 && y <= 592)
             return Optional.of(Action.SERVER);
         if (account == null && !busy && x >= 30 && x <= 410) {
             for (int i = 0; i < (!editingServer && register ? 3 : 2); i++) if (y >= fieldY(i) && y <= fieldY(i) + 48) {
-                focused = i; refreshFields(); return Optional.empty();
+                focused = i; blinkTime = 0; refreshFields(); return Optional.empty();
             }
         }
         for (Button button : buttons) if (enabled(button.action()) && x >= 30 && x <= 410
@@ -117,15 +122,15 @@ public final class AccountPanel {
         return Optional.empty();
     }
     public Vector2f buttonCenter(Action action) {
-        if (action == Action.SERVER && !editingServer) return new Vector2f(left + 220 * scale, bottom + 494 * scale);
+        if (action == Action.SERVER && !editingServer) return new Vector2f(left + 342 * scale, bottom + 579 * scale);
         Button button = buttons.stream().filter(b -> b.action() == action).findFirst().orElseThrow();
         return new Vector2f(left + 220 * scale, bottom + (button.y() + 21) * scale);
     }
-    public void nextField() { if (!busy) { focused = (focused + 1) % (!editingServer && register ? 3 : 2); refreshFields(); } }
+    public void nextField() { if (!busy) { blinkTime = 0; focused = (focused + 1) % (!editingServer && register ? 3 : 2); refreshFields(); } }
     public void backspace() {
         String[] input = editingServer ? serverValues : values;
         if (!busy && !input[focused].isEmpty()) {
-            input[focused] = input[focused].substring(0, input[focused].length() - 1); rebuild();
+            input[focused] = input[focused].substring(0, input[focused].offsetByCodePoints(input[focused].length(), -1)); blinkTime = 0; rebuild();
         }
     }
     public void inputCharacter(char value) {
@@ -135,7 +140,7 @@ public final class AccountPanel {
             if (serverValues[focused].length() >= limit || value > 127 || Character.isWhitespace(value)) return;
             if (focused == 1 && (value < '0' || value > '9')) return;
             serverValues[focused] += value;
-            rebuild();
+            blinkTime = 0; rebuild();
             return;
         }
         int limit = focused == 0 ? 24 : 128;
@@ -143,17 +148,32 @@ public final class AccountPanel {
         if (focused == 0 && !(value >= 'a' && value <= 'z' || value >= 'A' && value <= 'Z'
                 || value >= '0' && value <= '9' || value == '_')) return;
         values[focused] += value;
-        rebuild();
+        blinkTime = 0; rebuild();
     }
     private float fieldY(int i) { return 408 - i * 84; }
+    public void update(float delta) {
+        if (!visible || account != null || caret == null) return;
+        blinkTime = (blinkTime + Math.max(0, delta)) % 1f;
+        caret.setCullHint(!busy && blinkTime < .5f ? CullHint.Never : CullHint.Always);
+    }
+    public boolean caretVisible() { return caret != null && caret.getLocalCullHint() != CullHint.Always; }
+    public Vector2f fieldCenter(int index) { return new Vector2f(left + 220 * scale, bottom + (fieldY(index) + 24) * scale); }
     private void refreshFields() {
         for (int i = 0; i < 3; i++) if (fields[i] != null) {
             String value = editingServer ? (i < 2 ? serverValues[i] : "")
-                    : i == 0 ? values[i] : "*".repeat(Math.min(28, values[i].length()));
-            if (editingServer && value.length() > 30) value = value.substring(value.length() - 30);
-            fields[i].setText(value.isEmpty() ? (i == focused ? "|" : "") : value);
-            fields[i].setColor(Materials.rgb(i == focused ? CYAN : IVORY));
+                    : i == 0 ? values[i] : "*".repeat(values[i].length());
+            BitmapText label = fields[i];
+            label.setVerticalAlignment(BitmapFont.VAlign.Top); label.setBox(null); label.setText(value);
+            while (!value.isEmpty() && label.getLineWidth() > 334) {
+                value = value.substring(value.offsetByCodePoints(0, 1)); label.setText(value);
+            }
+            float textWidth = label.getLineWidth();
+            label.setBox(new Rectangle(0, 0, 352, 48)); label.setLineWrapMode(LineWrapMode.Clip);
+            label.setVerticalAlignment(BitmapFont.VAlign.Center); label.setLocalTranslation(44, fieldY(i) + 48, 84);
+            label.setColor(Materials.rgb(i == focused ? CYAN : IVORY));
+            if (i == focused && caret != null) caret.setLocalTranslation(46 + textWidth, fieldY(i) + 14, 85);
         }
+        update(0);
     }
     private void rebuild() {
         card.detachAllChildren(); buttons.clear(); java.util.Arrays.fill(fields, null);
@@ -162,22 +182,22 @@ public final class AccountPanel {
         outline(8, 8, 424, 604, 0x655638);
         text(display, "BATTLESHIP", 20, 30, 582, GOLD);
         text(display, account != null ? "YOUR ACCOUNT" : editingServer ? "SERVER CONNECTION" : register ? "CREATE ACCOUNT" : "SIGN IN", 36, 30, 540, IVORY);
-        String endpoint = appliedServer[0] + ":" + appliedServer[1];
-        text(body, account == null && !editingServer ? "SERVER: " + (endpoint.length() > 30 ? endpoint.substring(0, 27) + "..." : endpoint) + " / CHANGE"
-                : "ADMIRAL'S REGISTRY", 10, 32, 501, CYAN);
+        text(body, account == null && !editingServer ? "Command your fleet. Rule the ocean." : "ADMIRAL'S REGISTRY", 10, 32, 501, CYAN);
+        caret = null;
         if (account == null) {
             String[] captions = editingServer ? new String[] {"SERVER IP / HOSTNAME", "TCP PORT"} : new String[] {"USERNAME", "PASSWORD", "CONFIRM PASSWORD"};
             for (int i = 0; i < (!editingServer && register ? 3 : 2); i++) {
                 float y = fieldY(i);
-                text(body, captions[i], 10, 32, y + 65, GOLD);
+                text(body, captions[i], 10, 32, y + 78, GOLD);
                 rect(30, y, 380, 48, new ColorRGBA(.015f, .038f, .07f, 1), 81);
                 outline(30, y, 380, 48, 0x516275);
                 fields[i] = text(body, "", 16, 44, y + 31, IVORY);
             }
             text(body, editingServer ? "Tab to move / Enter to connect" : register ? "12-128 characters / Tab to move" : "Tab to move / Enter to sign in", 10, 32,
-                    !editingServer && register ? 220 : 290, 0xAFBBD0);
-            button(166, editingServer || !connected ? "CONNECT TO SERVER" : register ? "REGISTER" : "SIGN IN",
-                    editingServer || !connected ? Action.CONNECT : Action.SUBMIT);
+                    !editingServer && register ? 234 : 290, 0xAFBBD0);
+            caret = rect(44, fieldY(focused) + 14, 1.3f, 20, Materials.rgb(CYAN), 85);
+            button(166, editingServer ? "CONNECT TO SERVER" : register ? "REGISTER" : "SIGN IN",
+                    editingServer ? Action.CONNECT : Action.SUBMIT);
             button(112, editingServer ? "BACK" : register ? "ALREADY REGISTERED? SIGN IN" : "CREATE AN ACCOUNT",
                     editingServer ? Action.SERVER : Action.SWITCH);
         } else {
@@ -186,7 +206,11 @@ public final class AccountPanel {
             text(body, "Signed in. Your PvP results are saved.", 12, 32, 332, IVORY);
             button(166, "SIGN OUT", Action.LOGOUT);
         }
-        statusLabel = text(body, wrap(status), 11, 32, 89, CYAN);
+        statusLabel = text(body, wrap(status), 11, 32, 108, CYAN);
+        if (account == null && !editingServer) {
+            BitmapText serverLink = text(body, "CONNECTION", 10, 274, 566, 0xAFBBD0);
+            UiTypography.centerIn(serverLink, 274, 566, 136, 26);
+        }
         button(22, account == null ? "EXIT" : "MAIN MENU", account == null ? Action.EXIT : Action.BACK);
         refreshFields();
     }
@@ -201,7 +225,7 @@ public final class AccountPanel {
         rect(30, y, 380, 42, new ColorRGBA(.02f, .05f, .085f, 1), 81);
         outline(30, y, 380, 42, enabled ? GOLD : 0x334050);
         BitmapText label = text(body, caption, 11, 0, y + 26, enabled ? IVORY : 0x69788D);
-        label.setLocalTranslation((440 - label.getLineWidth()) / 2, y + 26, 84);
+        UiTypography.centerIn(label, 30, y, 380, 42);
         buttons.add(new Button(y, action));
     }
     private void outline(float x, float y, float w, float h, int color) {
@@ -209,15 +233,15 @@ public final class AccountPanel {
         rect(x, y, w, .8f, c, 82); rect(x, y + h, w, .8f, c, 82);
         rect(x, y, .8f, h, c, 82); rect(x + w, y, .8f, h, c, 82);
     }
-    private void rect(float x, float y, float w, float h, ColorRGBA color, float z) {
+    private Geometry rect(float x, float y, float w, float h, ColorRGBA color, float z) {
         Geometry geometry = new Geometry("Account panel detail", new Quad(w, h));
         Material material = materials.flat(color);
         material.getAdditionalRenderState().setBlendMode(BlendMode.Alpha);
-        geometry.setMaterial(material); geometry.setLocalTranslation(x, y, z); card.attachChild(geometry);
+        geometry.setMaterial(material); geometry.setLocalTranslation(x, y, z); card.attachChild(geometry); return geometry;
     }
     private BitmapText text(BitmapFont font, String value, float size, float x, float y, int color) {
         BitmapText label = new BitmapText(font);
-        label.setText(value); label.setSize(size); label.setColor(Materials.rgb(color));
+        label.setText(UiTypography.normalize(value)); label.setSize(font == body ? UiTypography.bodySize(size) : size); label.setColor(Materials.rgb(color));
         label.setLocalTranslation(x, y, 84); card.attachChild(label); return label;
     }
     private record Button(float y, Action action) {}

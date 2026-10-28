@@ -15,7 +15,7 @@ public final class FriendsInput extends RawInputListenerAdapter implements AutoC
         this.input = input; this.panel = panel; this.action = action; input.addRawInputListener(this);
     }
     @Override public void onKeyEvent(KeyInputEvent event) {
-        if (!panel.visible() || !event.isPressed()) return;
+        if (!panel.visible() || (!event.isPressed() && !event.isRepeating())) return;
         if (event.getKeyCode() == KeyInput.KEY_ESCAPE && !event.isRepeating()) {
             action.accept(new FriendsPanel.Command(panel.confirming() ? FriendsPanel.Action.CANCEL_REMOVE : FriendsPanel.Action.BACK, null));
             event.setConsumed(); return;

@@ -183,6 +183,10 @@ public final class ScreenController implements AutoCloseable {
         gameInvites.update();
         chat.update();
         accountPanel.sync(pvp.account(), pvp.status(), pvp.pending(), pvp.connected());
+        accountPanel.update(delta);
+        friendsPanel.updateCaret(delta);
+        roomPanel.updateCaret(delta);
+        chatPanel.updateCaret(delta);
         if (pvp.account() == null) {
             pendingAction = null;
             menuRequested = roomRequested = false;

@@ -19,7 +19,7 @@ public final class RoomCodeInput extends RawInputListenerAdapter implements Auto
     }
 
     @Override public void onKeyEvent(KeyInputEvent event) {
-        if (!panel.acceptsRoomCode() || !event.isPressed()) return;
+        if (!panel.acceptsRoomCode() || (!event.isPressed() && !event.isRepeating())) return;
         if (event.getKeyCode() == KeyInput.KEY_BACK) {
             panel.backspace();
         } else if (event.getKeyCode() == KeyInput.KEY_RETURN || event.getKeyCode() == KeyInput.KEY_NUMPADENTER) {

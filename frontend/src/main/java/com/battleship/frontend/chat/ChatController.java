@@ -21,8 +21,6 @@ public final class ChatController {
     public void handle(ChatPanel.Action action) {
         switch (action) {
             case TOGGLE -> panel.toggle();
-            case UP -> panel.scroll(-5);
-            case DOWN -> panel.scroll(5);
             case LATEST -> panel.latest();
             case SEND -> send();
         }

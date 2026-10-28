@@ -1,6 +1,8 @@
 package com.battleship.frontend.friends;
 
 import com.battleship.frontend.graphics.Materials;
+import com.battleship.frontend.ui.UiTypography;
+import com.battleship.frontend.ui.UiTextField;
 import com.battleship.shared.friends.*;
 import com.jme3.asset.AssetManager;
 import com.jme3.font.BitmapFont;
@@ -29,6 +31,7 @@ public final class FriendsPanel {
     private final Node card = new Node("Admirals alliance register");
     private final Materials materials;
     private final BitmapFont display, body;
+    private final UiTextField searchField;
     private final List<Button> buttons = new ArrayList<>();
     private FriendsAction tab = FriendsAction.FRIENDS;
     private FriendsResult data;
@@ -43,7 +46,8 @@ public final class FriendsPanel {
 
     public FriendsPanel(AssetManager assets) {
         materials = new Materials(assets);
-        display = assets.loadFont("fonts/CormorantGaramond.fnt"); body = assets.loadFont("fonts/Manrope.fnt");
+        display = UiTypography.display(assets); body = UiTypography.body(assets);
+        searchField = new UiTextField(body, materials, 760, 39, UiTypography.bodySize(13), "Search by username...", false);
         root.attachChild(card); resize(1440, 900); rebuild(); hide();
     }
     public void setInRoom(boolean value) { inRoom = value; rebuild(); }
@@ -89,7 +93,7 @@ public final class FriendsPanel {
     }
     public void backspace() { if (focused && !loading && !query.isEmpty()) { query = query.substring(0, query.length() - 1); rebuild(); } }
     public void resize(int width, int height) {
-        scale = Math.min(width / 1440f, height / 900f);
+        scale = UiTypography.scale(width, height);
         left = (width - WIDTH * scale) / 2; bottom = (height - HEIGHT * scale) / 2;
         card.setLocalScale(scale); card.setLocalTranslation(left, bottom, 0);
     }
@@ -121,6 +125,8 @@ public final class FriendsPanel {
                 .findFirst().orElseThrow();
         return new Vector2f(left + (b.x + b.width / 2) * scale, bottom + (b.y + 18) * scale);
     }
+    public void updateCaret(float delta) { searchField.setContent(query, visible && focused && !loading && confirmation == null); searchField.update(delta); }
+    public boolean caretVisible() { return searchField.caretVisible(); }
     public void update(Vector2f cursor) {
         Command next = actionAt(cursor).orElse(null);
         if (!Objects.equals(next, hovered)) { hovered = next; refreshButtons(); }
@@ -138,7 +144,8 @@ public final class FriendsPanel {
         line(30, 556, 1040, GOLD);
         rect(32, 507, 790, 39, new ColorRGBA(.025f, .055f, .095f, 1), 91);
         frame(32, 507, 790, 39, focused ? CYAN : 0x516275);
-        text(body, query.isEmpty() ? "Search by username..." : query + (focused ? "|" : ""), 13, 47, 532, query.isEmpty() ? MUTED : IVORY);
+        searchField.setContent(query, visible && focused && !loading && confirmation == null);
+        searchField.setLocalTranslation(47, 507, 94); card.attachChild(searchField);
         button(838, 508, 230, "SEARCH", Action.SEARCH, null);
         text(body, tab == FriendsAction.SEARCH ? "SEARCH RESULTS" : tab.name(), 11, 40, 481, GOLD);
         text(body, "STATUS / INVITATION SENT", 10, 460, 481, GOLD);
@@ -165,10 +172,10 @@ public final class FriendsPanel {
         refreshButtons();
     }
     private void row(FriendEntry entry, int index) {
-        float y = 414 - index * 38;
-        rect(30, y, 1040, 36, new ColorRGBA(.03f, .075f, .13f, index % 2 == 0 ? .85f : .4f), 91);
-        text(body, entry.displayName(), 13, 45, y + 30, IVORY);
-        text(body, "@" + entry.username(), 9, 45, y + 12, MUTED);
+        float y = 418 - index * 42;
+        rect(30, y, 1040, 40, new ColorRGBA(.03f, .075f, .13f, index % 2 == 0 ? .85f : .4f), 91);
+        text(body, entry.displayName(), 13, 45, y + 37, IVORY);
+        text(body, "@" + entry.username(), 9, 45, y + 17, MUTED);
         String state = entry.relationship();
         String caption = state.equals("FRIEND") ? (entry.online() ? "ONLINE" : "OFFLINE") : switch (state) {
             case "OUTGOING" -> "PENDING - SENT";
@@ -176,8 +183,8 @@ public final class FriendsPanel {
             case "NONE" -> "NOT CONNECTED";
             default -> state;
         };
-        text(body, caption, 11, 460, y + 29, state.equals("FRIEND") && entry.online() ? CYAN : GOLD);
-        if (entry.requestedAt() != null) text(body, DATE.format(Instant.parse(entry.requestedAt())), 9, 460, y + 12, MUTED);
+        text(body, caption, 11, 460, y + 37, state.equals("FRIEND") && entry.online() ? CYAN : GOLD);
+        if (entry.requestedAt() != null) text(body, DATE.format(Instant.parse(entry.requestedAt())), 9, 460, y + 17, MUTED);
         switch (state) {
             case "FRIEND" -> {
                 if (entry.online()) button(734, y, 174, "INVITE TO BATTLE", Action.INVITE, entry.userId());
@@ -195,7 +202,7 @@ public final class FriendsPanel {
         Material fill = materials.flat(new ColorRGBA(.025f, .055f, .095f, 1));
         rect(x, y, width, 36, fill, 91); frame(x, y, width, 36, 0x516275);
         BitmapText label = text(body, caption, 11, 0, y + 23, IVORY);
-        label.setLocalTranslation(x + (width - label.getLineWidth()) / 2, y + 23, 94);
+        UiTypography.centerIn(label, x, y, width, 36);
         buttons.add(new Button(x, y, width, new Command(action, target), fill, label));
     }
     private void refreshButtons() {
@@ -219,7 +226,7 @@ public final class FriendsPanel {
         geometry.setMaterial(m); geometry.setLocalTranslation(x, y, z); card.attachChild(geometry); return geometry;
     }
     private BitmapText text(BitmapFont font, String value, float size, float x, float y, int color) {
-        BitmapText label = new BitmapText(font); label.setText(value); label.setSize(size); label.setColor(Materials.rgb(color));
+        BitmapText label = new BitmapText(font); label.setText(UiTypography.normalize(value)); label.setSize(font == body ? UiTypography.bodySize(size) : size); label.setColor(Materials.rgb(color));
         label.setLocalTranslation(x, y, 94); card.attachChild(label); return label;
     }
     private record Button(float x, float y, float width, Command command, Material fill, BitmapText label) {}

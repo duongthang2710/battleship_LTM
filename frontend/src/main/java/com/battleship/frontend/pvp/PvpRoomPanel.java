@@ -1,6 +1,9 @@
 package com.battleship.frontend.pvp;
 
 import com.battleship.frontend.graphics.Materials;
+import com.battleship.frontend.ui.UiTypography;
+import com.battleship.frontend.ui.UiTextField;
+import com.battleship.frontend.ui.UiShapes;
 import com.battleship.shared.room.RoomPlayer;
 import com.battleship.shared.room.RoomSnapshot;
 import com.battleship.shared.room.RoomPhase;
@@ -51,14 +54,15 @@ public final class PvpRoomPanel {
     private float scale = 1;
     private float left;
     private float bottom;
-    private BitmapText codeLabel;
+    private final UiTextField codeField;
     private BitmapText statusLabel;
     private Action hovered;
 
     public PvpRoomPanel(AssetManager assets) {
         materials = new Materials(assets);
-        display = assets.loadFont("fonts/CormorantGaramond.fnt");
-        body = assets.loadFont("fonts/Manrope.fnt");
+        display = UiTypography.display(assets);
+        body = UiTypography.body(assets);
+        codeField = new UiTextField(body, materials, 344, 72, 29, "Room code", true);
         root.attachChild(layout);
         rebuild();
         resize(1440, 900);
@@ -71,7 +75,7 @@ public final class PvpRoomPanel {
     public boolean acceptsRoomCode() { return visible && view == View.JOIN && !busy; }
 
     public void resize(int width, int height) {
-        scale = Math.min(width / 1440f, height / 900f);
+        scale = UiTypography.scale(width, height);
         left = 56 * scale;
         bottom = (height - HEIGHT * scale) / 2;
         layout.setLocalScale(scale);
@@ -187,7 +191,6 @@ public final class PvpRoomPanel {
     private void rebuild() {
         layout.detachAllChildren();
         buttons.clear();
-        codeLabel = null;
         panel(0, 0, WIDTH, HEIGHT, new ColorRGBA(0.003f, 0.007f, 0.021f, 0.94f), 70);
         frame(0, 0, WIDTH, HEIGHT, materials.flat(Materials.rgb(GOLD)), 71);
         frame(8, 8, WIDTH - 16, HEIGHT - 16,
@@ -206,15 +209,15 @@ public final class PvpRoomPanel {
             button(34, 28, 372, 42, "MAIN MENU", Action.BACK, false);
         } else if (view == View.JOIN) {
             centered(body, "ENTER ROOM CODE", 11, WIDTH / 2, 393, GOLD);
-            panel(34, 290, 372, 72, new ColorRGBA(0.014f, 0.038f, 0.072f, 1), 72);
+            panel(34, 290, 372, 72, new ColorRGBA(0.014f, 0.038f, 0.072f, 1), 72).setMesh(UiShapes.chamfered(372, 72, 9));
             frame(34, 290, 372, 72, materials.flat(Materials.rgb(0x516275)), 73);
-            codeLabel = centered(body, codeDisplay(), 29, WIDTH / 2, 338, CYAN);
+            codeField.setContent(codeDisplay(), acceptsRoomCode()); codeField.setLocalTranslation(48, 290, 75); layout.attachChild(codeField);
             centered(body, "6 characters / Enter to join", 10, WIDTH / 2, 268, 0xAFBBD0);
             button(34, 182, 372, 56, "JOIN ROOM", Action.JOIN_ROOM, true);
             button(34, 28, 372, 42, "BACK", Action.BACK, false);
         } else {
             centered(body, "ROOM CODE", 10, WIDTH / 2, 414, GOLD);
-            centered(display, room.roomCode(), 39, WIDTH / 2, 388, CYAN);
+            centered(body, room.roomCode(), 32, WIDTH / 2, 388, CYAN);
             player(0, 286);
             player(1, 208);
             boolean ready = room.players().stream().anyMatch(player -> player.clientId().equals(localClientId) && player.ready());
@@ -240,17 +243,10 @@ public final class PvpRoomPanel {
         }
     }
 
-    private void refreshCode() {
-        if (codeLabel != null) {
-            codeLabel.setText(codeDisplay());
-            center(codeLabel, 338);
-        }
-        refreshButtons();
-    }
-
-    private String codeDisplay() {
-        return String.join(" ", (code + "_".repeat(6 - code.length())).split(""));
-    }
+    public void updateCaret(float delta) { codeField.setContent(codeDisplay(), acceptsRoomCode()); codeField.update(delta); }
+    public boolean caretVisible() { return codeField.caretVisible(); }
+    private void refreshCode() { codeField.setContent(codeDisplay(), acceptsRoomCode()); refreshButtons(); }
+    private String codeDisplay() { return String.join(" ", code.split("")); }
 
     private void refreshButtons() {
         for (Button button : buttons) {
@@ -265,10 +261,11 @@ public final class PvpRoomPanel {
 
     private void button(float x, float y, float width, float height, String caption, Action action, boolean primary) {
         Material fill = materials.flat(ColorRGBA.Black);
-        panel(x, y, width, height, fill, 72);
+        panel(x, y, width, height, fill, 72).setMesh(UiShapes.chamfered(width, height, 9));
         Material border = materials.flat(Materials.rgb(GOLD));
         frame(x, y, width, height, border, 73);
-        BitmapText label = centered(body, caption, 12, x + width / 2, y + height / 2 + 5, IVORY);
+        BitmapText label = centered(body, caption, 12, x + width / 2, y, IVORY);
+        UiTypography.centerIn(label, x, y, width, height);
         buttons.add(new Button(x, y, width, height, action, primary, fill, border, label));
     }
 
@@ -318,8 +315,8 @@ public final class PvpRoomPanel {
 
     private BitmapText text(BitmapFont font, String value, float size, float x, float y, int color) {
         BitmapText label = new BitmapText(font);
-        label.setText(value);
-        label.setSize(size);
+        label.setText(UiTypography.normalize(value));
+        label.setSize(font == body ? UiTypography.bodySize(size) : size);
         label.setColor(Materials.rgb(color));
         label.setLocalTranslation(x, y, 75);
         layout.attachChild(label);

@@ -14,7 +14,7 @@ public final class AccountInput extends RawInputListenerAdapter implements AutoC
         this.input = input; this.panel = panel; this.action = action; input.addRawInputListener(this);
     }
     @Override public void onKeyEvent(KeyInputEvent event) {
-        if (!panel.visible() || !event.isPressed()) return;
+        if (!panel.visible() || (!event.isPressed() && !event.isRepeating())) return;
         switch (event.getKeyCode()) {
             case KeyInput.KEY_TAB -> { if (!event.isRepeating()) panel.nextField(); }
             case KeyInput.KEY_BACK -> panel.backspace();
@@ -24,7 +24,13 @@ public final class AccountInput extends RawInputListenerAdapter implements AutoC
                     if (panel.enabled(submit)) action.accept(submit);
                 }
             }
-            case KeyInput.KEY_ESCAPE -> { if (!event.isRepeating()) action.accept(panel.enabled(AccountPanel.Action.BACK) ? AccountPanel.Action.BACK : AccountPanel.Action.EXIT); }
+            case KeyInput.KEY_ESCAPE -> {
+                if (!event.isRepeating()) {
+                    if (panel.editingServer()) action.accept(AccountPanel.Action.SERVER);
+                    else if (panel.registering()) action.accept(AccountPanel.Action.SWITCH);
+                    else if (panel.enabled(AccountPanel.Action.BACK)) action.accept(AccountPanel.Action.BACK);
+                }
+            }
             default -> panel.inputCharacter(event.getKeyChar());
         }
         event.setConsumed();
