@@ -195,6 +195,15 @@ tasks.register('checkJoinConnection', JavaExec) {
 }
 tasks.named('check') { dependsOn 'checkJoinConnection' }
 
+tasks.register('checkTypographyRendering', JavaExec) {
+    group = 'verification'
+    description = 'Renders UI typography at three window sizes without connecting to a server.'
+    dependsOn testClasses
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'com.battleship.frontend.ui.TypographyRenderChecks'
+    workingDir rootProject.projectDir
+}
+
 tasks.register('checkSettingsScreens', JavaExec) {
     group = 'verification'
     description = 'Checks Settings, real window changes, persistence and desktop restart against a running backend.'
@@ -217,3 +226,12 @@ tasks.register('checkUiInteractions', JavaExec) {
     jvmArgs '--enable-native-access=ALL-UNNAMED'
     if (hostOs.contains('mac')) jvmArgs '-XstartOnFirstThread'
 }
+
+
+tasks.register('checkUiFeedback', JavaExec) {
+    group = 'verification'
+    dependsOn testClasses
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'com.battleship.frontend.ui.UiFeedbackChecks'
+}
+tasks.named('check') { dependsOn 'checkUiFeedback' }
