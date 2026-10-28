@@ -18,6 +18,10 @@ import com.battleship.frontend.game.GameInput;
 import com.battleship.frontend.game.GameController;
 import com.battleship.frontend.pvp.PvpController;
 import com.battleship.frontend.input.PointerInput;
+import com.battleship.frontend.input.NavigationInput;
+import com.battleship.frontend.network.ConnectionNoticePanel;
+import com.battleship.frontend.network.ConnectionNoticeInput;
+import com.battleship.frontend.ui.ClipboardService;
 import com.battleship.frontend.pvp.RoomCodeInput;
 import com.battleship.frontend.game.FleetRenderer;
 import com.battleship.frontend.game.PlacementFeedback;
@@ -81,6 +85,11 @@ public final class ScreenController implements AutoCloseable {
     private boolean roomRequested;
     private RoomSnapshot placementRequested;
     private Screen screen;
+    private final ConnectionNoticePanel connectionNotice;
+    private final ConnectionNoticeInput connectionNoticeInput;
+    private final NavigationInput navigationInput;
+    private final ClipboardService clipboard = new ClipboardService();
+    private boolean backRequested, connectionSettingsRequested;
 
     public ScreenController(AssetManager assets, Node gui, InputManager input, Camera camera, OrbitCamera orbit,
                             Node board, String player, Runnable exit) {
@@ -121,6 +130,9 @@ public final class ScreenController implements AutoCloseable {
             placementRequested = null;
             roomRequested = true;
         }, this::requestMainMenu, game::applyNetworkState, game::networkError);
+        connectionNotice = new ConnectionNoticePanel(assets);
+        gui.attachChild(connectionNotice.root());
+        connectionNoticeInput = new ConnectionNoticeInput(input, connectionNotice, this::connectionAction);
         leaderboardPanel = new LeaderboardPanel(assets);
         gui.attachChild(leaderboardPanel.root());
         leaderboard = new LeaderboardController(pvp, leaderboardPanel, this::requestMainMenu);
@@ -134,6 +146,7 @@ public final class ScreenController implements AutoCloseable {
         gui.attachChild(chatPanel.root());
         chat = new ChatController(pvp, chatPanel);
         chatInput = new ChatInput(input, chatPanel, chat::handle);
+        navigationInput = new NavigationInput(input, () -> backRequested = true);
         friends = new FriendsController(pvp, friendsPanel, () -> {
             if (pvp.room() != null) roomRequested = true; else requestMainMenu();
         }, menu::friendsUpdated, gameInvites::send);
@@ -141,6 +154,7 @@ public final class ScreenController implements AutoCloseable {
         showAccount();
     }
 
+    public ConnectionNoticePanel connectionNotice() { return connectionNotice; }
     public SettingsPanel settingsPanel() { return settingsPanel; }
     public SettingsController settings() { return settings; }
     public ChatPanel chatPanel() { return chatPanel; }
@@ -161,6 +175,7 @@ public final class ScreenController implements AutoCloseable {
     public void requestMainMenu() { menuRequested = true; }
 
     public void resize(int width, int height) {
+        connectionNotice.resize(width, height);
         menu.resize(width, height);
         settingsPanel.resize(width, height);
         leaderboardPanel.resize(width, height);
@@ -182,11 +197,19 @@ public final class ScreenController implements AutoCloseable {
         friends.update();
         gameInvites.update();
         chat.update();
+        clipboard.update();
         accountPanel.sync(pvp.account(), pvp.status(), pvp.pending(), pvp.connected());
         accountPanel.update(delta);
         friendsPanel.updateCaret(delta);
         roomPanel.updateCaret(delta);
         chatPanel.updateCaret(delta);
+        connectionNotice.sync(pvp.connectionProblem(), pvp.connecting());
+        if (connectionSettingsRequested) {
+            connectionSettingsRequested = false;
+            showAccount();
+            if (!accountPanel.editingServer()) accountPanel.toggleServer();
+        }
+        if (backRequested) { backRequested = false; navigateBack(); }
         if (pvp.account() == null) {
             pendingAction = null;
             menuRequested = roomRequested = false;
@@ -226,10 +249,9 @@ public final class ScreenController implements AutoCloseable {
             else if (action == MainMenu.Action.PROFILE) showAccount();
             else if (action == MainMenu.Action.FRIENDS) showFriends();
             else if (action == MainMenu.Action.LEADERBOARD) showLeaderboard();
-            else if (action == MainMenu.Action.PVP || action == MainMenu.Action.CREATE_ROOM
-                    || action == MainMenu.Action.JOIN_ROOM) {
+            else if (action == MainMenu.Action.PVP) {
                 showPvpRoom();
-                pvp.open(action);
+                pvp.open();
             }
         }
         boolean waitingChat = screen == Screen.PVP && pvp.room() != null && pvp.room().phase() == com.battleship.shared.room.RoomPhase.WAITING;
@@ -243,11 +265,49 @@ public final class ScreenController implements AutoCloseable {
         else if (screen != Screen.ACCOUNT && screen != Screen.SETTINGS) game.update(delta, cursor);
     }
 
+    private void connectionAction(ConnectionNoticePanel.Action action) {
+        switch (action) {
+            case RECONNECT -> pvp.reconnect();
+            case DISMISS -> pvp.dismissConnectionNotice();
+            case SETTINGS -> { pvp.dismissConnectionNotice(); connectionSettingsRequested = true; }
+        }
+    }
+
+    private void roomAction(PvpRoomPanel.Action action) {
+        if (action != PvpRoomPanel.Action.COPY_CODE) { pvp.handle(action); return; }
+        if (pvp.room() == null) return;
+        String code = pvp.room().roomCode();
+        clipboard.copy(code, status -> {
+            if (pvp.room() != null && pvp.room().roomCode().equals(code)) roomPanel.setStatus(status);
+        });
+    }
+
+    private void navigateBack() {
+        if (screen == null) return;
+        if (gameInvitePanel.visible()) { gameInvitePanel.hide(); return; }
+        switch (screen) {
+            case ACCOUNT -> {
+                if (accountPanel.editingServer()) accountPanel.toggleServer();
+                else if (accountPanel.registering()) accountPanel.switchMode();
+                else if (pvp.account() != null) requestMainMenu();
+            }
+            case SETTINGS -> settings.handle(SettingsPanel.Action.BACK);
+            case FRIENDS -> friends.handle(new FriendsPanel.Command(friendsPanel.confirming()
+                    ? FriendsPanel.Action.CANCEL_REMOVE : FriendsPanel.Action.BACK, null));
+            case LEADERBOARD -> leaderboard.handle(LeaderboardPanel.Action.BACK);
+            case PVP -> {
+                if (pvp.room() != null) pvp.handle(PvpRoomPanel.Action.LEAVE_ROOM);
+                else pvp.handle(PvpRoomPanel.Action.BACK);
+            }
+            case PVP_PLACEMENT -> pvp.returnToMainMenu();
+            case MAIN_MENU -> { } // Root screen; Esc never signs out or exits.
+        }
+    }
+
     private void menuClick(Vector2f cursor) {
         menu.actionAt(cursor).ifPresent(action -> {
             if (action == MainMenu.Action.SETTINGS || action == MainMenu.Action.FRIENDS || action == MainMenu.Action.LEADERBOARD || action == MainMenu.Action.PROFILE || action == MainMenu.Action.EXIT
-                    || action == MainMenu.Action.PVP || action == MainMenu.Action.CREATE_ROOM
-                    || action == MainMenu.Action.JOIN_ROOM) pendingAction = action;
+                    || action == MainMenu.Action.PVP) pendingAction = action;
         });
     }
 
@@ -331,7 +391,8 @@ public final class ScreenController implements AutoCloseable {
         screen = Screen.PVP;
         // Consume room-code letters before the camera sees shortcuts such as R.
         codeInput = new RoomCodeInput(input, roomPanel, pvp::handle);
-        roomInput = new PointerInput(input, orbit, cursor -> roomPanel.actionAt(cursor).ifPresent(pvp::handle));
+        roomInput = new PointerInput(input, orbit, cursor -> roomPanel.actionAt(cursor).ifPresent(this::roomAction));
+        pvp.showPanel();
     }
 
     private void startNetworkPlacement(RoomSnapshot room) {
@@ -379,6 +440,9 @@ public final class ScreenController implements AutoCloseable {
 
     @Override public void close() {
         closeInputs();
+        navigationInput.close();
+        connectionNoticeInput.close();
+        clipboard.close();
         gameInviteInput.close();
         chatInput.close();
         settings.close();

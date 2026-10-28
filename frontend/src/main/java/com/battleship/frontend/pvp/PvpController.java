@@ -1,7 +1,6 @@
 package com.battleship.frontend.pvp;
 
 import com.battleship.frontend.network.ConnectionManager;
-import com.battleship.frontend.menu.MainMenu;
 import com.battleship.shared.room.JoinRoomRequest;
 import com.battleship.shared.room.RoomError;
 import com.battleship.shared.room.RoomPhase;
@@ -44,8 +43,9 @@ public final class PvpController implements AutoCloseable {
     private String clientId;
     private AccountProfile account;
     private String pendingRequest;
-    private PvpRoomPanel.Action afterConnect;
     private boolean active;
+    private boolean connecting;
+    private String connectionProblem;
     private boolean accountView;
     private boolean joining;
     private boolean leaving;
@@ -142,6 +142,14 @@ public final class PvpController implements AutoCloseable {
     public RoomSnapshot room() { return room; }
     public String clientId() { return clientId; }
     public boolean connected() { return connection.connected(); }
+    public boolean connecting() { return connecting; }
+    public String connectionProblem() { return connectionProblem; }
+    public void dismissConnectionNotice() { connectionProblem = null; }
+    public void reconnect() { if (!connected() && !connecting) connect(); }
+    public void showPanel() {
+        if (room != null) panel.showRoom(room, clientId);
+        else if (joining) panel.showJoin(); else panel.showChoice();
+    }
     public String status() { return status; }
     public MatchSnapshot match() { return match; }
     public boolean pending() { return pendingRequest != null; }
@@ -184,16 +192,13 @@ public final class PvpController implements AutoCloseable {
 
     public boolean attack(Coordinate cell) { return send(MessageType.ATTACK, new AttackRequest(cell)); }
 
-    public void open(MainMenu.Action action) {
+    public void open() {
         active = true;
         accountView = false;
-        joining = action == MainMenu.Action.JOIN_ROOM;
-        if (joining) panel.showJoin(); else panel.showChoice();
-        afterConnect = action == MainMenu.Action.CREATE_ROOM ? PvpRoomPanel.Action.CREATE_ROOM : null;
-        if (connection.connected()) {
-            panel.setConnection(true, false);
-            if (account != null && afterConnect != null) { afterConnect = null; handle(PvpRoomPanel.Action.CREATE_ROOM); }
-        } else connect();
+        joining = false;
+        showPanel();
+        if (connection.connected()) panel.setConnection(true, false);
+        else connect();
     }
 
     public void update() {
@@ -202,6 +207,7 @@ public final class PvpController implements AutoCloseable {
         if (pendingRequest != null && System.nanoTime() - sentAt > java.util.concurrent.TimeUnit.SECONDS.toNanos(15)) {
             disconnect();
             setStatus("Server did not respond. Reconnect to continue.");
+            connectionProblem = status;
         }
     }
 
@@ -209,8 +215,7 @@ public final class PvpController implements AutoCloseable {
         if (!active || !panel.enabled(action)) return;
         switch (action) {
             case INVITE_FRIENDS -> inviteFriendsAction.run();
-            case CONNECT -> connect();
-            case DISCONNECT -> disconnect();
+            case COPY_CODE -> { } // Clipboard is owned by the UI coordinator.
             case SHOW_JOIN -> { joining = true; panel.showJoin(); setStatus("Enter a six-character room code."); }
             case BACK -> {
                 if (joining) { joining = false; panel.showChoice(); setStatus(connected() ? "Connected" : "Disconnected"); }
@@ -247,13 +252,14 @@ public final class PvpController implements AutoCloseable {
         menuAfterLeave = false;
         clientId = null;
         pendingRequest = null;
-        afterConnect = null;
         leaving = false;
         joining = false;
         panel.setBusy(false);
         panel.setConnection(false, false);
         panel.showChoice();
-        setStatus("Disconnected. Connect to find a room.");
+        connecting = false;
+        setStatus("Connection to the server was closed.");
+        connectionProblem = status;
         if (!accountView) showWaiting.run();
     }
 
@@ -277,15 +283,13 @@ public final class PvpController implements AutoCloseable {
 
     private void onStatus(ConnectionManager.Status state) {
         if (!active) return;
+        connecting = state.connecting();
+        if (state.connected()) connectionProblem = null;
+        else if (!state.connecting()) connectionProblem = state.detail();
         panel.setConnection(state.connected(), state.connecting());
         setStatus(state.detail());
         if (state.connected()) {
             clientId = state.player().clientId();
-            if (account != null && afterConnect != null) {
-                PvpRoomPanel.Action action = afterConnect;
-                afterConnect = null;
-                handle(action);
-            }
         } else if (!state.connecting()) {
             if (account != null) LOG.warning("Authenticated TCP session ended: " + state.detail());
             account = null;
@@ -298,7 +302,6 @@ public final class PvpController implements AutoCloseable {
             menuAfterLeave = false;
             clientId = null;
             pendingRequest = null;
-            afterConnect = null;
             leaving = false;
             panel.setBusy(false);
             if (joining) panel.showJoin(); else panel.showChoice();
@@ -455,7 +458,6 @@ public final class PvpController implements AutoCloseable {
         rematchStatus = "";
         menuAfterLeave = false;
         pendingRequest = null;
-        afterConnect = null;
         clientId = null;
         leaving = false;
         joining = false;

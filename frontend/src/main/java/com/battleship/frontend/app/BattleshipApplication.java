@@ -45,6 +45,7 @@ public final class BattleshipApplication extends SimpleApplication {
         setDisplayStatView(false);
         flyCam.setEnabled(false);
         inputManager.setCursorVisible(true);
+        if (inputManager.hasMapping(INPUT_MAPPING_EXIT)) inputManager.deleteMapping(INPUT_MAPPING_EXIT);
         viewPort.setBackgroundColor(Materials.rgb(0x07101C));
         battleScene = new BattleScene(assetManager);
         rootNode.attachChild(battleScene.root());

@@ -791,7 +791,7 @@ public final class PvpRoomRenderChecks extends SimpleApplication {
         AccountPanel panel = screens.accountPanel();
         switch (stage) {
             case 1 -> {
-                require(screens.mainMenu().visible() && MainMenu.Action.values().length == 8, "Authenticated menu has no Local Game action");
+                require(screens.mainMenu().visible() && MainMenu.Action.values().length == 6, "Authenticated menu has no Local Game action");
                 click(screens.mainMenu().buttonCenter(MainMenu.Action.SETTINGS));
                 require(screens.settingsPanel().visible() && !screens.mainMenu().visible(), "Settings opens a real screen");
                 stage = 89;
@@ -835,8 +835,11 @@ public final class PvpRoomRenderChecks extends SimpleApplication {
             case 95 -> {
                 if (screens.mainMenu().visible()) {
                     require(screens.pvp().account() != null && screens.pvp().room() == null, "Login returns to menu without creating a room");
-                    click(screens.mainMenu().buttonCenter(MainMenu.Action.CREATE_ROOM)); stage = 950;
+                    click(screens.mainMenu().buttonCenter(MainMenu.Action.PVP)); stage = 945;
                 }
+            }
+            case 945 -> {
+                if (screens.roomPanel().visible()) { action(PvpRoomPanel.Action.CREATE_ROOM); stage = 950; }
             }
             case 950 -> {
                 if (screens.pvp().room() != null) { screens.pvp().returnToMainMenu(); stage = 96; }

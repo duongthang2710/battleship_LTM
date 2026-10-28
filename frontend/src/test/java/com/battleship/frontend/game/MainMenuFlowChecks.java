@@ -77,6 +77,12 @@ public final class MainMenuFlowChecks extends SimpleApplication {
             require(screens.accountPanel().visible() && !screens.mainMenu().visible(), "App requires sign-in before Main Menu");
             require(guiNode.getChild("Placement HUD").getLocalCullHint() == CullHint.Always,
                     "Placement HUD stays hidden before sign-in");
+            if (screens.connectionNotice().visible()) key(KeyInput.KEY_ESCAPE, (char) 0);
+            key(KeyInput.KEY_ESCAPE, (char) 0); require(!exitCalled, "Esc at root sign-in does not exit");
+            screens.accountPanel().switchMode(); key(KeyInput.KEY_ESCAPE, (char) 0);
+            require(!screens.accountPanel().registering(), "Esc returns from registration");
+            screens.accountPanel().toggleServer(); key(KeyInput.KEY_ESCAPE, (char) 0);
+            require(!screens.accountPanel().editingServer(), "Esc returns from connection settings");
             var initialState = screens.game().state();
             key(KeyInput.KEY_F, 'f');
             key(KeyInput.KEY_RETURN, '\n');
@@ -86,7 +92,7 @@ public final class MainMenuFlowChecks extends SimpleApplication {
             require(!screens.mainMenu().visible() && screens.accountPanel().visible(), "Main Menu request cannot bypass authentication");
             require(!screens.accountPanel().enabled(AccountPanel.Action.BACK), "Login has no unauthenticated back route");
             MainMenu menu = new MainMenu(assetManager);
-            require(MainMenu.Action.values().length == 8, "Eight implemented non-local menu actions");
+            require(MainMenu.Action.values().length == 6, "Six menu actions; room creation and joining live under PvP");
             for (int[] size : new int[][] {{1440, 900}, {960, 600}}) {
                 menu.resize(size[0], size[1]);
                 for (MainMenu.Action action : MainMenu.Action.values())

@@ -26,7 +26,7 @@ import java.util.Optional;
 
 public final class PvpRoomPanel {
     public enum Action {
-        CREATE_ROOM, SHOW_JOIN, JOIN_ROOM, BACK, INVITE_FRIENDS, TOGGLE_READY, LEAVE_ROOM, DISCONNECT, CONNECT
+        CREATE_ROOM, SHOW_JOIN, JOIN_ROOM, BACK, INVITE_FRIENDS, TOGGLE_READY, LEAVE_ROOM, COPY_CODE
     }
 
     private enum View { CHOICE, JOIN, WAITING }
@@ -152,8 +152,7 @@ public final class PvpRoomPanel {
         return switch (action) {
             case INVITE_FRIENDS -> connected && !busy && room != null && room.phase() == RoomPhase.WAITING && room.players().size() < 2;
             case BACK -> !busy;
-            case CONNECT -> !connected && !connecting && !busy;
-            case DISCONNECT -> connected && !busy;
+            case COPY_CODE -> room != null && view == View.WAITING;
             case CREATE_ROOM, SHOW_JOIN -> connected && !busy;
             case JOIN_ROOM -> connected && !busy && code.length() == 6;
             case LEAVE_ROOM -> connected && !busy && room != null;
@@ -204,8 +203,6 @@ public final class PvpRoomPanel {
             centered(display, "Two admirals. One ocean.", 23, WIDTH / 2, 404, IVORY);
             button(34, 304, 372, 56, "CREATE ROOM", Action.CREATE_ROOM, true);
             button(34, 232, 372, 56, "JOIN ROOM", Action.SHOW_JOIN, false);
-            button(34, 164, 180, 42, "CONNECT", Action.CONNECT, false);
-            button(226, 164, 180, 42, "DISCONNECT", Action.DISCONNECT, false);
             button(34, 28, 372, 42, "MAIN MENU", Action.BACK, false);
         } else if (view == View.JOIN) {
             centered(body, "ENTER ROOM CODE", 11, WIDTH / 2, 393, GOLD);
@@ -217,7 +214,8 @@ public final class PvpRoomPanel {
             button(34, 28, 372, 42, "BACK", Action.BACK, false);
         } else {
             centered(body, "ROOM CODE", 10, WIDTH / 2, 414, GOLD);
-            centered(body, room.roomCode(), 32, WIDTH / 2, 388, CYAN);
+            centered(body, room.roomCode(), 32, 192, 388, CYAN);
+            button(314, 354, 72, 34, "COPY", Action.COPY_CODE, false);
             player(0, 286);
             player(1, 208);
             boolean ready = room.players().stream().anyMatch(player -> player.clientId().equals(localClientId) && player.ready());

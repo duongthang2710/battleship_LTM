@@ -1,6 +1,5 @@
 package com.battleship.frontend.pvp;
 
-import com.battleship.frontend.menu.MainMenu;
 import com.battleship.shared.auth.AccountProfile;
 import com.battleship.shared.game.PlayerIdentity;
 import com.battleship.shared.protocol.*;
@@ -49,7 +48,8 @@ public final class JoinConnectionChecks {
                     try (var client = new PvpController(panel, "Admiral", room -> { }, () -> { }, () -> { }, match -> { }, error -> { })) {
                         client.openAccount(); await(client, client::connected);
                         client.login("join_check", "TransportCheckPassword!"); await(client, () -> client.account() != null);
-                        client.open(MainMenu.Action.JOIN_ROOM);
+                        client.open();
+                        client.handle(PvpRoomPanel.Action.SHOW_JOIN);
                         for (char letter : "ABCDEF".toCharArray()) panel.inputCharacter(letter);
                         client.handle(PvpRoomPanel.Action.JOIN_ROOM);
                         if (drop) {
@@ -70,11 +70,53 @@ public final class JoinConnectionChecks {
                     server.get(5, TimeUnit.SECONDS);
                 }
             }
+            checkReconnect(assets);
             System.out.println("PASS: rejected Join preserves login; dropped Join reports TCP loss; login navigation retains the reason without automatic reconnect.");
         } finally {
             restore("battleship.port", oldPort); restore("battleship.host", oldHost);
         }
     }
+    private static void checkReconnect(DesktopAssetManager assets) throws Exception {
+        var drop = new CountDownLatch(1);
+        try (var listener = new ServerSocket(0); var worker = Executors.newSingleThreadExecutor()) {
+            listener.setSoTimeout(5_000); System.setProperty("battleship.port", Integer.toString(listener.getLocalPort()));
+            Future<?> server = worker.submit(() -> {
+                try {
+                    for (int session = 1; session <= 2; session++) try (Socket socket = listener.accept()) {
+                        socket.setSoTimeout(5_000);
+                        var input = new DataInputStream(socket.getInputStream()); var output = new DataOutputStream(socket.getOutputStream());
+                        Message connect = MessageCodec.read(input);
+                        if (connect.type() != MessageType.CONNECT) throw new AssertionError("Expected connect handshake");
+                        MessageCodec.write(output, Message.reply(MessageType.CONNECT_OK, connect.requestId(), new ConnectResponse(new PlayerIdentity("reconnect-" + session, "Admiral"))));
+                        Message login = MessageCodec.read(input);
+                        if (login.type() != MessageType.LOGIN) throw new AssertionError("Fresh session requires sign-in");
+                        MessageCodec.write(output, Message.reply(MessageType.AUTH_SUCCESS, login.requestId(), new AccountProfile(UUID.randomUUID(), "reconnect_check", "Admiral")));
+                        if (session == 1) { if (!drop.await(5, TimeUnit.SECONDS)) throw new AssertionError("Test never dropped connection"); }
+                        else {
+                            Message request;
+                            while ((request = MessageCodec.read(input)) != null) {
+                                if (request.type() == MessageType.DISCONNECT) break;
+                                if (request.type() == MessageType.PING) MessageCodec.write(output, Message.reply(MessageType.PONG, request.requestId(), null));
+                            }
+                        }
+                    }
+                } catch (IOException error) { throw new UncheckedIOException(error); }
+                catch (InterruptedException error) { Thread.currentThread().interrupt(); throw new RuntimeException(error); }
+            });
+            try (var client = new PvpController(new PvpRoomPanel(assets), "Admiral", room -> { }, () -> { }, () -> { }, match -> { }, error -> { })) {
+                client.openAccount(); await(client, client::connected);
+                client.login("reconnect_check", "TestPassword!"); await(client, () -> client.account() != null);
+                drop.countDown(); await(client, () -> client.connectionProblem() != null);
+                require(client.account() == null && !client.connected(), "Lost TCP requires notice and clears authentication");
+                client.reconnect(); client.reconnect(); await(client, () -> client.connected() && !client.connecting());
+                require(client.connectionProblem() == null && client.account() == null && client.clientId().equals("reconnect-2"), "Reconnect creates one fresh unauthenticated session and clears notice");
+                client.login("reconnect_check", "TestPassword!"); await(client, () -> client.account() != null);
+            }
+            server.get(5, TimeUnit.SECONDS);
+        }
+        System.out.println("PASS: real TCP drop, connection notice state, explicit reconnect, duplicate reconnect guard and fresh sign-in.");
+    }
+
     private static void await(PvpController client, BooleanSupplier condition) throws Exception {
         long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
         while (!condition.getAsBoolean()) {

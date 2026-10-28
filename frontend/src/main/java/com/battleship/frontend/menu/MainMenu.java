@@ -22,11 +22,11 @@ import java.util.Optional;
 
 public final class MainMenu {
     public enum Action {
-        PVP, LEADERBOARD, CREATE_ROOM, JOIN_ROOM, FRIENDS, PROFILE, SETTINGS, EXIT
+        PVP, LEADERBOARD, FRIENDS, PROFILE, SETTINGS, EXIT
     }
 
     private static final float WIDTH = 400;
-    private static final float HEIGHT = 650;
+    private static final float HEIGHT = 586;
     private static final int GOLD = 0xDEB663;
     private static final int IVORY = 0xF4EAD1;
     private static final int CYAN = 0x91CEFF;
@@ -126,15 +126,13 @@ public final class MainMenu {
         frame(0, 0, WIDTH, HEIGHT, materials.flat(Materials.rgb(GOLD)), 61);
         frame(8, 8, WIDTH - 16, HEIGHT - 16,
                 materials.flat(new ColorRGBA(0.38f, 0.32f, 0.22f, 0.55f)), 61);
-        compass(WIDTH / 2, 589);
-        centered(display, "BATTLESHIP", 48, WIDTH / 2, 545, IVORY);
-        centered(body, "FANTASY NAVAL STRATEGY", 10, WIDTH / 2, 492, GOLD);
-        divider(469);
-        button(28, 380, 344, 66, "PVP", Action.PVP, true);
-        UiTypography.centerIn(centered(body, "ONLINE MATCH", 10, WIDTH / 2, 398, CYAN), 28, 382, 344, 25);
-        button(28, 311, 344, 52, "LEADERBOARD", Action.LEADERBOARD, false);
-        button(28, 247, 165, 52, "CREATE ROOM", Action.CREATE_ROOM, false);
-        button(207, 247, 165, 52, "JOIN ROOM", Action.JOIN_ROOM, false);
+        compass(WIDTH / 2, 525);
+        centered(display, "BATTLESHIP", 48, WIDTH / 2, 481, IVORY);
+        centered(body, "FANTASY NAVAL STRATEGY", 10, WIDTH / 2, 428, GOLD);
+        divider(405);
+        button(28, 316, 344, 66, "PVP", Action.PVP, true);
+        UiTypography.centerIn(centered(body, "ONLINE MATCH", 10, WIDTH / 2, 334, CYAN), 28, 318, 344, 25);
+        button(28, 247, 344, 52, "LEADERBOARD", Action.LEADERBOARD, false);
         button(28, 183, 165, 52, "FRIENDS", Action.FRIENDS, false);
         button(207, 183, 165, 52, "PROFILE", Action.PROFILE, false);
         button(28, 119, 165, 52, "SETTINGS", Action.SETTINGS, false);
