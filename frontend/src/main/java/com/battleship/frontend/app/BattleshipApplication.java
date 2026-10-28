@@ -60,18 +60,28 @@ public final class BattleshipApplication extends SimpleApplication {
 
     @Override
     public void simpleUpdate(float delta) {
+        var guiCamera = guiViewPort.getCamera();
+        if (guiCamera.getWidth() > 0 && guiCamera.getHeight() > 0
+                && (hudWidth != guiCamera.getWidth() || hudHeight != guiCamera.getHeight())) resizeHud();
         battleScene.update(delta, cam);
         screens.update(delta, inputManager.getCursorPosition());
-        if (cam.getWidth() > 0 && cam.getHeight() > 0
-                && (hudWidth != cam.getWidth() || hudHeight != cam.getHeight())) {
+    }
+
+    @Override
+    public void reshape(int width, int height) {
+        super.reshape(width, height);
+        // GLFW input already uses framebuffer pixels. Resize hit areas in the same callback,
+        // before input dispatch, rather than waiting until the end of simpleUpdate.
+        if (screens != null && width > 0 && height > 0) {
             resizeHud();
             orbit.update();
         }
     }
 
     private void resizeHud() {
-        hudWidth = cam.getWidth();
-        hudHeight = cam.getHeight();
+        var guiCamera = guiViewPort.getCamera();
+        hudWidth = guiCamera.getWidth();
+        hudHeight = guiCamera.getHeight();
         screens.resize(hudWidth, hudHeight);
     }
 

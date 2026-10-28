@@ -205,3 +205,15 @@ tasks.register('checkSettingsScreens', JavaExec) {
     systemProperty 'battleship.port', providers.gradleProperty('serverPort').getOrElse('2209')
     systemProperty 'battleship.settingsOnly', 'true'
 }
+
+
+tasks.register('checkUiInteractions', JavaExec) {
+    group = 'verification'
+    description = 'Checks native fullscreen/window hit targets and chat scrollbar input (requires OpenGL).'
+    dependsOn testClasses
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'com.battleship.frontend.ui.UiInteractionChecks'
+    workingDir rootProject.projectDir
+    jvmArgs '--enable-native-access=ALL-UNNAMED'
+    if (hostOs.contains('mac')) jvmArgs '-XstartOnFirstThread'
+}
