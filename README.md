@@ -13,6 +13,7 @@ bàn cờ và mô hình tàu 3D. Backend dùng **Java TCP Socket** để quản 
 - **Mời bạn vào PvP:** mời bạn online, Accept/Decline, thời hạn 60 giây; tự tạo hoặc dùng lại phòng chờ.
 - **Friends:** tìm username, gửi/nhận/chấp nhận/từ chối/hủy lời mời, xóa bạn có xác nhận; cập nhật hai phía qua TCP và hiển thị online/offline.
 - **Leaderboard:** xếp hạng toàn server theo số trận thắng, tỷ lệ thắng hoặc số trận; 10 người/trang.
+- **Fleet designer:** tự vẽ hình tàu liền cạnh, model 3D dựng theo đúng vùng ô; chọn chế độ trước khi tạo phòng PvP.
 - **PvP:** tạo phòng, tham gia bằng mã 6 ký tự, phòng chờ hai người, Ready/Not Ready,
   xếp tàu và đánh trận qua TCP.
 - Server chọn ngẫu nhiên phe trắng/đen khi bắt đầu xếp tàu; Player 1 trong phòng đi trước, độc lập với màu phe.
@@ -554,3 +555,35 @@ docker compose exec -T postgres psql -U battleship -d postgres -c "CREATE DATABA
 Khi đã có backend chạy, `./gradlew :frontend:checkSettingsScreens -PserverPort=2209`
 mở hai client desktop kiểm tra đổi cửa sổ/toàn màn hình, lưu, bỏ thay đổi và khởi động lại để đọc cấu hình.
 Bài kiểm tra dùng file riêng trong `build/pvp-verification`, không ghi cấu hình cá nhân.
+
+
+## Hạm đội tự thiết kế
+
+Trong **PVP**, bấm **CLASSIC FLEET / CHANGE** để chọn **FLEET DESIGNER**, rồi **CREATE ROOM**.
+Người tham gia bằng mã phòng hoặc lời mời nhận chế độ từ server. Muốn mời bạn chơi chế độ này,
+hãy tạo phòng Fleet designer trước rồi dùng INVITE FRIENDS trong phòng.
+
+- Giữ **chuột trái** trên grid để tô, **chuột phải** để xóa. Có thể nhấp từng ô hoặc tô qua nhiều nét.
+- Chọn tàu bằng nút hoặc **1–5**. Mỗi tàu cần đúng 5/4/3/3/2 ô liền nhau qua cạnh; không nối chỉ bằng góc, chồng lấn hoặc vượt biên.
+- Khi đủ số ô hợp lệ và nhả chuột, model tàu được dựng và lưu vào board. Bản nháp sai hoặc chưa đủ ô hiện đỏ và chưa được gửi server.
+- **G** đổi Draw/Move; ở Move kéo thả tàu đã đặt. **T** xoay tàu đã hoàn tất 90 độ. **Cancel** hủy bản nháp, Remove xóa tàu; Reset/Random dùng luật của chế độ phòng.
+- Ready chỉ cho phép đội hình đủ 5 tàu và không có bản nháp chưa hoàn tất. Server xác thực lại, giữ bí mật tọa độ đối thủ; hit/miss/sunk, timer 60 giây và rematch dùng luồng PvP hiện có.
+
+Thuật toán bao phủ mọi hình nối cạnh: 2 hình cho 2 ô, 6 hình cho 3 ô, 19 hình cho 4 ô,
+63 hình cho 5 ô (các hướng xoay/lật được tính riêng nếu hình khác nhau). Cruiser/Submarine có cùng
+6 footprint nhưng thiết kế chi tiết khác nhau: tổng 96 mẫu theo loại tàu, 192 model cho hai phe.
+Model được dựng procedural và cache, không dùng asset GLB ngoài. Classic giữ tàu thẳng như cũ.
+
+Sau cập nhật, build lại và khởi động lại **backend cùng cả hai client** để dùng chung protocol mới:
+
+```powershell
+.\gradlew.bat build
+.\gradlew.bat :backend:run
+# Mỗi client ở terminal/máy riêng; thay IP backend khi cần:
+.\gradlew.bat :frontend:run -PserverHost=localhost -PserverPort=2209
+```
+
+Kiểm tra riêng: `:shared:designerChecks`, `:backend:checkDesigner`, `:frontend:checkDesignerRendering`.
+Khi PostgreSQL đã chạy, `:backend:checkDesignerTcp -PdatabaseChecks` mở server cổng ngẫu nhiên và hai
+client TCP test, chạy hai ván/rematch rồi dọn đúng tài khoản và lịch sử test vừa tạo.
+Atlas hai phe và danh mục footprint được xuất vào `build/designer-review/` khi chạy rendering check.

@@ -37,3 +37,11 @@ Người dùng xác nhận giữ **5 loại tàu thẳng**, không chuyển sang
 Các lượt tiếp theo đối chiếu thiết kế chung và phạm vi được giao; kiểm tra code/protocol trước khi sửa. Những chức năng chưa triển khai chỉ bổ sung khi được yêu cầu.
 
 Bạn bè đã được bổ sung theo yêu cầu riêng: lời mời, quan hệ một cặp duy nhất, online/offline qua phiên TCP và migration V003. Đã tích hợp mời bạn online vào phòng PvP qua TCP, lời mời trong RAM hết hạn sau 60 giây; đã có chat trong phòng chờ và trận PvP theo yêu cầu riêng. Chat riêng giữa bạn bè chưa triển khai.
+
+
+## Bổ sung theo yêu cầu mới: Fleet designer
+
+Yêu cầu ngày 28/10/2026 cho phép thêm **chế độ riêng** tự vẽ tàu bằng ô nối cạnh D4.
+Giữ 5 loại/kích thước 5/4/3/3/2; không chồng lấn hoặc vượt biên. Chế độ Classic và thao tác cũ vẫn giữ tàu thẳng.
+Server chọn bộ luật từ phòng, xác thực đội hình và giữ luật 60 giây hết lượt thì thua. Đây là mở rộng được
+người dùng yêu cầu trực tiếp, thay cho giới hạn chỉ dùng tàu thẳng đối với chế độ mới.
