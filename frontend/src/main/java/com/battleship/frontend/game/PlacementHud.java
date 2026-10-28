@@ -26,7 +26,7 @@ import java.util.Optional;
 public final class PlacementHud {
     public enum Action {
         SELECT_CARRIER, SELECT_BATTLESHIP, SELECT_CRUISER, SELECT_SUBMARINE,
-        SELECT_DESTROYER, ROTATE, REMOVE, RESET, RANDOM, READY, TOGGLE_BOARD, RESTART, LEAVE_ROOM
+        SELECT_DESTROYER, ROTATE, REMOVE, RESET, RANDOM, READY, TOGGLE_BOARD, RESTART, LEAVE_ROOM, TOGGLE_DRAW
     }
 
     private static final int GOLD = 0xDEB663;
@@ -49,6 +49,11 @@ public final class PlacementHud {
     private float scale = 1;
     private float top;
     private float panelHeight;
+    private boolean designer, drawing, draft;
+    private int draftCount;
+    public void setDesigner(boolean designer, boolean drawing, int count, boolean draft) {
+        this.designer = designer; this.drawing = drawing; this.draftCount = count; this.draft = draft;
+    }
 
     public PlacementHud(AssetManager assets) {
         materials = new Materials(assets);
@@ -87,7 +92,7 @@ public final class PlacementHud {
             if (state.player().board().ship(type) != null) placedMask |= 1 << type.ordinal();
         }
         String next = state.phase() + ":" + selected + ":" + orientation + ":"
-                + placedMask + ":" + message + ":" + enemyView;
+                + placedMask + ":" + message + ":" + enemyView + ":" + designer + ":" + drawing + ":" + draftCount + ":" + draft;
         this.state = state;
         this.selected = selected;
         this.orientation = orientation;
@@ -120,11 +125,11 @@ public final class PlacementHud {
         buttons.clear();
         if (state == null) return;
         boolean placing = state.phase() == GamePhase.PLACEMENT;
-        panelHeight = placing ? 397 : 160;
+        panelHeight = placing ? (designer ? 435 : 397) : 160;
         panel(36, top - panelHeight, 255, panelHeight,
                 new ColorRGBA(0.003f, 0.007f, 0.021f, 0.89f));
         frame(36, top - panelHeight, 255, panelHeight, GOLD);
-        text(display, placing ? "Assemble fleet"
+        text(display, placing ? (designer ? "Design fleet" : "Assemble fleet")
                 : state.phase() == GamePhase.GAME_OVER ? "Battle complete" : networkPlacement ? "PVP battle" : "Local battle", 25, 54, top - 18, IVORY);
         if (!placing) {
             text(body, enemyView ? "ENEMY WATERS" : "YOUR FLEET", 10, 55, top - 46, GOLD);
@@ -150,21 +155,23 @@ public final class PlacementHud {
             UiTypography.centerIn(text(body, state.player().board().ship(type) == null ? type.length() + " cells" : "Placed",
                     10, 209, y, state.player().board().ship(type) == null ? 0xB6BDCF : CYAN), 209, y, 64, 28);
         }
-        text(body, orientation == ShipOrientation.HORIZONTAL ? "HORIZONTAL  /  T TO ROTATE" : "VERTICAL  /  T TO ROTATE",
-                10, 55, top - 231, CYAN);
-        button(54, top - 281, 106, 27, "Rotate [T]", Action.ROTATE, selected != null && !networkLocked, false);
-        button(167, top - 281, 106, 27, "Remove", Action.REMOVE,
-                selected != null && state.player().board().ship(selected) != null && !networkLocked, false);
-        button(54, top - 313, 106, 27, "Reset [C]", Action.RESET, !networkLocked, false);
-        button(167, top - 313, 106, 27, "Random [F]", Action.RANDOM, !networkLocked, false);
+        text(body, designer ? (draft ? "DRAWN " + draftCount + " / " + selected.length() + " CELLS" : "CONNECT CELLS / T: ROTATE")
+                : orientation == ShipOrientation.HORIZONTAL ? "HORIZONTAL  /  T TO ROTATE" : "VERTICAL  /  T TO ROTATE", 10, 55, top - 231, CYAN);
+        if (designer) button(54, top - 282, 219, 26, drawing ? "DRAW MODE [G]" : "MOVE MODE [G]", Action.TOGGLE_DRAW, !networkLocked, drawing);
+        float shift = designer ? 32 : 0;
+        button(54, top - 281 - shift, 106, 27, "Rotate [T]", Action.ROTATE, selected != null && !networkLocked, false);
+        button(167, top - 281 - shift, 106, 27, draft ? "Cancel" : "Remove", Action.REMOVE,
+                selected != null && (draft || state.player().board().ship(selected) != null) && !networkLocked, false);
+        button(54, top - 313 - shift, 106, 27, "Reset [C]", Action.RESET, !networkLocked, false);
+        button(167, top - 313 - shift, 106, 27, "Random [F]", Action.RANDOM, !networkLocked, false);
         if (networkPlacement) {
-            button(54, top - 350, 106, 30, "Ready", Action.READY, state.canReady() && !networkLocked, false);
-            button(167, top - 350, 106, 30, "Leave", Action.LEAVE_ROOM, true, false);
+            button(54, top - 350 - shift, 106, 30, "Ready", Action.READY, state.canReady() && !networkLocked && !draft, false);
+            button(167, top - 350 - shift, 106, 30, "Leave", Action.LEAVE_ROOM, true, false);
         } else {
-            button(54, top - 350, 219, 30, "Ready", Action.READY, state.canReady(), false);
+            button(54, top - 350 - shift, 219, 30, "Ready", Action.READY, state.canReady(), false);
         }
         String note = message.isBlank() ? "Hover to preview. Click to place." : message;
-        text(body, note, 10, 55, top - 369, 0xB6BDCF);
+        text(body, note, 10, 55, top - 369 - shift, 0xB6BDCF);
     }
 
     private void button(float x, float y, float width, float height, String label,

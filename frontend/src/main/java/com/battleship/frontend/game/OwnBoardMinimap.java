@@ -138,6 +138,16 @@ public final class OwnBoardMinimap {
     }
 
     private void drawShip(Ship ship) {
+        if (ship.custom()) {
+            for (var cell : ship.occupiedCells()) {
+                Vector2f p = center(cell);
+                quad(fleet, "Designed hull cell", p.x - CELL * .44f, p.y - CELL * .44f, CELL * .88f, CELL * .88f, 21,
+                        ship.isSunk() ? sunkHull : hullGold);
+                quad(fleet, "Designed deck cell", p.x - CELL * .36f, p.y - CELL * .36f, CELL * .72f, CELL * .72f, 21.1f,
+                        ship.isSunk() ? sunkHull : hullBlue);
+            }
+            return;
+        }
         Vector2f start = center(ship.occupiedCells().getFirst());
         Vector2f end = center(ship.occupiedCells().getLast());
         float length = start.distance(end) / 2 + CELL * 0.42f;

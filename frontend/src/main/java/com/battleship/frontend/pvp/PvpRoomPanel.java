@@ -26,7 +26,7 @@ import java.util.Optional;
 
 public final class PvpRoomPanel {
     public enum Action {
-        CREATE_ROOM, SHOW_JOIN, JOIN_ROOM, BACK, INVITE_FRIENDS, TOGGLE_READY, LEAVE_ROOM, COPY_CODE
+        CREATE_ROOM, SHOW_JOIN, JOIN_ROOM, BACK, INVITE_FRIENDS, TOGGLE_READY, LEAVE_ROOM, COPY_CODE, TOGGLE_MODE
     }
 
     private enum View { CHOICE, JOIN, WAITING }
@@ -43,6 +43,13 @@ public final class PvpRoomPanel {
     private final BitmapFont body;
     private final List<Button> buttons = new ArrayList<>();
     private View view = View.CHOICE;
+    private com.battleship.shared.game.GameMode selectedMode = com.battleship.shared.game.GameMode.CLASSIC;
+    public com.battleship.shared.game.GameMode selectedMode() { return selectedMode; }
+    public void toggleMode() {
+        if (view != View.CHOICE || busy) return;
+        selectedMode = selectedMode == com.battleship.shared.game.GameMode.CLASSIC ? com.battleship.shared.game.GameMode.DESIGNER : com.battleship.shared.game.GameMode.CLASSIC;
+        rebuild();
+    }
     private RoomSnapshot room;
     private String localClientId;
     private String code = "";
@@ -152,6 +159,7 @@ public final class PvpRoomPanel {
         return switch (action) {
             case INVITE_FRIENDS -> connected && !busy && room != null && room.phase() == RoomPhase.WAITING && room.players().size() < 2;
             case BACK -> !busy;
+            case TOGGLE_MODE -> view == View.CHOICE && connected && !busy;
             case COPY_CODE -> room != null && view == View.WAITING;
             case CREATE_ROOM, SHOW_JOIN -> connected && !busy;
             case JOIN_ROOM -> connected && !busy && code.length() == 6;
@@ -201,6 +209,7 @@ public final class PvpRoomPanel {
         divider(445);
         if (view == View.CHOICE) {
             centered(display, "Two admirals. One ocean.", 23, WIDTH / 2, 404, IVORY);
+            button(34, 164, 372, 42, selectedMode.label().toUpperCase(java.util.Locale.ROOT) + " / CHANGE", Action.TOGGLE_MODE, false);
             button(34, 304, 372, 56, "CREATE ROOM", Action.CREATE_ROOM, true);
             button(34, 232, 372, 56, "JOIN ROOM", Action.SHOW_JOIN, false);
             button(34, 28, 372, 42, "MAIN MENU", Action.BACK, false);
@@ -213,6 +222,7 @@ public final class PvpRoomPanel {
             button(34, 182, 372, 56, "JOIN ROOM", Action.JOIN_ROOM, true);
             button(34, 28, 372, 42, "BACK", Action.BACK, false);
         } else {
+            centered(body, room.mode().label().toUpperCase(java.util.Locale.ROOT), 10, WIDTH / 2, 433, GOLD);
             centered(body, "ROOM CODE", 10, WIDTH / 2, 414, GOLD);
             centered(body, room.roomCode(), 32, 192, 388, CYAN);
             button(314, 354, 72, 34, "COPY", Action.COPY_CODE, false);

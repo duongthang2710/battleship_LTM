@@ -23,6 +23,10 @@ import java.util.logging.Logger;
 public final class GameController {
     private static final Logger LOG = Logger.getLogger(GameController.class.getName());
     private final GameEngine engine;
+    private final ShipDesignEditor designer;
+    private boolean drawingMode;
+    public ShipDesignEditor designer() { return designer; }
+    public boolean designerMode() { return engine.mode() == com.battleship.shared.game.GameMode.DESIGNER; }
     private final BoardPicker picker;
     private final FleetRenderer fleet;
     private final PlacementFeedback feedback;
@@ -57,6 +61,7 @@ public final class GameController {
                           TargetingRenderer targeting, AttackEffectManager effects, GameOverOverlay gameOver,
                           Runnable returnToMenu) {
         this.engine = engine;
+        designer = new ShipDesignEditor(engine);
         this.picker = picker;
         this.fleet = fleet;
         this.feedback = feedback;
@@ -78,6 +83,8 @@ public final class GameController {
 
     public void useLocalMode() {
         networkPlacement = false;
+        designer.clear(); drawingMode = false;
+        engine.restart(); engine.setMode(com.battleship.shared.game.GameMode.CLASSIC);
         network = null;
         networkState = null;
         submitted = false;
@@ -94,6 +101,10 @@ public final class GameController {
     }
 
     public void useNetworkPlacement(String opponent, String roomCode, Side side, PvpController network) {
+        useNetworkPlacement(opponent, roomCode, side, com.battleship.shared.game.GameMode.CLASSIC, network);
+    }
+    public void useNetworkPlacement(String opponent, String roomCode, Side side, com.battleship.shared.game.GameMode mode, PvpController network) {
+        engine.setMode(mode); designer.clear(); drawingMode = designerMode();
         networkPlacement = true;
         this.network = network;
         this.leaveRoom = network::leaveRoom;
@@ -107,7 +118,7 @@ public final class GameController {
         hud.setPlayerName(network.account().displayName());
         hud.setOpponentName(opponent);
         hud.setConnectionStatus("PVP " + roomCode + " / " + side + " / Player 1 starts");
-        message = side + " fleet. Place ships, then Ready.";
+        message = designerMode() ? "Draw connected cells. Right click erases." : side + " fleet. Place ships, then Ready.";
         refresh();
     }
 
@@ -178,7 +189,11 @@ public final class GameController {
         if (draggedShip != null) { dragShip(cursor); return; }
         hover = overHud(cursor) ? null : picker.pick(cursor).orElse(null);
         targeting.clear();
-        if (state().phase() == GamePhase.PLACEMENT && !placementLocked() && hover != null
+        if (state().phase() == GamePhase.PLACEMENT && designerMode() && !placementLocked() && drawingMode) {
+            if (designer.hasDraft()) feedback.showPreview(designer.cells(), designer.validation().success());
+            else if (hover != null) feedback.showPreview(List.of(hover), state().player().board().shipAt(hover) == null);
+            else feedback.clearPreview();
+        } else if (state().phase() == GamePhase.PLACEMENT && !designerMode() && !placementLocked() && hover != null
                 && state().player().board().ship(state().placement().selectedType()) == null) {
             PlacementResult preview = engine.previewPlacement(hover);
             feedback.showPreview(preview.affectedCells(), preview.success());
@@ -204,13 +219,14 @@ public final class GameController {
         update(cursor);
         if (state().phase() == GamePhase.PLACEMENT) {
             if (placementLocked()) return;
+            if (designerMode() && drawingMode) return;
             var hit = picker.pickShip(cursor, fleet.root()).orElse(null);
             Ship placed = hit == null ? (hover == null ? null : state().player().board().shipAt(hover))
                     : state().player().board().ship(hit.type());
             if (placed != null) {
                 engine.selectShip(placed.type());
                 message = selectionMessage();
-            } else if (hover != null && state().player().board().ship(state().placement().selectedType()) == null) {
+            } else if (!designerMode() && hover != null && state().player().board().ship(state().placement().selectedType()) == null) {
                 PlacementResult result = engine.clickPlacement(hover);
                 message = result.success() ? selectionMessage() : failureMessage(result);
             } else {
@@ -221,12 +237,46 @@ public final class GameController {
         else if (state().phase() == GamePhase.BATTLE && hover != null) attack();
     }
 
+    public boolean beginDrawing(Vector2f cursor, boolean erase) {
+        if (!designerMode() || !drawingMode || state().phase() != GamePhase.PLACEMENT || placementLocked() || overHud(cursor)) return false;
+        Coordinate cell = picker.pick(cursor).orElse(null);
+        if (cell == null) return false;
+        Ship placed = state().player().board().shipAt(cell);
+        if (!designer.hasDraft() && placed != null && placed.type() != state().placement().selectedType()) engine.selectShip(placed.type());
+        designer.beginStroke(); designer.paint(cell, erase); refresh();
+        return true;
+    }
+    public void drawAt(Vector2f cursor, boolean erase) {
+        if (!designer.hasDraft() || overHud(cursor)) return;
+        picker.pick(cursor).ifPresent(cell -> { if (designer.paint(cell, erase)) refresh(); });
+    }
+    public void endDrawing() {
+        designer.endStroke();
+        if (!designer.hasDraft()) return;
+        if (designer.cells().isEmpty()) {
+            if (state().player().board().ship(designer.type()) != null) engine.removeSelected();
+            designer.clear(); message = "Hull cleared.";
+        } else {
+            PlacementResult result = designer.commit();
+            if (result.success()) {
+                message = "Hull built. G switches to move mode.";
+                for (ShipType type : ShipType.values()) if (state().player().board().ship(type) == null) { engine.selectShip(type); break; }
+            } else message = result.reason() == PlacementResult.Failure.WRONG_SIZE
+                    ? "Draw " + state().placement().selectedType().length() + " cells; right click erases." : failureMessage(result);
+        }
+        refresh();
+    }
+    public void cancelDrawingStroke() { designer.endStroke(); }
+
     public boolean beginShipDrag(Vector2f cursor) {
-        if (state().phase() != GamePhase.PLACEMENT || placementLocked() || effects.isBusy() || overHud(cursor)) return false;
+        if (state().phase() != GamePhase.PLACEMENT || placementLocked() || effects.isBusy() || overHud(cursor) || designerMode() && drawingMode) return false;
         var hit = picker.pickShip(cursor, fleet.root()).orElse(null);
         if (hit == null) return false;
         engine.selectShip(hit.type());
-        PlacementResult result = engine.clickPlacement(hit.cell());
+        Ship picked = state().player().board().ship(hit.type());
+        Coordinate grab = picked.occupiedCells().contains(hit.cell()) ? hit.cell() : picked.occupiedCells().stream()
+                .min(java.util.Comparator.comparingInt(c -> Math.abs(c.row() - hit.cell().row()) + Math.abs(c.column() - hit.cell().column()))).orElseThrow();
+        PlacementResult result = engine.clickPlacement(grab);
         if (!result.success() || !state().placement().moving()) return false;
         draggedShip = hit.type();
         dragHeight = hit.height();
@@ -279,6 +329,7 @@ public final class GameController {
     public void restartLocalMatch() {
         cancelShipDrag();
         engine.restart();
+        designer.clear(); drawingMode = designerMode();
         networkState = null;
         effects.clear();
         targeting.clear();
@@ -307,6 +358,7 @@ public final class GameController {
                 return;
             }
             cancelShipDrag();
+            if (designer.hasDraft()) { message = "Finish or clear your draft before Ready."; refreshHud(); return; }
             if (state().canReady()) {
                 message = network.submitFleet(state().player().board()) ? "Submitting fleet..." : "Connection unavailable.";
             } else message = submitted ? "Waiting for opponent." : "Place all five ships.";
@@ -314,6 +366,15 @@ public final class GameController {
             return;
         }
         if (state().phase() == GamePhase.PLACEMENT && placementLocked()) return;
+        if (designerMode() && action == PlacementHud.Action.TOGGLE_DRAW && state().phase() == GamePhase.PLACEMENT) {
+            cancelShipDrag(); designer.clear(); drawingMode = !drawingMode;
+            message = drawingMode ? "Left drag draws; right drag erases." : "Drag ships to move; T rotates.";
+            refresh(); return;
+        }
+        if (designerMode() && action == PlacementHud.Action.REMOVE && designer.hasDraft()) { designer.clear(); message = "Draft cancelled."; refresh(); return; }
+        if (designerMode() && action == PlacementHud.Action.ROTATE && draggedShip != null) cancelShipDrag();
+        if (designerMode() && action == PlacementHud.Action.ROTATE && designer.hasDraft()) { message = "Finish or clear the draft before rotating."; refreshHud(); return; }
+        if (action.name().startsWith("SELECT_") || action == PlacementHud.Action.RESET || action == PlacementHud.Action.RANDOM) designer.clear();
         if (draggedShip != null && action != PlacementHud.Action.ROTATE) cancelShipDrag();
         if (action == PlacementHud.Action.RESTART
                 || (action == PlacementHud.Action.READY && state().phase() == GamePhase.GAME_OVER)) {
@@ -377,6 +438,10 @@ public final class GameController {
             case SHIP_NOT_FOUND -> "Select a placed ship.";
             case FLEET_INCOMPLETE -> "Place all five ships before Ready.";
             case INVALID_ARGUMENT -> "Choose a ship and orientation.";
+            case WRONG_SIZE -> "Hull must use exactly the selected ship's cells.";
+            case DISCONNECTED -> "Connect all cells edge-to-edge.";
+            case DUPLICATE_CELLS -> "A ship cannot repeat a cell.";
+            case MODE_MISMATCH -> "Choose Fleet designer to draw ships.";
             case NONE -> "";
         };
     }
@@ -422,6 +487,7 @@ public final class GameController {
     private void refresh() {
         Board visible = enemyView ? state().enemy().board() : state().player().board();
         Side visibleSide = enemyView ? ownSide.opponent() : ownSide;
+        fleet.setEditing(designer.hasDraft() ? designer.type() : null);
         fleet.display(visible, !enemyView, visibleSide == Side.WHITE ? ShipFactory.Fleet.RADIANT : ShipFactory.Fleet.ABYSSAL);
         feedback.displayAttacks(visible);
         var selected = state().player().board().ship(state().placement().selectedType());
@@ -429,6 +495,7 @@ public final class GameController {
             feedback.showSelection(selected.occupiedCells());
         else feedback.clearSelection();
         feedback.clearPreview();
+        if (designer.hasDraft()) feedback.showPreview(designer.cells(), designer.validation().success());
         targeting.clear();
         refreshHud();
     }
@@ -437,9 +504,10 @@ public final class GameController {
         updateTurnClock();
         minimap.update(state().player().board());
         controls.setNetworkLocked(placementLocked());
+        controls.setDesigner(designerMode(), drawingMode, designer.cells().size(), designer.hasDraft());
         controls.update(state(), message, enemyView);
         hud.setControlHints(state().phase() == GamePhase.PLACEMENT
-                ? "Drag ship: move / Click: place\nDrag sea: orbit / Scroll: zoom / R: reset"
+                ? designerMode() ? "G: draw/move / T: rotate / Enter: Ready\nDraw: left drag / Erase: right drag" : "Drag ship: move / Click: place\nDrag sea: orbit / Scroll: zoom / R: reset"
                 : "Click: fire / Tab: switch board\nDrag sea: orbit / Scroll: zoom / R: reset");
         if (state().phase() == GamePhase.PLACEMENT) {
             hud.setGameStatus(submitted ? "Waiting for opponent" : "Deploy your fleet", state().player().board().ships().size()

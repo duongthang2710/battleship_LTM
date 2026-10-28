@@ -15,11 +15,13 @@ public final class GameInput implements ActionListener, AutoCloseable {
     private final InputManager input;
     private final GameController controller;
     private final PointerInput pointer;
+    private final com.battleship.frontend.input.ShipDrawingInput drawing;
     private final Map<String, Action> actions = new LinkedHashMap<>();
 
     public GameInput(InputManager input, GameController controller, OrbitCamera orbit) {
         this.input = input;
         this.controller = controller;
+        drawing = new com.battleship.frontend.input.ShipDrawingInput(input, controller);
         pointer = new PointerInput(input, orbit, controller::primaryClick, new PointerInput.DragHandler() {
             @Override public boolean begin(Vector2f cursor) {
                 return controller.beginShipDrag(cursor);
@@ -34,6 +36,7 @@ public final class GameInput implements ActionListener, AutoCloseable {
         bind(Action.SELECT_SUBMARINE, KeyInput.KEY_4);
         bind(Action.SELECT_DESTROYER, KeyInput.KEY_5);
         bind(Action.ROTATE, KeyInput.KEY_T);
+        bind(Action.TOGGLE_DRAW, KeyInput.KEY_G);
         bind(Action.REMOVE, KeyInput.KEY_DELETE);
         bind(Action.RESET, KeyInput.KEY_C);
         bind(Action.RANDOM, KeyInput.KEY_F);
@@ -56,6 +59,7 @@ public final class GameInput implements ActionListener, AutoCloseable {
     @Override public void close() {
         input.removeListener(this);
         pointer.close();
+        drawing.close();
         for (String name : actions.keySet()) input.deleteMapping(name);
     }
 }

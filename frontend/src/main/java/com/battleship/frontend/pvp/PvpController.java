@@ -215,13 +215,14 @@ public final class PvpController implements AutoCloseable {
         if (!active || !panel.enabled(action)) return;
         switch (action) {
             case INVITE_FRIENDS -> inviteFriendsAction.run();
+            case TOGGLE_MODE -> panel.toggleMode();
             case COPY_CODE -> { } // Clipboard is owned by the UI coordinator.
             case SHOW_JOIN -> { joining = true; panel.showJoin(); setStatus("Enter a six-character room code."); }
             case BACK -> {
                 if (joining) { joining = false; panel.showChoice(); setStatus(connected() ? "Connected" : "Disconnected"); }
                 else { hide(); mainMenu.run(); }
             }
-            case CREATE_ROOM -> { if (account != null) send(MessageType.CREATE_ROOM, null); }
+            case CREATE_ROOM -> { if (account != null) send(MessageType.CREATE_ROOM, new com.battleship.shared.room.CreateRoomRequest(panel.selectedMode())); }
             case JOIN_ROOM -> { if (account != null) send(MessageType.JOIN_ROOM, new JoinRoomRequest(panel.roomCode())); }
             case LEAVE_ROOM -> { leaving = true; send(MessageType.LEAVE_ROOM, null); }
             case TOGGLE_READY -> {

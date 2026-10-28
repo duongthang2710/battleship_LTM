@@ -406,7 +406,7 @@ public final class ScreenController implements AutoCloseable {
         var side = room.players().stream().filter(player -> player.clientId().equals(pvp.clientId()))
                 .findFirst().orElseThrow().side();
         orbit.setPlayerSide(side);
-        game.useNetworkPlacement(opponent, room.roomCode(), side, pvp);
+        game.useNetworkPlacement(opponent, room.roomCode(), side, room.mode(), pvp);
         if (pvp.match() != null) game.applyNetworkState(pvp.match());
         setGameHudVisible(true);
         gameInput = new GameInput(input, game, orbit);
