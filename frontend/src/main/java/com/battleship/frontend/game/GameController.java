@@ -84,7 +84,7 @@ public final class GameController {
     public void useLocalMode() {
         networkPlacement = false;
         designer.clear(); drawingMode = false;
-        engine.restart(); engine.setMode(com.battleship.shared.game.GameMode.CLASSIC);
+        engine.restart(); engine.setRules(com.battleship.shared.game.GameRules.DEFAULT);
         network = null;
         networkState = null;
         submitted = false;
@@ -104,7 +104,11 @@ public final class GameController {
         useNetworkPlacement(opponent, roomCode, side, com.battleship.shared.game.GameMode.CLASSIC, network);
     }
     public void useNetworkPlacement(String opponent, String roomCode, Side side, com.battleship.shared.game.GameMode mode, PvpController network) {
-        engine.setMode(mode); designer.clear(); drawingMode = designerMode();
+        useNetworkPlacement(opponent, roomCode, side, new com.battleship.shared.game.GameRules(mode, 5,
+                com.battleship.shared.game.TurnRule.ALTERNATING), network);
+    }
+    public void useNetworkPlacement(String opponent, String roomCode, Side side, com.battleship.shared.game.GameRules rules, PvpController network) {
+        engine.setRules(rules); designer.clear(); drawingMode = designerMode();
         networkPlacement = true;
         this.network = network;
         this.leaveRoom = network::leaveRoom;
@@ -260,7 +264,7 @@ public final class GameController {
             PlacementResult result = designer.commit();
             if (result.success()) {
                 message = "Hull built. G switches to move mode.";
-                for (ShipType type : ShipType.values()) if (state().player().board().ship(type) == null) { engine.selectShip(type); break; }
+                for (ShipType type : engine.rules().shipTypes()) if (state().player().board().ship(type) == null) { engine.selectShip(type); break; }
             } else message = result.reason() == PlacementResult.Failure.WRONG_SIZE
                     ? "Draw " + state().placement().selectedType().length() + " cells; right click erases." : failureMessage(result);
         }
@@ -344,6 +348,8 @@ public final class GameController {
     }
 
     public void perform(PlacementHud.Action action) {
+        if (action.name().startsWith("SELECT_")
+                && !engine.rules().allows(ShipType.valueOf(action.name().substring(7)))) return;
         if (networkPlacement && action == PlacementHud.Action.LEAVE_ROOM) { cancelShipDrag(); leaveRoom.run(); return; }
         if (effects.isBusy()) return;
         if (networkPlacement && (action == PlacementHud.Action.RESTART
@@ -359,9 +365,9 @@ public final class GameController {
             }
             cancelShipDrag();
             if (designer.hasDraft()) { message = "Finish or clear your draft before Ready."; refreshHud(); return; }
-            if (state().canReady()) {
+            if (engine.canReady()) {
                 message = network.submitFleet(state().player().board()) ? "Submitting fleet..." : "Connection unavailable.";
-            } else message = submitted ? "Waiting for opponent." : "Place all five ships.";
+            } else message = submitted ? "Waiting for opponent." : "Place all " + engine.rules().shipCount() + " ships.";
             refreshHud();
             return;
         }
@@ -436,7 +442,7 @@ public final class GameController {
             case OVERLAP -> "Invalid: overlapping another ship.";
             case PHASE_CLOSED -> "Ship placement is closed.";
             case SHIP_NOT_FOUND -> "Select a placed ship.";
-            case FLEET_INCOMPLETE -> "Place all five ships before Ready.";
+            case FLEET_INCOMPLETE -> "Place every required ship before Ready.";
             case INVALID_ARGUMENT -> "Choose a ship and orientation.";
             case WRONG_SIZE -> "Hull must use exactly the selected ship's cells.";
             case DISCONNECTED -> "Connect all cells edge-to-edge.";
@@ -504,6 +510,7 @@ public final class GameController {
         updateTurnClock();
         minimap.update(state().player().board());
         controls.setNetworkLocked(placementLocked());
+        controls.setRules(engine.rules());
         controls.setDesigner(designerMode(), drawingMode, designer.cells().size(), designer.hasDraft());
         controls.update(state(), message, enemyView);
         hud.setControlHints(state().phase() == GamePhase.PLACEMENT
@@ -511,7 +518,7 @@ public final class GameController {
                 : "Click: fire / Tab: switch board\nDrag sea: orbit / Scroll: zoom / R: reset");
         if (state().phase() == GamePhase.PLACEMENT) {
             hud.setGameStatus(submitted ? "Waiting for opponent" : "Deploy your fleet", state().player().board().ships().size()
-                    + "/5 ships - " + (networkPlacement ? ownSide + " fleet" : "cyan valid / red blocked"));
+                    + "/" + engine.rules().shipCount() + " ships - " + (networkPlacement ? ownSide + " fleet" : "cyan valid / red blocked"));
         } else if (state().phase() == GamePhase.GAME_OVER) {
             hud.setGameStatus(networkPlacement && network.match() != null && network.match().timedOut() ? "Time expired" : "Game over",
                     state().winnerId().equals(state().player().id()) ? "Your fleet wins." : "Enemy fleet wins.");

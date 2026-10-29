@@ -215,14 +215,18 @@ public final class PvpController implements AutoCloseable {
         if (!active || !panel.enabled(action)) return;
         switch (action) {
             case INVITE_FRIENDS -> inviteFriendsAction.run();
+            case SHOW_CREATE -> { joining = false; panel.showCreate(); setStatus(""); }
             case TOGGLE_MODE -> panel.toggleMode();
+            case FEWER_SHIPS -> panel.changeShipCount(-1);
+            case MORE_SHIPS -> panel.changeShipCount(1);
+            case TOGGLE_TURN_RULE -> panel.toggleTurnRule();
             case COPY_CODE -> { } // Clipboard is owned by the UI coordinator.
             case SHOW_JOIN -> { joining = true; panel.showJoin(); setStatus("Enter a six-character room code."); }
             case BACK -> {
-                if (joining) { joining = false; panel.showChoice(); setStatus(connected() ? "Connected" : "Disconnected"); }
+                if (joining || panel.configuring()) { joining = false; panel.showChoice(); setStatus(connected() ? "Connected" : "Disconnected"); }
                 else { hide(); mainMenu.run(); }
             }
-            case CREATE_ROOM -> { if (account != null) send(MessageType.CREATE_ROOM, new com.battleship.shared.room.CreateRoomRequest(panel.selectedMode())); }
+            case CREATE_ROOM -> { if (account != null) send(MessageType.CREATE_ROOM, new com.battleship.shared.room.CreateRoomRequest(panel.selectedRules())); }
             case JOIN_ROOM -> { if (account != null) send(MessageType.JOIN_ROOM, new JoinRoomRequest(panel.roomCode())); }
             case LEAVE_ROOM -> { leaving = true; send(MessageType.LEAVE_ROOM, null); }
             case TOGGLE_READY -> {

@@ -68,6 +68,22 @@ public final class UiFeedbackChecks {
             require(chat.draft().equals("Hel"), "Chat supports held Backspace");
         }
         var room = new PvpRoomPanel(assets); room.setConnection(true, false); room.showChoice();
+        require(room.enabled(PvpRoomPanel.Action.SHOW_CREATE) && !room.enabled(PvpRoomPanel.Action.CREATE_ROOM)
+                && !room.enabled(PvpRoomPanel.Action.TOGGLE_MODE), "PvP choice only opens Create or Join; no settings or creation yet");
+        room.showCreate();
+        require(room.enabled(PvpRoomPanel.Action.CREATE_ROOM), "Settings have explicit Create confirmation");
+        room.changeShipCount(-1); room.changeShipCount(-1); room.changeShipCount(-1);
+        require(room.selectedRules().shipCount() == 3 && !room.enabled(PvpRoomPanel.Action.FEWER_SHIPS), "Minimum three ships");
+        room.changeShipCount(1); room.changeShipCount(1); room.changeShipCount(1);
+        require(room.selectedRules().shipCount() == 5 && !room.enabled(PvpRoomPanel.Action.MORE_SHIPS), "Maximum five ships");
+        room.toggleTurnRule();
+        require(room.selectedRules().turnRule() == com.battleship.shared.game.TurnRule.HIT_CONTINUES, "Hit-again option is selectable");
+        for (int[] size : new int[][] {{960, 600}, {1280, 800}, {1920, 1080}}) {
+            room.resize(size[0], size[1]);
+            for (var action : new PvpRoomPanel.Action[] {PvpRoomPanel.Action.TOGGLE_MODE, PvpRoomPanel.Action.FEWER_SHIPS,
+                    PvpRoomPanel.Action.TOGGLE_TURN_RULE, PvpRoomPanel.Action.CREATE_ROOM, PvpRoomPanel.Action.BACK})
+                require(room.actionAt(room.buttonCenter(action)).orElseThrow() == action, "Settings hit areas scale with the panel");
+        }
         require(room.selectedMode() == com.battleship.shared.game.GameMode.CLASSIC, "Classic remains the default");
         require(room.actionAt(room.buttonCenter(PvpRoomPanel.Action.TOGGLE_MODE)).orElseThrow() == PvpRoomPanel.Action.TOGGLE_MODE, "Mode selection hit target");
         room.toggleMode(); require(room.selectedMode() == com.battleship.shared.game.GameMode.DESIGNER, "Room creator can choose designer");

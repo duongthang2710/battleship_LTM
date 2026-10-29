@@ -157,6 +157,20 @@ public final class DesignerRenderChecks extends SimpleApplication {
             require(engine.state().player().board().ship(ShipType.CARRIER).shape().equals(ShipShapes.rotate(moved.shape())),"Placed custom ship rotates through controller");
             require(cam.getLocation().equals(cameraBefore),"Moving custom ships does not orbit camera");
             System.out.println("PASS: real 3D raycast/drawing input, erase, exclusive camera capture, full designed fleet and custom model drag/rotation.");
+            controller.restartLocalMatch(); engine.setRules(new GameRules(GameMode.DESIGNER, 3, TurnRule.HIT_CONTINUES));
+            stroke(false, List.of(new Coordinate(2, 2)));
+            controller.perform(PlacementHud.Action.SELECT_DESTROYER);
+            require(controller.designer().cells().size() == 1 && engine.state().placement().selectedType() == ShipType.CARRIER,
+                    "Disabled ship hotkey cannot erase a valid draft in a 3-ship room");
+            stroke(false, List.of(new Coordinate(3, 2), new Coordinate(4, 2), new Coordinate(4, 3), new Coordinate(4, 4)));
+            for (var shape : List.of(List.of(new Coordinate(2, 6), new Coordinate(2, 7), new Coordinate(2, 8), new Coordinate(3, 7)),
+                    List.of(new Coordinate(6, 2), new Coordinate(7, 2), new Coordinate(7, 3)))) for (Coordinate cell : shape) stroke(false, List.of(cell));
+            require(engine.canReady() && engine.state().player().board().ships().size() == 3, "3D drawing stops at the configured three ships and enables Ready");
+            var labels = new ArrayList<String>();
+            guiNode.depthFirstTraversal(s -> { if (s instanceof BitmapText text) labels.add(text.getText()); });
+            require(labels.contains("3 / 3 SHIPS PLACED") && labels.stream().noneMatch(s -> s.contains("[4] Submarine") || s.contains("[5] Destroyer")),
+                    "Placement HUD uses configured count and hides disabled types");
+            System.out.println("PASS: actual 3D drawing + HUD for Designer/3 ships; disabled hotkeys preserve draft and Ready follows room settings.");
         }
     }
     private void stroke(boolean erase,List<Coordinate> path) {

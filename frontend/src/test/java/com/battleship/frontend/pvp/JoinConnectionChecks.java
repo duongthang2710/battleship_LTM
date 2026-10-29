@@ -71,10 +71,58 @@ public final class JoinConnectionChecks {
                 }
             }
             checkReconnect(assets);
+            checkCreateConfiguration(assets);
             System.out.println("PASS: rejected Join preserves login; dropped Join reports TCP loss; login navigation retains the reason without automatic reconnect.");
         } finally {
             restore("battleship.port", oldPort); restore("battleship.host", oldHost);
         }
+    }
+    private static void checkCreateConfiguration(DesktopAssetManager assets) throws Exception {
+        var creates = new java.util.concurrent.atomic.AtomicInteger();
+        try (var listener = new ServerSocket(0); var worker = Executors.newSingleThreadExecutor()) {
+            System.setProperty("battleship.port", Integer.toString(listener.getLocalPort()));
+            Future<?> server = worker.submit(() -> {
+                try (Socket socket = listener.accept()) {
+                    var input = new DataInputStream(socket.getInputStream()); var output = new DataOutputStream(socket.getOutputStream());
+                    Message request;
+                    while ((request = MessageCodec.read(input)) != null) switch (request.type()) {
+                        case CONNECT -> MessageCodec.write(output, Message.reply(MessageType.CONNECT_OK, request.requestId(),
+                                new ConnectResponse(new PlayerIdentity("creator", "Admiral"))));
+                        case LOGIN -> MessageCodec.write(output, Message.reply(MessageType.AUTH_SUCCESS, request.requestId(),
+                                new AccountProfile(UUID.randomUUID(), "creator", "Admiral")));
+                        case CREATE_ROOM -> {
+                            creates.incrementAndGet();
+                            var rules = request.payloadAs(CreateRoomRequest.class).rules();
+                            MessageCodec.write(output, Message.reply(MessageType.ROOM_CREATED, request.requestId(),
+                                    new RoomSnapshot("ABC234", List.of(new RoomPlayer("creator", "Admiral", false)), RoomPhase.WAITING, rules)));
+                        }
+                        case PING -> MessageCodec.write(output, Message.reply(MessageType.PONG, request.requestId(), null));
+                        case DISCONNECT -> { return; }
+                        default -> throw new AssertionError("Unexpected configuration request: " + request.type());
+                    }
+                } catch (IOException e) { throw new UncheckedIOException(e); }
+            });
+            var panel = new PvpRoomPanel(assets);
+            try (var client = new PvpController(panel, "Admiral", r -> { }, () -> { }, () -> { }, s -> { }, e -> { })) {
+                client.openAccount(); await(client, client::connected);
+                client.login("creator", "TestPassword!"); await(client, () -> client.account() != null); client.open();
+                client.handle(PvpRoomPanel.Action.SHOW_CREATE);
+                client.handle(PvpRoomPanel.Action.TOGGLE_MODE);
+                client.handle(PvpRoomPanel.Action.FEWER_SHIPS); client.handle(PvpRoomPanel.Action.FEWER_SHIPS);
+                client.handle(PvpRoomPanel.Action.TOGGLE_TURN_RULE);
+                var rules = panel.selectedRules();
+                require(panel.configuring() && !client.pending() && creates.get() == 0, "Editing settings never sends CREATE_ROOM");
+                client.handle(PvpRoomPanel.Action.BACK);
+                require(!panel.configuring() && panel.enabled(PvpRoomPanel.Action.SHOW_CREATE) && client.room() == null, "Back returns to PvP without creating a room");
+                client.handle(PvpRoomPanel.Action.SHOW_CREATE); client.handle(PvpRoomPanel.Action.CREATE_ROOM);
+                await(client, () -> client.room() != null);
+                require(creates.get() == 1 && client.room().rules().equals(rules) && rules.shipCount() == 3
+                        && rules.mode() == com.battleship.shared.game.GameMode.DESIGNER
+                        && rules.turnRule() == com.battleship.shared.game.TurnRule.HIT_CONTINUES, "Confirmation sends selected rules once and consumes authoritative snapshot");
+            }
+            server.get(5, TimeUnit.SECONDS);
+        }
+        System.out.println("PASS client TCP adapter (scripted server): configure/back/confirm sends Designer + 3 ships + hit-again only on confirmation.");
     }
     private static void checkReconnect(DesktopAssetManager assets) throws Exception {
         var drop = new CountDownLatch(1);

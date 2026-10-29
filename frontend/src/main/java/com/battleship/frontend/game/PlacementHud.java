@@ -50,6 +50,8 @@ public final class PlacementHud {
     private float top;
     private float panelHeight;
     private boolean designer, drawing, draft;
+    private com.battleship.shared.game.GameRules rules = com.battleship.shared.game.GameRules.DEFAULT;
+    public void setRules(com.battleship.shared.game.GameRules rules) { this.rules = rules; }
     private int draftCount;
     public void setDesigner(boolean designer, boolean drawing, int count, boolean draft) {
         this.designer = designer; this.drawing = drawing; this.draftCount = count; this.draft = draft;
@@ -92,7 +94,7 @@ public final class PlacementHud {
             if (state.player().board().ship(type) != null) placedMask |= 1 << type.ordinal();
         }
         String next = state.phase() + ":" + selected + ":" + orientation + ":"
-                + placedMask + ":" + message + ":" + enemyView + ":" + designer + ":" + drawing + ":" + draftCount + ":" + draft;
+                + placedMask + ":" + message + ":" + enemyView + ":" + designer + ":" + drawing + ":" + draftCount + ":" + draft + ":" + rules;
         this.state = state;
         this.selected = selected;
         this.orientation = orientation;
@@ -143,8 +145,8 @@ public final class PlacementHud {
             return;
         }
         int placed = state.player().board().ships().size();
-        text(body, placed + " / 5 SHIPS PLACED", 10, 55, top - 40, GOLD);
-        ShipType[] types = ShipType.values();
+        text(body, placed + " / " + rules.shipCount() + " SHIPS PLACED", 10, 55, top - 40, GOLD);
+        ShipType[] types = rules.shipTypes().toArray(ShipType[]::new);
         Action[] selectionActions = {Action.SELECT_CARRIER, Action.SELECT_BATTLESHIP,
                 Action.SELECT_CRUISER, Action.SELECT_SUBMARINE, Action.SELECT_DESTROYER};
         for (int i = 0; i < types.length; i++) {
@@ -165,10 +167,10 @@ public final class PlacementHud {
         button(54, top - 313 - shift, 106, 27, "Reset [C]", Action.RESET, !networkLocked, false);
         button(167, top - 313 - shift, 106, 27, "Random [F]", Action.RANDOM, !networkLocked, false);
         if (networkPlacement) {
-            button(54, top - 350 - shift, 106, 30, "Ready", Action.READY, state.canReady() && !networkLocked && !draft, false);
+            button(54, top - 350 - shift, 106, 30, "Ready", Action.READY, state.canReady(rules) && !networkLocked && !draft, false);
             button(167, top - 350 - shift, 106, 30, "Leave", Action.LEAVE_ROOM, true, false);
         } else {
-            button(54, top - 350 - shift, 219, 30, "Ready", Action.READY, state.canReady(), false);
+            button(54, top - 350 - shift, 219, 30, "Ready", Action.READY, state.canReady(rules), false);
         }
         String note = message.isBlank() ? "Hover to preview. Click to place." : message;
         text(body, note, 10, 55, top - 369 - shift, 0xB6BDCF);

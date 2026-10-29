@@ -644,7 +644,7 @@ public final class PvpRoomRenderChecks extends SimpleApplication {
         var room = screens.pvp().room();
         switch (stage) {
             case 1 -> {
-                if (role.equals("A")) { action(PvpRoomPanel.Action.CREATE_ROOM); stage = 2; }
+                if (role.equals("A")) { createRoom(); stage = 2; }
                 else if (Files.exists(journal.resolve("code"))) { join(Files.readString(journal.resolve("code"))); stage = 2; }
             }
             case 2 -> {
@@ -839,7 +839,7 @@ public final class PvpRoomRenderChecks extends SimpleApplication {
                 }
             }
             case 945 -> {
-                if (screens.roomPanel().visible()) { action(PvpRoomPanel.Action.CREATE_ROOM); stage = 950; }
+                if (screens.roomPanel().visible()) { createRoom(); stage = 950; }
             }
             case 950 -> {
                 if (screens.pvp().room() != null) { screens.pvp().returnToMainMenu(); stage = 96; }
@@ -857,7 +857,7 @@ public final class PvpRoomRenderChecks extends SimpleApplication {
     private void stepA() throws Exception {
         RoomSnapshot room = screens.pvp().room();
         switch (stage) {
-            case 1 -> { if (screens.roomPanel().enabled(PvpRoomPanel.Action.CREATE_ROOM)) { action(PvpRoomPanel.Action.CREATE_ROOM); stage = 2; } }
+            case 1 -> { if (screens.roomPanel().enabled(PvpRoomPanel.Action.SHOW_CREATE)) { createRoom(); stage = 2; } }
             case 2 -> {
                 if (room != null) {
                     code = room.roomCode(); Files.writeString(journal.resolve("code"), code);
@@ -1203,6 +1203,11 @@ public final class PvpRoomRenderChecks extends SimpleApplication {
         for (char character : code.toCharArray()) key(character == 'R' ? KeyInput.KEY_R : 0, character);
         require(screens.roomPanel().roomCode().equals(code), "Room code typed through RoomCodeInput");
         key(KeyInput.KEY_RETURN, '\n');
+    }
+
+    private void createRoom() {
+        action(PvpRoomPanel.Action.SHOW_CREATE);
+        action(PvpRoomPanel.Action.CREATE_ROOM);
     }
 
     private void action(PvpRoomPanel.Action action) {

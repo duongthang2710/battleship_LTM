@@ -26,10 +26,10 @@ import java.util.Optional;
 
 public final class PvpRoomPanel {
     public enum Action {
-        CREATE_ROOM, SHOW_JOIN, JOIN_ROOM, BACK, INVITE_FRIENDS, TOGGLE_READY, LEAVE_ROOM, COPY_CODE, TOGGLE_MODE
+        SHOW_CREATE, CREATE_ROOM, SHOW_JOIN, JOIN_ROOM, BACK, INVITE_FRIENDS, TOGGLE_READY, LEAVE_ROOM, COPY_CODE, TOGGLE_MODE, FEWER_SHIPS, MORE_SHIPS, TOGGLE_TURN_RULE
     }
 
-    private enum View { CHOICE, JOIN, WAITING }
+    private enum View { CHOICE, CREATE, JOIN, WAITING }
 
     private static final float WIDTH = 440;
     private static final float HEIGHT = 580;
@@ -44,9 +44,25 @@ public final class PvpRoomPanel {
     private final List<Button> buttons = new ArrayList<>();
     private View view = View.CHOICE;
     private com.battleship.shared.game.GameMode selectedMode = com.battleship.shared.game.GameMode.CLASSIC;
+    private int selectedShipCount = 5;
+    private com.battleship.shared.game.TurnRule selectedTurnRule = com.battleship.shared.game.TurnRule.ALTERNATING;
+    public com.battleship.shared.game.GameRules selectedRules() {
+        return new com.battleship.shared.game.GameRules(selectedMode, selectedShipCount, selectedTurnRule);
+    }
+    public boolean configuring() { return view == View.CREATE; }
+    public void changeShipCount(int delta) {
+        if (view != View.CREATE || busy) return;
+        selectedShipCount = Math.max(3, Math.min(5, selectedShipCount + delta)); rebuild();
+    }
+    public void toggleTurnRule() {
+        if (view != View.CREATE || busy) return;
+        selectedTurnRule = selectedTurnRule == com.battleship.shared.game.TurnRule.ALTERNATING
+                ? com.battleship.shared.game.TurnRule.HIT_CONTINUES : com.battleship.shared.game.TurnRule.ALTERNATING;
+        rebuild();
+    }
     public com.battleship.shared.game.GameMode selectedMode() { return selectedMode; }
     public void toggleMode() {
-        if (view != View.CHOICE || busy) return;
+        if (view != View.CREATE || busy) return;
         selectedMode = selectedMode == com.battleship.shared.game.GameMode.CLASSIC ? com.battleship.shared.game.GameMode.DESIGNER : com.battleship.shared.game.GameMode.CLASSIC;
         rebuild();
     }
@@ -95,6 +111,11 @@ public final class PvpRoomPanel {
         show();
     }
 
+    public void showCreate() {
+        view = View.CREATE;
+        show();
+    }
+
     public void showJoin() {
         if (view != View.JOIN) code = "";
         view = View.JOIN;
@@ -136,7 +157,7 @@ public final class PvpRoomPanel {
         this.status = status == null ? "" : status;
         if (statusLabel != null) {
             statusLabel.setText(wrapStatus(this.status));
-            center(statusLabel, 107);
+            center(statusLabel, view == View.CREATE ? 37 : 107);
         }
     }
 
@@ -159,9 +180,12 @@ public final class PvpRoomPanel {
         return switch (action) {
             case INVITE_FRIENDS -> connected && !busy && room != null && room.phase() == RoomPhase.WAITING && room.players().size() < 2;
             case BACK -> !busy;
-            case TOGGLE_MODE -> view == View.CHOICE && connected && !busy;
+            case TOGGLE_MODE, TOGGLE_TURN_RULE -> view == View.CREATE && connected && !busy;
+            case FEWER_SHIPS -> view == View.CREATE && selectedShipCount > 3 && connected && !busy;
+            case MORE_SHIPS -> view == View.CREATE && selectedShipCount < 5 && connected && !busy;
             case COPY_CODE -> room != null && view == View.WAITING;
-            case CREATE_ROOM, SHOW_JOIN -> connected && !busy;
+            case SHOW_CREATE, SHOW_JOIN -> view == View.CHOICE && connected && !busy;
+            case CREATE_ROOM -> view == View.CREATE && connected && !busy;
             case JOIN_ROOM -> connected && !busy && code.length() == 6;
             case LEAVE_ROOM -> connected && !busy && room != null;
             case TOGGLE_READY -> connected && !busy && room != null && room.phase() == RoomPhase.WAITING;
@@ -203,16 +227,30 @@ public final class PvpRoomPanel {
         frame(8, 8, WIDTH - 16, HEIGHT - 16,
                 materials.flat(new ColorRGBA(0.38f, 0.32f, 0.22f, 0.55f)), 71);
         diamond(WIDTH / 2, 548, GOLD);
-        centered(display, view == View.WAITING ? "WAITING ROOM" : "PVP", 39, WIDTH / 2, 516, IVORY);
+        centered(display, view == View.WAITING ? "WAITING ROOM" : view == View.CREATE ? "ROOM SETTINGS" : "PVP", 39, WIDTH / 2, 516, IVORY);
         centered(body, connecting ? "CONNECTING TO SERVER" : connected ? "SERVER CONNECTED" : "SERVER DISCONNECTED",
                 10, WIDTH / 2, 468, connected ? CYAN : 0xB4B7C7);
         divider(445);
         if (view == View.CHOICE) {
             centered(display, "Two admirals. One ocean.", 23, WIDTH / 2, 404, IVORY);
-            button(34, 164, 372, 42, selectedMode.label().toUpperCase(java.util.Locale.ROOT) + " / CHANGE", Action.TOGGLE_MODE, false);
-            button(34, 304, 372, 56, "CREATE ROOM", Action.CREATE_ROOM, true);
+            button(34, 304, 372, 56, "CREATE ROOM", Action.SHOW_CREATE, true);
             button(34, 232, 372, 56, "JOIN ROOM", Action.SHOW_JOIN, false);
             button(34, 28, 372, 42, "MAIN MENU", Action.BACK, false);
+        } else if (view == View.CREATE) {
+            centered(body, "GAME MODE", 11, WIDTH / 2, 422, GOLD);
+            button(34, 358, 372, 44, (selectedMode == com.battleship.shared.game.GameMode.CLASSIC ? "BASIC" : "FLEET DESIGNER") + " / CHANGE", Action.TOGGLE_MODE, false);
+            centered(body, "FLEET SIZE", 11, WIDTH / 2, 338, GOLD);
+            button(34, 280, 72, 38, "-", Action.FEWER_SHIPS, false);
+            centered(body, selectedShipCount + " SHIPS", 17, WIDTH / 2, 308, CYAN);
+            button(334, 280, 72, 38, "+", Action.MORE_SHIPS, false);
+            centered(body, "Carrier / Battleship / Cruiser", 10, WIDTH / 2, 269, IVORY);
+            centered(body, selectedShipCount == 3 ? "" : selectedShipCount == 4 ? "+ Submarine" : "+ Submarine / Destroyer", 10, WIDTH / 2, 249, IVORY);
+            centered(body, "TURN RULE", 11, WIDTH / 2, 219, GOLD);
+            button(34, 160, 372, 40, selectedTurnRule.label().toUpperCase(java.util.Locale.ROOT), Action.TOGGLE_TURN_RULE, false);
+            centered(body, selectedTurnRule == com.battleship.shared.game.TurnRule.ALTERNATING
+                    ? "Every valid shot passes the turn." : "Hit or sunk: shoot again. Miss: pass turn.", 10, WIDTH / 2, 148, CYAN);
+            button(34, 87, 372, 42, "CREATE ROOM", Action.CREATE_ROOM, true);
+            button(34, 43, 372, 34, "BACK", Action.BACK, false);
         } else if (view == View.JOIN) {
             centered(body, "ENTER ROOM CODE", 11, WIDTH / 2, 393, GOLD);
             panel(34, 290, 372, 72, new ColorRGBA(0.014f, 0.038f, 0.072f, 1), 72).setMesh(UiShapes.chamfered(372, 72, 9));
@@ -222,18 +260,19 @@ public final class PvpRoomPanel {
             button(34, 182, 372, 56, "JOIN ROOM", Action.JOIN_ROOM, true);
             button(34, 28, 372, 42, "BACK", Action.BACK, false);
         } else {
-            centered(body, room.mode().label().toUpperCase(java.util.Locale.ROOT), 10, WIDTH / 2, 433, GOLD);
+            centered(body, (room.mode() == com.battleship.shared.game.GameMode.CLASSIC ? "BASIC" : "FLEET DESIGNER") + " / " + room.shipCount() + " SHIPS", 10, WIDTH / 2, 433, GOLD);
             centered(body, "ROOM CODE", 10, WIDTH / 2, 414, GOLD);
             centered(body, room.roomCode(), 32, 192, 388, CYAN);
             button(314, 354, 72, 34, "COPY", Action.COPY_CODE, false);
             player(0, 286);
             player(1, 208);
+            centered(body, room.turnRule().label(), 10, WIDTH / 2, 196, CYAN);
             boolean ready = room.players().stream().anyMatch(player -> player.clientId().equals(localClientId) && player.ready());
             button(34, 132, 372, 48, ready ? "NOT READY" : "READY", Action.TOGGLE_READY, true);
             button(34, 28, 180, 42, "INVITE FRIENDS", Action.INVITE_FRIENDS, false);
             button(226, 28, 180, 42, "LEAVE ROOM", Action.LEAVE_ROOM, false);
         }
-        statusLabel = centered(body, wrapStatus(status), 11, WIDTH / 2, 107, 0xB9C7DB);
+        statusLabel = centered(body, wrapStatus(status), view == View.CREATE ? 9 : 11, WIDTH / 2, view == View.CREATE ? 37 : 107, 0xB9C7DB);
         refreshButtons();
     }
 

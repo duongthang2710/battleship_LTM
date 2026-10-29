@@ -85,6 +85,9 @@ public final class TypographyRenderChecks extends SimpleApplication {
         add("settings", preferences.root());
         var room = new PvpRoomPanel(assetManager); room.resize(width, height); room.setConnection(true, false);
         room.showChoice(); add("pvp-choice", room.root());
+        room.showCreate(); add("room-settings-basic", room.root());
+        room.toggleMode(); room.changeShipCount(-1); room.changeShipCount(-1); room.toggleTurnRule();
+        add("room-settings-designer-3", room.root());
         room.showJoin(); for (char c : "ABC2".toCharArray()) room.inputCharacter(c); add("join-input", room.root());
         room.showRoom(new RoomSnapshot("ABC234", List.of(new RoomPlayer("a", "Nguyễn Trường Thắng", true), new RoomPlayer("b", "Đô đốc đại dương", false)), RoomPhase.WAITING), "a");
         add("waiting", room.root());
