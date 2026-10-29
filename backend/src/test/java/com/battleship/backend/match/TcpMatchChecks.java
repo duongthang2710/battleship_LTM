@@ -61,6 +61,7 @@ public final class TcpMatchChecks {
                 b.send(MessageType.SUBMIT_FLEET, fleet());
                 MatchSnapshot sa = a.read(MessageType.START_BATTLE).payloadAs(MatchSnapshot.class);
                 MatchSnapshot sb = b.read(MessageType.START_BATTLE).payloadAs(MatchSnapshot.class);
+                awaitStart(a,b);
                 require(sa.revision() == 3 && sa.revision() == sb.revision() && sa.enemyBoard().ships().isEmpty()
                         && sb.enemyBoard().ships().isEmpty(), "Only accepted fleets change revision; enemy fleets stay hidden");
                 require(sa.currentPlayerId().equals(a.id), "Player 1 starts regardless of color or submission order");
@@ -206,6 +207,7 @@ public final class TcpMatchChecks {
             b.send(MessageType.SUBMIT_FLEET, fleet());
             fresh = a.read(MessageType.START_BATTLE).payloadAs(MatchSnapshot.class);
             b.read(MessageType.START_BATTLE);
+            awaitStart(a,b);
             require(fresh.turnNumber() == 1 && fresh.timer().remainingMillis() > 59_000, "New battle starts a fresh 60-second turn");
             List<Coordinate> cells = fleet().ships().stream().flatMap(ship -> ship.ship().occupiedCells().stream()).toList();
             for (int shot = 0; shot < cells.size() * 2 - 1; shot++) {
@@ -252,6 +254,15 @@ public final class TcpMatchChecks {
         }
     }
 
+    static void awaitStart(Peer a, Peer b) throws IOException {
+        for(Peer peer:List.of(a,b)) {
+            com.battleship.shared.match.TurnTimer tick;
+            do { tick=peer.read(MessageType.TURN_TIMER).payloadAs(com.battleship.shared.match.TurnTimer.class); }
+            while(tick.startsInMillis()>0);
+            require(tick.remainingMillis()>59_000,"First turn retains 60 seconds at START");
+        }
+    }
+
     static FleetSubmission fleet() {
         ShipType[] types = ShipType.values();
         return new FleetSubmission(java.util.stream.IntStream.range(0, types.length)
@@ -284,7 +295,7 @@ public final class TcpMatchChecks {
         Message read(MessageType type) throws IOException {
             Message message;
             do { message = MessageCodec.read(input); }
-            while (message != null && (message.type() == MessageType.TURN_TIMER || message.type() == MessageType.CHAT_CONTEXT));
+            while (message != null && ((message.type() == MessageType.TURN_TIMER && type != MessageType.TURN_TIMER) || message.type() == MessageType.CHAT_CONTEXT));
             require(message != null && message.type() == type, "Expected " + type + ", received " + message);
             return message;
         }

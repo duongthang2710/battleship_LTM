@@ -31,7 +31,7 @@ public final class RoomRulesChecks {
                     && match.snapshot("b").enemyBoard().ships().isEmpty(), "Configured fleet waits privately");
             match.submit("b", fleet);
             require(match.timer().remainingMillis() == 60_000 && match.snapshot("a").currentPlayerId().equals("a"), "Player 1 opens with 60s");
-            now.addAndGet(7_000_000_000L);
+            now.addAndGet(10_000_000_000L);
             require(match.attack("a", new Coordinate(-1, 0)).type() == AttackResultType.INVALID_COORDINATE
                     && match.timer().remainingMillis() == 53_000, "Invalid shot keeps deadline");
             require(match.attack("a", new Coordinate(9, 9)).type() == AttackResultType.MISS

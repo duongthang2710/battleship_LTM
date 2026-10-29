@@ -8,12 +8,22 @@ import java.util.List;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 
-final class MatchTimerChecks {
+public final class MatchTimerChecks {
+    public static void main(String[] args) { run(); }
     static void run() {
         AtomicLong time = new AtomicLong();
         MatchService match = match(time);
-        require(match.timer().remainingMillis() == 60_000, "First turn starts at 60 seconds");
-        time.set(TimeUnit.SECONDS.toNanos(20));
+        require(match.timer().remainingMillis() == 60_000 && match.timer().startsInMillis() == 3000, "Countdown reserves a full first 60-second turn");
+        long initialRevision=match.snapshot("first").revision();
+        require(!match.attack("first",new Coordinate(9,9)).accepted() && match.snapshot("first").revision()==initialRevision,
+                "Server rejects shooting before START without changing state");
+        for(int second=1;second<=3;second++) {
+            time.set(TimeUnit.SECONDS.toNanos(second));
+            require(match.timer().startsInMillis()==(3-second)*1000 && match.timer().remainingMillis()==60_000
+                    && !match.expireTurn(), "3-2-1 progression does not consume first-turn time");
+            require(match.clockUpdate()!=null,"Server broadcasts each countdown boundary, including START");
+        }
+        time.set(TimeUnit.SECONDS.toNanos(23));
         require(match.attack("first", new Coordinate(-1, 0)).type() == AttackResultType.INVALID_COORDINATE,
                 "Invalid coordinate rejected");
         require(match.timer().remainingMillis() == 40_000 && match.snapshot("first").revision() == 3,
@@ -31,11 +41,11 @@ final class MatchTimerChecks {
 
         time.set(0);
         match = match(time);
-        time.set(TimeUnit.SECONDS.toNanos(60) - 1);
+        time.set(TimeUnit.SECONDS.toNanos(63) - 1);
         require(match.attack("first", new Coordinate(9, 9)).accepted(), "One nanosecond before deadline is valid");
-        time.set(TimeUnit.SECONDS.toNanos(60));
+        time.set(TimeUnit.SECONDS.toNanos(63));
         require(!match.expireTurn() && match.phase() == GamePhase.BATTLE, "Old deadline cannot expire new turn");
-        time.set(TimeUnit.SECONDS.toNanos(120) - 1);
+        time.set(TimeUnit.SECONDS.toNanos(123) - 1);
         require(match.expireTurn(), "Exact new deadline expires once");
         var ended = match.snapshot("first");
         require(ended.timedOut() && ended.winnerId().equals("first") && ended.lastAttack() == null,
@@ -47,7 +57,7 @@ final class MatchTimerChecks {
 
         time.set(0);
         match = match(time);
-        time.set(TimeUnit.SECONDS.toNanos(60));
+        time.set(TimeUnit.SECONDS.toNanos(63));
         require(match.attack("first", new Coordinate(0, 0)).type() == AttackResultType.GAME_FINISHED,
                 "A shot processed exactly at expiry loses to timeout");
         require(match.snapshot("second").winnerId().equals("second")
@@ -57,16 +67,16 @@ final class MatchTimerChecks {
         require(disconnected.forfeit("second") && disconnected.snapshot("first").winnerId().equals("first")
                 && disconnected.endReason() == com.battleship.shared.match.MatchEndReason.PLAYER_LEFT, "Disconnect ends a live match");
         long disconnectRevision = disconnected.snapshot("first").revision();
-        disconnectTime.set(TimeUnit.SECONDS.toNanos(120));
+        disconnectTime.set(TimeUnit.SECONDS.toNanos(123));
         require(!disconnected.expireTurn() && !disconnected.forfeit("first")
                 && disconnected.snapshot("first").revision() == disconnectRevision, "Stale timer/disconnect cannot overwrite forfeit");
         AtomicLong boundary = new AtomicLong();
         MatchService deadlineFirst = match(boundary);
-        boundary.set(TimeUnit.SECONDS.toNanos(60));
+        boundary.set(TimeUnit.SECONDS.toNanos(63));
         require(deadlineFirst.forfeit("second") && deadlineFirst.snapshot("first").winnerId().equals("second")
                 && deadlineFirst.endReason() == com.battleship.shared.match.MatchEndReason.TURN_TIMEOUT,
                 "Expired turn takes precedence over a concurrent opponent departure");
-        System.out.println("PASS turn timer: 60 seconds, valid reset, invalid/repeat unchanged, deadline boundary, stale expiry, timeout and post-game guard.");
+        System.out.println("PASS turn timer: synchronized 3-2-1, early-shot guard, full 60 seconds after START, valid reset, invalid/repeat unchanged, deadline boundary, stale expiry, timeout and post-game guard.");
     }
 
     private static MatchService match(AtomicLong time) {

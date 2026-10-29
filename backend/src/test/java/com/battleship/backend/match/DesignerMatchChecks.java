@@ -18,6 +18,7 @@ public final class DesignerMatchChecks {
             match.submit("b",submission);
             require(match.phase()==GamePhase.BATTLE && match.timer().remainingMillis()==60_000 && match.snapshot("a").currentPlayerId().equals("a"),"Server starts with Player 1 / 60 seconds");
             require(match.snapshot("a").ownBoard().board().ship(type).occupiedCells().equals(shape),"Snapshot preserves custom shape");
+            now.addAndGet(3_000_000_000L);
             int hit=0;
             for (Coordinate cell:shape) {
                 var result=match.attack("a",cell); hit++;

@@ -19,6 +19,7 @@ public final class MatchService {
     private static final long TURN_NANOS = TimeUnit.SECONDS.toNanos(60);
     private long revision = 1;
     private long turnDeadline;
+    private long turnStarts;
     private long lastClockSecond = 60;
     private MatchEndReason endReason;
 
@@ -55,12 +56,18 @@ public final class MatchService {
         if (request.ships().size() != engine.rules().shipCount()) throw new IllegalArgumentException(engine.rules().shipCount() == 5 ? "Exactly five ships required." : "Exactly " + engine.rules().shipCount() + " ships required.");
         engine.submitFleet(clientId, request.ships().stream().map(ship -> ship.ship()).toList());
         revision++;
-        if (phase() == GamePhase.BATTLE) startTurn();
+        if (phase() == GamePhase.BATTLE) startTurn(TurnTimer.START_COUNTDOWN_MILLIS);
     }
 
     public AttackResult attack(String clientId, Coordinate cell) {
         // RoomManager holds the same lock for incoming attacks and scheduled expiry.
         expireTurn();
+        if (phase() == GamePhase.BATTLE && nanoTime.getAsLong() - turnStarts < 0) {
+            GameState state = engine.state();
+            String target = state.player().id().equals(clientId) ? state.enemy().id() : state.player().id();
+            return new AttackResult(AttackResultType.NOT_IN_BATTLE, cell, null, false, false,
+                    clientId, target, null, List.of());
+        }
         AttackResult result = engine.attack(clientId, cell);
         if (result.accepted()) {
             revision++;
@@ -71,8 +78,12 @@ public final class MatchService {
     }
 
     private void startTurn() {
-        turnDeadline = nanoTime.getAsLong() + TURN_NANOS;
-        lastClockSecond = 60;
+        startTurn(0);
+    }
+    private void startTurn(long delayMillis) {
+        turnStarts = nanoTime.getAsLong() + TimeUnit.MILLISECONDS.toNanos(delayMillis);
+        turnDeadline = turnStarts + TURN_NANOS;
+        lastClockSecond = delayMillis > 0 ? -4 : 60;
     }
 
     public boolean expireTurn() {
@@ -101,15 +112,18 @@ public final class MatchService {
     }
 
     public TurnTimer timer() {
-        long remaining = phase() == GamePhase.BATTLE ? Math.max(0, turnDeadline - nanoTime.getAsLong()) : 0;
+        long now = nanoTime.getAsLong();
+        long remaining = phase() == GamePhase.BATTLE ? Math.min(TURN_NANOS, Math.max(0, turnDeadline - now)) : 0;
+        long delay = phase() == GamePhase.BATTLE ? Math.max(0, turnStarts - now) : 0;
         return new TurnTimer(revision, engine.state().turnNumber(), engine.state().currentPlayerId(),
-                (remaining + 999_999) / 1_000_000);
+                (remaining + 999_999) / 1_000_000, (delay + 999_999) / 1_000_000);
     }
 
     public TurnTimer clockUpdate() {
         if (phase() != GamePhase.BATTLE) return null;
         TurnTimer timer = timer();
-        long seconds = (timer.remainingMillis() + 999) / 1000;
+        long seconds = timer.startsInMillis() > 0 ? -1 - (timer.startsInMillis() + 999) / 1000
+                : (timer.remainingMillis() + 999) / 1000;
         if (seconds == lastClockSecond) return null;
         lastClockSecond = seconds;
         return timer;

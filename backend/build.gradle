@@ -98,3 +98,11 @@ tasks.register('checkRoomSettingsTcp', JavaExec) {
     workingDir rootProject.projectDir
     onlyIf { providers.gradleProperty('databaseChecks').isPresent() }
 }
+
+
+tasks.register('checkMatchTimer', JavaExec) {
+    dependsOn testClasses
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'com.battleship.backend.match.MatchTimerChecks'
+}
+tasks.named('check') { dependsOn 'checkMatchTimer' }

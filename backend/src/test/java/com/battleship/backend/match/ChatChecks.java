@@ -74,7 +74,7 @@ public final class ChatChecks {
                 ChatContext match = context(a, ChatScope.MATCH, true); ChatContext matchB = context(b, ChatScope.MATCH, true);
                 require(match.contextId().equals(matchB.contextId()), "Both players share new match context");
                 send(a, match, "Battle chat without shooting"); receive(b, m -> m.type() == MessageType.CHAT_MESSAGE);
-                TurnTimer tick = receive(a, m -> m.type() == MessageType.TURN_TIMER).payloadAs(TurnTimer.class);
+                TurnTimer tick = receive(a, m -> m.type() == MessageType.TURN_TIMER && m.payloadAs(TurnTimer.class).startsInMillis()==0 && m.payloadAs(TurnTimer.class).remainingMillis()<60_000).payloadAs(TurnTimer.class);
                 require(tick.matchRevision() == state.revision() && tick.turnNumber() == 1 && tick.currentPlayerId().equals(a.id)
                         && tick.remainingMillis() < state.timer().remainingMillis(), "Chat does not switch turn, increment match revision or reset deadline");
                 var cells = TcpMatchChecks.fleet().ships().stream().flatMap(s -> s.ship().occupiedCells().stream()).toList();

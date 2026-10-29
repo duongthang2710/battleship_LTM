@@ -71,6 +71,7 @@ public final class RoomSettingsTcpChecks {
         require(waiting.fleetSubmitted() && waiting.phase() == GamePhase.PLACEMENT && waiting.ownBoard().shots().isEmpty(), "New configured fleet accepted privately with empty shot history");
         b.send(MessageType.SUBMIT_FLEET, fleet);
         var state = a.read(MessageType.START_BATTLE).payloadAs(MatchSnapshot.class); b.read(MessageType.START_BATTLE);
+        TcpMatchChecks.awaitStart(a,b);
         require(state.currentPlayerId().equals(a.id) && state.timer().remainingMillis() > 59_000 && state.enemyBoard().ships().isEmpty(), "Player 1 / fresh 60s / hidden fleet");
         a.send(MessageType.ATTACK, new AttackRequest(new Coordinate(9, 9)));
         state = a.read(MessageType.MATCH_UPDATED).payloadAs(MatchSnapshot.class); b.read(MessageType.MATCH_UPDATED);

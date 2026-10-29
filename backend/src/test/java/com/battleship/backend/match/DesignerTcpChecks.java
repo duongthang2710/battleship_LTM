@@ -43,6 +43,9 @@ public final class DesignerTcpChecks {
                         b.send(MessageType.SUBMIT_FLEET,valid);
                         var state=a.read(MessageType.START_BATTLE).payloadAs(MatchSnapshot.class); var other=b.read(MessageType.START_BATTLE).payloadAs(MatchSnapshot.class);
                         require(state.currentPlayerId().equals(a.id) && state.timer().remainingMillis()<=60_000 && state.timer().remainingMillis()>59_000 && other.enemyBoard().ships().isEmpty(),"Both peers start with hidden fleet and 60s");
+                        require(state.timer().startsInMillis()>0 && other.timer().startsInMillis()>0,"Both real TCP peers receive countdown");
+                        a.send(MessageType.ATTACK,new AttackRequest(new Coordinate(9,9))); a.read(MessageType.ERROR);
+                        TcpMatchChecks.awaitStart(a,b);
                         a.send(MessageType.ATTACK,new AttackRequest(new Coordinate(9,9))); a.read(MessageType.MATCH_UPDATED); b.read(MessageType.MATCH_UPDATED);
                         b.send(MessageType.ATTACK,new AttackRequest(new Coordinate(9,8))); a.read(MessageType.MATCH_UPDATED); b.read(MessageType.MATCH_UPDATED);
                         var cells=board.ships().stream().flatMap(s -> s.occupiedCells().stream()).toList(); int ai=0,bi=0;
@@ -79,6 +82,7 @@ public final class DesignerTcpChecks {
                     a.send(MessageType.SUBMIT_FLEET,TcpMatchChecks.fleet()); a.read(MessageType.FLEET_ACCEPTED); b.read(MessageType.FLEET_ACCEPTED);
                     b.send(MessageType.SUBMIT_FLEET,TcpMatchChecks.fleet());
                     var classicState=a.read(MessageType.START_BATTLE).payloadAs(MatchSnapshot.class); b.read(MessageType.START_BATTLE);
+                    TcpMatchChecks.awaitStart(a,b);
                     require(classicState.ownBoard().ships().stream().allMatch(p -> p.cells()==null),"Classic keeps the original straight-ship protocol");
                     var classicCells=TcpMatchChecks.fleet().ships().stream().flatMap(p -> p.ship().occupiedCells().stream()).toList();
                     int ai=0,bi=0; TcpMatchChecks.Peer actor=a;
