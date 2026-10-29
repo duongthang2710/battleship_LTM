@@ -39,7 +39,7 @@ public final class GameInviteController {
         if (network.pending()) { panel.error("Finish the current room request before answering or sending an invitation."); return; }
         requestId = network.requestGameInvite(type, payload); sentAt = System.nanoTime();
         if (requestId == null) panel.error("Connect and sign in to invite friends.");
-        else if (current == null) panel.waiting();
+        else if (current == null || current.invite.status() != GameInviteStatus.PENDING) panel.waiting();
         else render();
     }
     public void update() {
@@ -76,11 +76,18 @@ public final class GameInviteController {
             if (current == null || current.invite.inviteId().equals(invite.inviteId()) || response
                     || invite.recipient().id().equals(network.account().id()) && !current.invite.recipient().id().equals(network.account().id())) current = received;
             if (invite.status() == GameInviteStatus.ACCEPTED) network.showInvitedRoom();
+            if (answered(invite) && current != null && current.invite.inviteId().equals(invite.inviteId())) {
+                panel.hide(); next(); return;
+            }
         }
         render();
     }
     private void next() { if (!pending.isEmpty()) { current = pending.values().iterator().next(); render(); } }
     private void render() {
+        if (current != null && answered(current.invite)) { panel.hide(); return; }
         if (current != null) panel.show(current.invite, network.account() != null && current.invite.recipient().id().equals(network.account().id()), busy(), remaining());
+    }
+    private boolean answered(GameInvite invite) {
+        return invite.status() == GameInviteStatus.ACCEPTED || invite.status() == GameInviteStatus.DECLINED;
     }
 }

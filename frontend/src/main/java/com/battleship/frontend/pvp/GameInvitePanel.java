@@ -14,7 +14,8 @@ import java.util.*;
 /** Small global notification above existing menus; it never owns a room or a socket. */
 public final class GameInvitePanel {
     public enum Action { ACCEPT, DECLINE, DISMISS }
-    private static final float WIDTH = 620, HEIGHT = 200;
+    private static final float WIDTH = 432, HEIGHT = 176;
+    private static final float BUTTON_WIDTH = 138, BUTTON_Y = 16, BUTTON_HEIGHT = 32;
     private final Node root = new Node("PvP invitation notification");
     private final Node card = new Node("PvP invitation card");
     private final Materials materials;
@@ -51,14 +52,12 @@ public final class GameInvitePanel {
         visible = true; root.setCullHint(Spatial.CullHint.Never); card.detachAllChildren(); buttons.clear(); seconds = -1;
         rect(0, 0, WIDTH, HEIGHT, new ColorRGBA(.003f, .009f, .025f, .99f));
         frame(0, 0, WIDTH, HEIGHT, 0xDEB663); frame(6, 6, WIDTH - 12, HEIGHT - 12, 0x655638);
-        text(display, title, 26, 22, 172, 0xF4EAD1);
-        text(body, name, 12, 22, 137, 0xDEB663);
-        String wrapped = message.length() > 82 ? message.substring(0, 82) + "\n" + message.substring(82) : message;
-        text(body, wrapped, 11, 22, 110, 0x91CEFF);
-        countdown = text(body, "", 13, 460, 170, 0x91CEFF);
-        if (pending && incoming) { button(Action.ACCEPT, 22, "ACCEPT"); button(Action.DECLINE, 214, "DECLINE"); }
-        else button(Action.DISMISS, 22, "CLOSE");
-        if (busy) text(body, "Waiting for server...", 10, 422, 43, 0xA3AEC2);
+        UiTypography.fit(text(display, title, 24, 18, HEIGHT - 18, 0xF4EAD1), WIDTH - 100);
+        UiTypography.fit(text(body, name, 12, 18, HEIGHT - 51, 0xDEB663), WIDTH - 36);
+        text(body, wrapMessage(message), 11, 18, HEIGHT - 78, 0x91CEFF);
+        countdown = text(body, "", 13, WIDTH - 68, HEIGHT - 20, 0x91CEFF);
+        if (pending && incoming) { button(Action.ACCEPT, 18, "ACCEPT"); button(Action.DECLINE, 172, "DECLINE"); }
+        else button(Action.DISMISS, 18, "CLOSE");
     }
     public void updateCountdown(long millis) {
         long next = Math.max(0, (millis + 999) / 1000);
@@ -71,20 +70,36 @@ public final class GameInvitePanel {
     public Optional<Action> actionAt(Vector2f point) {
         if (!contains(point) || busy) return Optional.empty();
         float x = (point.x - left) / scale, y = (point.y - bottom) / scale;
-        if (y < 22 || y > 60) return Optional.empty();
-        return buttons.entrySet().stream().filter(b -> x >= b.getValue() && x <= b.getValue() + 176
+        if (y < BUTTON_Y || y > BUTTON_Y + BUTTON_HEIGHT) return Optional.empty();
+        return buttons.entrySet().stream().filter(b -> x >= b.getValue() && x <= b.getValue() + BUTTON_WIDTH
                 && (b.getKey() == Action.DISMISS || pending && incoming && seconds > 0)).map(Map.Entry::getKey).findFirst();
     }
     public Vector2f buttonCenter(Action action) {
         Float x = buttons.get(action);
         if (x == null) throw new IllegalArgumentException("Invitation button not shown: " + action);
-        return new Vector2f(left + (x + 88) * scale, bottom + 41 * scale);
+        return new Vector2f(left + (x + BUTTON_WIDTH / 2) * scale, bottom + (BUTTON_Y + BUTTON_HEIGHT / 2) * scale);
     }
     private void button(Action action, float x, String caption) {
-        buttons.put(action, x); rect(x, 22, 176, 38, new ColorRGBA(.025f, .055f, .095f, 1));
-        frame(x, 22, 176, 38, busy ? 0x516275 : 0xDEB663);
-        UiTypography.centerIn(text(body, caption, 12, x, 22, busy ? 0x69788D : 0xF4EAD1), x, 22, 176, 38);
+        buttons.put(action, x); rect(x, BUTTON_Y, BUTTON_WIDTH, BUTTON_HEIGHT, new ColorRGBA(.025f, .055f, .095f, 1));
+        frame(x, BUTTON_Y, BUTTON_WIDTH, BUTTON_HEIGHT, busy ? 0x516275 : 0xDEB663);
+        UiTypography.centerIn(text(body, caption, 12, x, BUTTON_Y, busy ? 0x69788D : 0xF4EAD1), x, BUTTON_Y, BUTTON_WIDTH, BUTTON_HEIGHT);
     }
+    private String wrapMessage(String value) {
+        String message = UiTypography.normalize(value).replaceAll("\\s+", " ").strip();
+        BitmapText probe = new BitmapText(body); probe.setSize(UiTypography.bodySize(11));
+        probe.setText(message);
+        if (probe.getLineWidth() <= WIDTH - 36) return message;
+        int end = message.length();
+        while (end > 0 && probe.getLineWidth() > WIDTH - 36) {
+            end = message.offsetByCodePoints(end, -1); probe.setText(message.substring(0, end));
+        }
+        int word = message.lastIndexOf(' ', end);
+        if (word > 0) end = word;
+        String first = message.substring(0, end).strip();
+        probe.setText(message.substring(end).strip()); UiTypography.fit(probe, WIDTH - 36);
+        return first + "\n" + probe.getText();
+    }
+
     private void frame(float x, float y, float w, float h, int color) {
         ColorRGBA c = Materials.rgb(color);
         rect(x, y, w, .8f, c); rect(x, y + h, w, .8f, c); rect(x, y, .8f, h, c); rect(x + w, y, .8f, h, c);

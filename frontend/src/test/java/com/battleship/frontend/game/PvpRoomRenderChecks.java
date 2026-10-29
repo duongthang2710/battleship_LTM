@@ -361,7 +361,14 @@ public final class PvpRoomRenderChecks extends SimpleApplication {
         }
     }
 
-    private void inviteAction(GameInvitePanel.Action action) { click(screens.gameInvitePanel().buttonCenter(action)); }
+    private void inviteAction(GameInvitePanel.Action action) {
+        var current = screens.gameInvites().current();
+        if (action == GameInvitePanel.Action.DISMISS && current != null
+                && (current.status() == GameInviteStatus.ACCEPTED || current.status() == GameInviteStatus.DECLINED)) {
+            require(!screens.gameInvitePanel().visible(), "Answered invitation closes automatically"); return;
+        }
+        click(screens.gameInvitePanel().buttonCenter(action));
+    }
     private void gameInviteScreens() throws Exception {
         var invite = screens.gameInvites().current();
         var panel = screens.gameInvitePanel();
@@ -1188,7 +1195,7 @@ public final class PvpRoomRenderChecks extends SimpleApplication {
     private void fireWhenOurTurn() throws Exception {
         if (!Files.exists(journal.resolve("a-battle")) || !Files.exists(journal.resolve("b-battle"))) return;
         var state = screens.game().state();
-        if (Files.exists(journal.resolve(role.toLowerCase() + "-fired")) || screens.game().attackAnimating()
+        if (Files.exists(journal.resolve(role.toLowerCase() + "-fired")) || screens.game().inputBusy()
                 || screens.pvp().pending() || !state.currentPlayerId().equals(state.player().id())) return;
         if (!screens.game().enemyView()) screens.game().perform(PlacementHud.Action.TOGGLE_BOARD);
         var screen = cam.getScreenCoordinates(new BoardCoordinates(board).worldCenter(new Coordinate(4, 4), 0.185f));

@@ -272,15 +272,6 @@ tasks.register('checkCursorFocus', JavaExec) {
 }
 
 
-tasks.register('checkGameAudio', JavaExec) {
-    group = 'verification'
-    dependsOn testClasses
-    classpath = sourceSets.test.runtimeClasspath
-    mainClass = 'com.battleship.frontend.audio.AudioChecks'
-    workingDir rootProject.projectDir
-}
-
-
 tasks.register('checkCombatPresentation', JavaExec) {
     group = 'verification'
     dependsOn testClasses
@@ -290,3 +281,21 @@ tasks.register('checkCombatPresentation', JavaExec) {
     jvmArgs '--enable-native-access=ALL-UNNAMED'
     if (hostOs.contains('mac')) jvmArgs '-XstartOnFirstThread'
 }
+
+
+tasks.register('checkGameAudio', JavaExec) {
+    group = 'verification'
+    dependsOn testClasses
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'com.battleship.frontend.audio.AudioChecks'
+    workingDir rootProject.projectDir
+}
+
+
+tasks.register('checkInviteNotifications', JavaExec) {
+    group = 'verification'
+    dependsOn testClasses
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'com.battleship.frontend.pvp.InviteNotificationChecks'
+}
+tasks.named('check') { dependsOn 'checkInviteNotifications' }
