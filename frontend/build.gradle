@@ -258,3 +258,15 @@ tasks.register('checkDisplayWindows', JavaExec) {
     jvmArgs '--enable-native-access=ALL-UNNAMED'
     if (hostOs.contains('mac')) jvmArgs '-XstartOnFirstThread'
 }
+
+
+tasks.register('checkCursorFocus', JavaExec) {
+    group = 'verification'
+    description = 'Checks cursor recovery in the production application after native fullscreen/windowed focus changes.'
+    dependsOn testClasses
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'com.battleship.frontend.settings.CursorFocusChecks'
+    workingDir rootProject.projectDir
+    jvmArgs '--enable-native-access=ALL-UNNAMED'
+    if (hostOs.contains('mac')) jvmArgs '-XstartOnFirstThread'
+}

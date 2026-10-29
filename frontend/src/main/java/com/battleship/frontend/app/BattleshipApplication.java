@@ -16,6 +16,7 @@ public final class BattleshipApplication extends SimpleApplication {
     private OrbitCamera orbit;
     private ScreenController screens;
     private com.battleship.frontend.input.DisplayModeInput displayModeInput;
+    private com.battleship.frontend.ui.FullscreenCursor fullscreenCursor;
     private int hudWidth;
     private int hudHeight;
 
@@ -58,6 +59,7 @@ public final class BattleshipApplication extends SimpleApplication {
         String player = System.getProperty("battleship.player", "Captain");
         var board = battleScene.beginLocalGameplay();
         screens = new ScreenController(assetManager, guiNode, inputManager, cam, orbit, board, player, this::stop, new DisplaySettings(this));
+        fullscreenCursor = new com.battleship.frontend.ui.FullscreenCursor(assetManager, guiNode, inputManager, context, guiViewPort.getCamera());
         resizeHud();
         LOG.info("Account screen ready. Sign in to enter the PvP menu.");
     }
@@ -70,6 +72,7 @@ public final class BattleshipApplication extends SimpleApplication {
         battleScene.update(delta, cam);
         screens.update(delta, inputManager.getCursorPosition());
         if (displayModeInput.pollToggle()) screens.toggleFullscreen();
+        fullscreenCursor.update();
     }
 
     @Override
@@ -100,6 +103,7 @@ public final class BattleshipApplication extends SimpleApplication {
             // InputManager caches visibility; reapply to native input even when its flag is already true.
             context.getMouseInput().setCursorVisible(true);
             inputManager.setMouseCursor(null);
+            if (fullscreenCursor != null) fullscreenCursor.refresh();
         });
     }
 
@@ -126,6 +130,7 @@ public final class BattleshipApplication extends SimpleApplication {
 
     @Override
     public void destroy() {
+        if (fullscreenCursor != null) fullscreenCursor.close();
         if (displayModeInput != null) displayModeInput.close();
         if (screens != null) screens.close();
         super.destroy();
