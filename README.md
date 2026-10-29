@@ -13,7 +13,7 @@ bàn cờ và mô hình tàu 3D. Backend dùng **Java TCP Socket** để quản 
 - **Mời bạn vào PvP:** mời bạn online, Accept/Decline, thời hạn 60 giây; tự tạo hoặc dùng lại phòng chờ.
 - **Friends:** tìm username, gửi/nhận/chấp nhận/từ chối/hủy lời mời, xóa bạn có xác nhận; cập nhật hai phía qua TCP và hiển thị online/offline.
 - **Leaderboard:** xếp hạng toàn server theo số trận thắng, tỷ lệ thắng hoặc số trận; 10 người/trang.
-- **Fleet designer:** tự vẽ hình tàu liền cạnh, model 3D dựng theo đúng vùng ô; chọn chế độ trước khi tạo phòng PvP.
+- **Fleet designer:** tự vẽ hình tàu liền cạnh, model 3D dựng theo đúng vùng ô; chọn chế độ trong màn hình cấu hình phòng PvP.
 - **PvP:** tạo phòng, tham gia bằng mã 6 ký tự, phòng chờ hai người, Ready/Not Ready,
   xếp tàu và đánh trận qua TCP.
 - Server chọn ngẫu nhiên phe trắng/đen khi bắt đầu xếp tàu; Player 1 trong phòng đi trước, độc lập với màu phe.
@@ -21,8 +21,20 @@ bàn cờ và mô hình tàu 3D. Backend dùng **Java TCP Socket** để quản 
 - Kiểm tra vị trí tàu, giới hạn bàn cờ, chồng lấn, lượt bắn, hit/miss/sunk và thắng/thua.
 - Hỗ trợ đặt mới, kéo thả, xoay, xóa, reset và random đội tàu; minimap và hiệu ứng bắn.
 
-Mỗi đội gồm Carrier (5 ô), Battleship (4 ô), Cruiser (3 ô), Submarine (3 ô)
-và Destroyer (2 ô). Tàu không được chồng lấn hoặc nằm ngoài bàn cờ.
+**PvP → Create Room → Room Settings → Create Room**: chọn Basic (tàu thẳng)
+hoặc Fleet Designer (vẽ tàu), số tàu 3–5, và luật bắn. Join Room chỉ cần nhập mã;
+người tham gia nhận cùng cấu hình từ server. Cấu hình giữ nguyên khi chơi lại.
+
+- 3 tàu: Carrier (5 ô), Battleship (4 ô), Cruiser (3 ô).
+- 4 tàu: thêm Submarine (3 ô).
+- 5 tàu: thêm Destroyer (2 ô).
+- **Alternate shots:** mọi phát bắn hợp lệ đều chuyển lượt.
+- **Hit grants another shot:** bắn trúng hoặc đánh chìm được bắn tiếp; trượt thì chuyển lượt.
+
+Player 1 mở trận. Mỗi phát bắn hợp lệ bắt đầu cửa sổ 60 giây tiếp theo (kể cả
+khi giữ lượt); bắn sai/bắn trùng không đặt lại đồng hồ. Hết giờ vẫn thua ngay.
+Tàu không được chồng lấn hoặc nằm ngoài bàn cờ. Server xác thực số lượng,
+đúng các loại tàu đã chọn, hình dạng và lượt chơi; client không tự quyết định luật.
 
 **Settings** đã hoạt động: cửa sổ/toàn màn hình không viền, kích thước cửa sổ, độ nhạy orbit/zoom và lưu cấu hình cục bộ.
 **Profile** hiện hiển thị tài khoản và đăng xuất; chưa có màn lịch sử/thống kê cá nhân.
@@ -103,13 +115,13 @@ sequenceDiagram
     S-->>B: MATCH_UPDATED
 ```
 
-Server xác nhận đủ 5 tàu hợp lệ trước khi bắt đầu Battle. Đội hình sai bị từ chối
+Server xác nhận đủ các loại tàu trong cấu hình phòng (3–5 tàu) trước khi bắt đầu Battle. Đội hình sai bị từ chối
 kèm lý do (thiếu/trùng loại tàu, thiếu dữ liệu, vượt biên hoặc chồng lấn); người chơi
 có thể sửa và gửi lại. Kích thước tàu được server suy ra từ `ShipType`, không tin
 kích thước hay danh sách ô do client tự khai báo. Người Ready trước chờ người còn lại,
 đội hình đã xác nhận bị khóa. Player 1 là người ở vị trí đầu tiên trong phòng chờ.
 Mỗi lượt bắn hợp lệ
-được giải quyết trên server, sau đó đổi lượt kể cả khi bắn trúng.
+được giải quyết trên server; chuyển lượt hay giữ lượt khi trúng theo luật của phòng.
 Mỗi lượt PvP có **60 giây**, bắt đầu khi trận vào Battle và đặt lại sau mỗi phát
 bắn hợp lệ. Bắn sai hoặc bắn trùng không đổi lượt, không đặt lại thời gian.
 Hết giờ, người đang có lượt thua; server gửi kết quả cho cả hai client.
@@ -275,8 +287,8 @@ Thử PvP trên một máy: mở **ba terminal** tại thư mục gốc, mỗi t
 ```
 
 Mỗi client đăng ký/đăng nhập bằng **hai tài khoản khác nhau**. Trên client A chọn
-**PVP → Create Room**; client B chọn **PVP → Join Room** và nhập mã.
-Cả hai Ready trong Waiting Room để vào xếp tàu. Xếp đủ 5 tàu rồi Ready lần nữa;
+**PVP → Create Room → cấu hình → Create Room**; client B chọn **PVP → Join Room** và nhập mã.
+Cả hai Ready trong Waiting Room để vào xếp tàu. Xếp đủ số tàu của phòng rồi Ready lần nữa;
 server khóa đội tàu đã gửi và bắt đầu Battle khi cả hai hoàn tất.
 
 ### macOS / Linux
@@ -324,21 +336,26 @@ là `battleship.host`, `battleship.port`, `battleship.player`.
 Main Menu có **PVP, LEADERBOARD, CREATE ROOM, JOIN ROOM, FRIENDS, PROFILE, SETTINGS, EXIT**.
 Từ **SETTINGS**:
 
-- **WINDOW MODE**: cửa sổ hoặc toàn màn hình không viền ở độ phân giải gốc của màn hình chính. Chuyển chế độ giữ nguyên kết nối TCP và tài nguyên 3D.
+- **WINDOW MODE**: cửa sổ hoặc toàn màn hình không viền ở độ phân giải gốc của màn hình đang chứa cửa sổ. Chuyển chế độ giữ nguyên kết nối TCP và tài nguyên 3D.
 - **WINDOWED SIZE**: chọn trong 960×600, 1280×720, 1440×900, 1600×900, 1920×1080 nếu vừa vùng làm việc của màn hình. Chỉ chỉnh khi ở chế độ cửa sổ; cửa sổ cũng có thể kéo giãn thủ công.
 - **ORBIT / ZOOM SENSITIVITY**: 50–200%, mặc định 100%; giữ nguyên góc nhìn và giới hạn camera hiện có.
 - **APPLY & SAVE** áp dụng và ghi file; **RESET TO SAVED** bỏ bản chỉnh chưa lưu, **BACK / Esc** về menu và bỏ chỉnh sửa chưa lưu.
 - Bảng **Controls** liệt kê thao tác hiện có. Chưa có nhạc/nguồn âm thanh trong game, vì vậy không tạo nút âm lượng không có tác dụng.
 
+**Mỗi lần mở app luôn bắt đầu ở Windowed**, kể cả file cấu hình cũ lưu `fullscreen=true`.
+**Alt+Enter** hoặc Settings cho phép bật fullscreen khi đang sử dụng.
+Windowed có thanh tiêu đề/nút thu nhỏ, phóng to, đóng; fullscreen dùng đúng màn hình đang chứa cửa sổ.
+Trong fullscreen, con trỏ được vẽ trong GUI để không phụ thuộc hình chuột native sau Alt+Tab; Windowed dùng con trỏ hệ thống.
+
 File cấu hình: `%USERPROFILE%\.battleship\settings.properties` trên Windows,
-`~/.battleship/settings.properties` trên macOS/Linux. Tự khôi phục khi mở lại; file sai định dạng dùng mặc định và có thông báo trong Settings.
+`~/.battleship/settings.properties` trên macOS/Linux. Kích thước và độ nhạy được khôi phục khi mở lại; chế độ khởi động luôn là Windowed. File sai định dạng dùng mặc định và có thông báo trong Settings.
 Lưu file chạy riêng khỏi render thread; lỗi ghi được báo và khôi phục giá trị trước đó.
 Cấu hình chỉ chứa màn hình/độ nhạy, không lưu mật khẩu. Chỉ kích thước chọn bằng **APPLY & SAVE** được lưu, không tự lưu thao tác kéo giãn cửa sổ.
 Khi cần hai cấu hình độc lập để kiểm thử bằng Java trực tiếp, đặt `-Dbattleship.settingsFile=<đường-dẫn-file>` cho từng client.
 
 Demo trên một máy: khởi động Docker và database bằng các lệnh ở trên → build → chạy server và hai client trong ba terminal.
 Dùng hai tài khoản khác nhau, client A tạo phòng, client B nhập mã; hoặc kết bạn rồi **INVITE TO BATTLE → ACCEPT**.
-Cả hai Ready phòng → xếp 5 tàu → Ready đội hình → Battle. Mỗi phát hợp lệ đổi lượt; có 60 giây mỗi lượt.
+Cả hai Ready phòng → xếp đủ 3–5 tàu theo cấu hình → Ready đội hình → Battle. Luật chuyển/giữ lượt theo phòng; có 60 giây cho mỗi phát bắn hợp lệ tiếp theo.
 Thử chat chờ/trận, kết quả, **PLAY AGAIN** ở cả hai phía rồi một ván mới trong cùng phòng.
 **MAIN MENU** rời phòng nhưng không dừng server; **PROFILE → SIGN OUT** về đăng nhập. **EXIT** chỉ đóng client đó.
 Sau trận, mở/Refresh Leaderboard để đọc kết quả đã lưu; Profile chưa có trang lịch sử riêng.
@@ -376,7 +393,7 @@ SQL tổng hợp ở database, chỉ trả một trang cùng tổng số ngườ
 | Kéo thả tàu đã đặt | Di chuyển tàu |
 | T / Delete | Xoay / xóa tàu đang chọn |
 | C / F | Reset / random đội tàu |
-| Enter | Ready khi đủ 5 tàu |
+| Enter | Ready khi đủ số tàu theo phòng |
 | Click ô trong Battle | Gửi lệnh bắn |
 | Tab | Đổi board đang xem |
 
@@ -559,7 +576,7 @@ Bài kiểm tra dùng file riêng trong `build/pvp-verification`, không ghi c�
 
 ## Hạm đội tự thiết kế
 
-Trong **PVP**, bấm **CLASSIC FLEET / CHANGE** để chọn **FLEET DESIGNER**, rồi **CREATE ROOM**.
+Trong **PVP → CREATE ROOM**, bấm **BASIC / CHANGE** để chọn **FLEET DESIGNER**, chọn số tàu và luật lượt, rồi xác nhận **CREATE ROOM**.
 Người tham gia bằng mã phòng hoặc lời mời nhận chế độ từ server. Muốn mời bạn chơi chế độ này,
 hãy tạo phòng Fleet designer trước rồi dùng INVITE FRIENDS trong phòng.
 
@@ -567,7 +584,7 @@ hãy tạo phòng Fleet designer trước rồi dùng INVITE FRIENDS trong phòn
 - Chọn tàu bằng nút hoặc **1–5**. Mỗi tàu cần đúng 5/4/3/3/2 ô liền nhau qua cạnh; không nối chỉ bằng góc, chồng lấn hoặc vượt biên.
 - Khi đủ số ô hợp lệ và nhả chuột, model tàu được dựng và lưu vào board. Bản nháp sai hoặc chưa đủ ô hiện đỏ và chưa được gửi server.
 - **G** đổi Draw/Move; ở Move kéo thả tàu đã đặt. **T** xoay tàu đã hoàn tất 90 độ. **Cancel** hủy bản nháp, Remove xóa tàu; Reset/Random dùng luật của chế độ phòng.
-- Ready chỉ cho phép đội hình đủ 5 tàu và không có bản nháp chưa hoàn tất. Server xác thực lại, giữ bí mật tọa độ đối thủ; hit/miss/sunk, timer 60 giây và rematch dùng luồng PvP hiện có.
+- Ready chỉ cho phép đội hình đủ số tàu của phòng và không có bản nháp chưa hoàn tất. Server xác thực lại, giữ bí mật tọa độ đối thủ; hit/miss/sunk, timer 60 giây và rematch dùng luồng PvP hiện có.
 
 Thuật toán bao phủ mọi hình nối cạnh: 2 hình cho 2 ô, 6 hình cho 3 ô, 19 hình cho 4 ô,
 63 hình cho 5 ô (các hướng xoay/lật được tính riêng nếu hình khác nhau). Cruiser/Submarine có cùng
@@ -587,3 +604,11 @@ Kiểm tra riêng: `:shared:designerChecks`, `:backend:checkDesigner`, `:fronten
 Khi PostgreSQL đã chạy, `:backend:checkDesignerTcp -PdatabaseChecks` mở server cổng ngẫu nhiên và hai
 client TCP test, chạy hai ván/rematch rồi dọn đúng tài khoản và lịch sử test vừa tạo.
 Atlas hai phe và danh mục footprint được xuất vào `build/designer-review/` khi chạy rendering check.
+
+
+Kiểm tra cấu hình phòng: `./gradlew build` chạy 12 tổ hợp Basic/Designer × 3–5 tàu × 2 luật lượt
+bằng MatchService với đồng hồ kiểm soát. `./gradlew :backend:checkRoomSettingsTcp -PdatabaseChecks`
+chạy hai kết nối TCP thật qua PostgreSQL, tạo/join phòng, đấu đủ ván và chơi lại;
+chỉ các tài khoản và trận QA do bài kiểm tra này vừa tạo được dọn sau khi chạy.
+Đây là kiểm tra protocol/server, không thay thế kiểm thử thủ công hai cửa sổ 3D.
+Sau khi cập nhật protocol, khởi động lại backend và cả hai client bằng cùng phiên bản.
