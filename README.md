@@ -339,8 +339,8 @@ Từ **SETTINGS**:
 - **WINDOW MODE**: cửa sổ hoặc toàn màn hình không viền ở độ phân giải gốc của màn hình đang chứa cửa sổ. Chuyển chế độ giữ nguyên kết nối TCP và tài nguyên 3D.
 - **WINDOWED SIZE**: chọn trong 960×600, 1280×720, 1440×900, 1600×900, 1920×1080 nếu vừa vùng làm việc của màn hình. Chỉ chỉnh khi ở chế độ cửa sổ; cửa sổ cũng có thể kéo giãn thủ công.
 - **ORBIT / ZOOM SENSITIVITY**: 50–200%, mặc định 100%; giữ nguyên góc nhìn và giới hạn camera hiện có.
-- **APPLY & SAVE** áp dụng và ghi file; **RESET TO SAVED** bỏ bản chỉnh chưa lưu, **BACK / Esc** về menu và bỏ chỉnh sửa chưa lưu.
-- Bảng **Controls** liệt kê thao tác hiện có. Chưa có nhạc/nguồn âm thanh trong game, vì vậy không tạo nút âm lượng không có tác dụng.
+- **APPLY & SAVE** áp dụng và ghi file; **RESET TO SAVED** bỏ bản chỉnh chưa lưu, **BACK / Esc** về màn hình trước đó (kể cả trận đang chơi) và bỏ chỉnh sửa chưa lưu.
+- **Audio** bật/tắt và chỉnh âm lượng tổng cho 34 WAV tải có giấy phép: 29 hiệu ứng, 3 bản nhạc theo màn hình và 2 lớp sóng/gió. Volume/mute được lưu cùng Settings; hiệu ứng và nhạc chạy trên luồng riêng bằng Java Sound. Nguồn, ghi công và cách tải lại: `sounds/ORIGIN.md`, `sounds/manifest.json` và [review âm thanh](docs/downloaded-audio-review.md).
 
 **Mỗi lần mở app luôn bắt đầu ở Windowed**, kể cả file cấu hình cũ lưu `fullscreen=true`.
 **Alt+Enter** hoặc Settings cho phép bật fullscreen khi đang sử dụng.
@@ -590,6 +590,10 @@ Thuật toán bao phủ mọi hình nối cạnh: 2 hình cho 2 ô, 6 hình cho 
 63 hình cho 5 ô (các hướng xoay/lật được tính riêng nếu hình khác nhau). Cruiser/Submarine có cùng
 6 footprint nhưng thiết kế chi tiết khác nhau: tổng 96 mẫu theo loại tàu, 192 model cho hai phe.
 Model được dựng procedural và cache, không dùng asset GLB ngoài. Classic giữ tàu thẳng như cũ.
+Tàu Designer dùng thân hẹp nối đoạn/bo góc theo footprint, giữ palette fantasy của hai phe.
+Đạn bay từ pháo trên tàu ngoài biển; trúng có lửa/khói nổ trên ô, trượt chỉ có nước bắn và ripple.
+Nhãn ở hai cạnh đối diện quay về hai chỗ ngồi, vẫn giữ nguyên mapping ô A–J/1–10.
+Review visual và kiểm tra: [naval-visual-review.md](docs/naval-visual-review.md).
 
 Sau cập nhật, build lại và khởi động lại **backend cùng cả hai client** để dùng chung protocol mới:
 
@@ -612,3 +616,44 @@ chạy hai kết nối TCP thật qua PostgreSQL, tạo/join phòng, đấu đ�
 chỉ các tài khoản và trận QA do bài kiểm tra này vừa tạo được dọn sau khi chạy.
 Đây là kiểm tra protocol/server, không thay thế kiểm thử thủ công hai cửa sổ 3D.
 Sau khi cập nhật protocol, khởi động lại backend và cả hai client bằng cùng phiên bản.
+
+
+### Giao diện đặt tàu và nhịp phát bắn
+
+Chọn tàu trên banner bên trái; `READY!` ở giữa phía dưới xác nhận, nút vòng mũi tên
+bên phải xếp nhanh (F). Nút `...` mở Remove / Reset / Leave; Rotate và Draw/Move ở
+khung hướng dẫn bên phải. Các phím T, C, F, Enter và kéo thả vẫn hoạt động.
+Designer có nút Draw/Move và giữ cách vẽ/xóa hiện tại.
+Mỗi phát bắn được trình diễn khoảng 3,4 giây: đạn bay, hit/miss rồi giữ kết quả
+trước khi cho thao tác bắn tiếp. Đây là nhịp hiển thị trên client; đồng hồ 60 giây
+vẫn chạy theo server. Tàu chìm được hiển thị thành xác ám cháy với mảnh gãy, than hồng
+và khói nhẹ; không làm lộ tàu chưa chìm.
+
+HUD dùng hai chân dung chỉ huy nguyên gốc. Minimap ở phía trên bên trái, hạm đội địch
+ở mép phải; vòng cung xanh/cam quanh avatar là thời gian lượt 60 giây theo server.
+Bánh răng mở Settings và Back trở lại trận; đồng hồ vẫn chạy khi đang mở Settings.
+Âm thanh dùng nguồn tải có giấy phép CC0/CC BY 4.0, không trích xuất từ game Steam. Nguồn asset ở
+`textures/portraits/ORIGIN.md`, `sounds/ORIGIN.md`; font HUD Roboto Condensed Bold dùng
+OFL (`fonts/NavalHud-OFL.txt`). Kiểm tra audio riêng: `:frontend:checkGameAudio`.
+
+
+### Chuẩn bị bắt đầu Battle và bố cục HUD
+
+Khi cả hai đội hình được server chấp nhận, hai client hiển thị **3 → 2 → 1 → START**.
+Server chặn bắn trong 3 giây chuẩn bị; lượt đầu có đủ 60 giây tính từ START. Countdown
+được làm mới cho mỗi ván/rematch và không tạo timer riêng trên render thread.
+Minimap có viền vàng sát mép, nằm trên chat ở cột trái; chat giữ nguyên cạnh trên và
+mở xuống dưới. Các thanh Waiting for opponent / Your fleet / Your turn phía trên đã
+được bỏ; lượt vẫn thể hiện bằng cung thời gian avatar. Biểu tượng hai tờ giấy nhỏ
+cạnh mã phòng dùng để copy.
+
+**Cập nhật xong phải dừng backend/client cũ và khởi động lại backend cùng cả hai client**
+vì dữ liệu timer chung có thêm `startsInMillis`. Lệnh chạy vẫn là `:backend:run` và
+`:frontend:run`. Kiểm tra countdown không cần database: `:backend:checkMatchTimer`;
+kiểm tra hai kết nối TCP thật với PostgreSQL: `:backend:checkDesignerTcp -PdatabaseChecks`.
+
+
+HUD bên trái dùng một trục giữa chung cho avatar, minimap và Chat. Dải trạng thái tàu
+bên phải thuộc đối thủ, nối phía sau avatar đối thủ; từng ô tàu có viền trắng.
+Hộp lời mời PvP được thu gọn và tự đóng ở cả bên gửi/nhận sau Accept hoặc Decline;
+các lỗi hoặc thông báo hết hạn vẫn có nút Close để người chơi đọc được lý do.

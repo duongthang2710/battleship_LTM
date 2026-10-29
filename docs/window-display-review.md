@@ -33,7 +33,7 @@ Nguyên nhân đã xác nhận của việc thiếu nút cửa sổ: cấu hình
   Log frontend thật: `build/window-review/frontend-windowed.log`.
 
 Chưa kiểm tra nhiều màn hình có DPI khác nhau hoặc native macOS trong lượt này.
-Các thay đổi chưa được commit. Không chỉnh visual, gameplay hay backend cho sửa lỗi cửa sổ.
+Trạng thái tại thời điểm review ban đầu: chưa commit. Đã chia commit ngày 29/10/2026: `eb93b89`, `0f39ac1`; chưa push. Không chỉnh visual, gameplay hay backend cho sửa lỗi cửa sổ.
 
 ## Bổ sung 29/10/2026: con trỏ sau Alt+Tab
 

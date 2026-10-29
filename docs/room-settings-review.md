@@ -10,7 +10,7 @@
 | `5c0c586` | Kiểm thử catalog hình, render và trận TCP |
 | `0f8f016` | Tài liệu chế độ Designer |
 
-Chưa push. Các thay đổi cấu hình phòng trong lượt này chưa được commit.
+Tại thời điểm review ban đầu, phần cấu hình phòng chưa commit. Đã chia commit ngày 29/10/2026: `ccb38c9`, `40db70e`; chưa push.
 
 ## Thay đổi và trách nhiệm
 
