@@ -11,7 +11,7 @@ import com.jme3.scene.shape.Quad;
 import java.util.*;
 
 public final class SettingsPanel {
-    public enum Action { MODE, SIZE_PREVIOUS, SIZE_NEXT, ROTATION_DOWN, ROTATION_UP, ZOOM_DOWN, ZOOM_UP, SAVE, RESET, BACK }
+    public enum Action { MODE, SIZE_PREVIOUS, SIZE_NEXT, ROTATION_DOWN, ROTATION_UP, ZOOM_DOWN, ZOOM_UP, SAVE, RESET, BACK, MUTE, VOLUME_DOWN, VOLUME_UP }
     private record Button(Action action, float x, float y, float width) {}
     private static final float WIDTH = 1080, HEIGHT = 690;
     private static final int GOLD = 0xDEB663, IVORY = 0xF4EAD1, CYAN = 0x91CEFF, MUTED = 0xA3AEC2;
@@ -53,6 +53,8 @@ public final class SettingsPanel {
             case ROTATION_UP -> draft.rotation() < 2;
             case ZOOM_DOWN -> draft.zoom() > .5f;
             case ZOOM_UP -> draft.zoom() < 2;
+            case VOLUME_DOWN -> draft.volume() > 0;
+            case VOLUME_UP -> draft.volume() < 1;
             default -> true;
         };
     }
@@ -68,7 +70,7 @@ public final class SettingsPanel {
     public void edit(Action action) {
         if (!enabled(action)) return;
         var size = new ClientPreferences.Resolution(draft.width(), draft.height());
-        boolean fullscreen = draft.fullscreen(); float rotation = draft.rotation(), zoom = draft.zoom();
+        boolean fullscreen = draft.fullscreen(), muted = draft.muted(); float rotation = draft.rotation(), zoom = draft.zoom(), volume = draft.volume();
         switch (action) {
             case MODE -> fullscreen = !fullscreen;
             case SIZE_PREVIOUS, SIZE_NEXT -> size = sizes.get(Math.floorMod(sizes.indexOf(size) + (action == Action.SIZE_NEXT ? 1 : -1), sizes.size()));
@@ -76,9 +78,12 @@ public final class SettingsPanel {
             case ROTATION_UP -> rotation += .25f;
             case ZOOM_DOWN -> zoom -= .25f;
             case ZOOM_UP -> zoom += .25f;
+            case MUTE -> muted = !muted;
+            case VOLUME_DOWN -> volume = Math.max(0, volume - .1f);
+            case VOLUME_UP -> volume = Math.min(1, volume + .1f);
             default -> { return; }
         }
-        draft = new ClientPreferences(size.width(), size.height(), fullscreen, rotation, zoom); status = "Apply and save to use these changes."; rebuild();
+        draft = new ClientPreferences(size.width(), size.height(), fullscreen, rotation, zoom, volume, muted); status = "Apply and save to use these changes."; rebuild();
     }
     private void rebuild() {
         card.detachAllChildren(); buttons.clear();
@@ -93,12 +98,14 @@ public final class SettingsPanel {
         text(body, draft.width() + " x " + draft.height(), 14, 302, 442, CYAN);
         button(Action.SIZE_NEXT, 470, 418, 40, ">");
         text(body, draft.fullscreen() ? "Fullscreen uses the monitor's native size." : "Minimum supported window: 960 x 600.", 12, 32, 397, MUTED);
-        text(display, "Camera controls", 27, 30, 353, IVORY);
+        text(display, "Camera controls", 27, 30, 363, IVORY);
         row("ORBIT SENSITIVITY", draft.rotation(), 298, Action.ROTATION_DOWN, Action.ROTATION_UP);
         row("ZOOM SENSITIVITY", draft.zoom(), 243, Action.ZOOM_DOWN, Action.ZOOM_UP);
-        text(display, "Audio", 27, 30, 203, IVORY);
-        text(body, "No music or sound sources are present in this build.", 13, 32, 174, MUTED);
-        text(body, "Volume controls are unavailable until audio is added.", 13, 32, 155, MUTED);
+        text(display, "Audio", 27, 30, 220, IVORY);
+        button(Action.MUTE, 32, 145, 170, draft.muted() ? "SOUND: OFF" : "SOUND: ON");
+        button(Action.VOLUME_DOWN, 235, 145, 40, "-");
+        text(body, Math.round(draft.volume()*100) + "%", 14, 331, 169, CYAN);
+        button(Action.VOLUME_UP, 470, 145, 40, "+");
         text(display, "Controls", 27, 565, 535, IVORY);
         String[] controls = {"Left drag: orbit / Wheel: zoom", "R: restore default view", "PLACEMENT", "1-5: select / Click: place", "Drag a placed ship to move it", "T: rotate / Delete: remove", "C: reset / F: random fleet", "Enter: confirm complete fleet", "BATTLE", "Click enemy cell: fire", "Tab: switch board / 60s per turn", "CHAT", "Enter: focus / send", "Esc: leave input", "Wheel / PgUp / PgDn: history", "Click + / -: expand / collapse"};
         for (int i = 0; i < controls.length; i++) text(body, controls[i], 13, 567, 499 - i * 22.5f,

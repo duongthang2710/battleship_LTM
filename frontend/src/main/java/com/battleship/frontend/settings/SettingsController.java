@@ -16,6 +16,8 @@ public final class SettingsController implements AutoCloseable {
     private ClientPreferences current = ClientPreferences.defaults();
     private List<ClientPreferences.Resolution> sizes = ClientPreferences.RESOLUTIONS;
     private boolean ready, saving, displayAvailable;
+    private java.util.function.Consumer<ClientPreferences> audioSettings = value -> { };
+    public void onAudioSettings(java.util.function.Consumer<ClientPreferences> action) { audioSettings = action; if (ready) action.accept(current); }
     private String status = "Loading settings...";
 
     public SettingsController(SettingsPanel panel, OrbitCamera orbit, DisplaySettings display, Runnable back) {
@@ -31,6 +33,7 @@ public final class SettingsController implements AutoCloseable {
             }
         } catch (RuntimeException exception) { status = "Display settings unavailable: " + exception.getMessage(); }
         orbit.setSensitivity(current.rotation(), current.zoom());
+        audioSettings.accept(current);
         ready = true; refresh();
     }
     public ClientPreferences current() { return current; }
@@ -52,11 +55,12 @@ public final class SettingsController implements AutoCloseable {
     }
     public void toggleFullscreen() {
         if (!ready || saving || !displayAvailable) return;
-        save(new ClientPreferences(current.width(), current.height(), !display.fullscreen(), current.rotation(), current.zoom()));
+        save(new ClientPreferences(current.width(), current.height(), !display.fullscreen(), current.rotation(), current.zoom(), current.volume(), current.muted()));
     }
     private void apply(ClientPreferences value) {
         if (displayAvailable) display.apply(value);
         orbit.setSensitivity(value.rotation(), value.zoom());
+        audioSettings.accept(value);
     }
     private void save() { save(panel.draft()); }
     private void save(ClientPreferences requested) {

@@ -1,0 +1,351 @@
+{
+  "click.wav": {
+    "source_file": "click_003.ogg",
+    "source_page": "https://kenney.nl/assets/interface-sounds",
+    "author": "Kenney",
+    "license": "CC0-1.0",
+    "loop": false,
+    "seconds": 0.1,
+    "sha256": "fdeddae3bafa81add04bc0687c690245b163a47991d926321e92bd7c20104e43",
+    "edits": "PCM16 44.1kHz; peak level; fades/trim"
+  },
+  "ready.wav": {
+    "source_file": "confirmation_002.ogg",
+    "source_page": "https://kenney.nl/assets/interface-sounds",
+    "author": "Kenney",
+    "license": "CC0-1.0",
+    "loop": false,
+    "seconds": 0.539,
+    "sha256": "c81d3f9a833c6c0b5df9271054dc14abff88de44a10e03ce3e2a8a2013f6ed17",
+    "edits": "PCM16 44.1kHz; peak level; fades/trim"
+  },
+  "ui_back.wav": {
+    "source_file": "back_001.ogg",
+    "source_page": "https://kenney.nl/assets/interface-sounds",
+    "author": "Kenney",
+    "license": "CC0-1.0",
+    "loop": false,
+    "seconds": 0.1,
+    "sha256": "c3821606f3a04e578123c5f6f32587af164f745d6e8186b7b9a2aab2d37a4f1d",
+    "edits": "PCM16 44.1kHz; peak level; fades/trim"
+  },
+  "ui_panel_open.wav": {
+    "source_file": "open_001.ogg",
+    "source_page": "https://kenney.nl/assets/interface-sounds",
+    "author": "Kenney",
+    "license": "CC0-1.0",
+    "loop": false,
+    "seconds": 0.148,
+    "sha256": "61087a6facb6d02a9a376223775710ec09dd165bb45d27262d2a775b6c33c3a9",
+    "edits": "PCM16 44.1kHz; peak level; fades/trim"
+  },
+  "ui_panel_close.wav": {
+    "source_file": "close_001.ogg",
+    "source_page": "https://kenney.nl/assets/interface-sounds",
+    "author": "Kenney",
+    "license": "CC0-1.0",
+    "loop": false,
+    "seconds": 0.148,
+    "sha256": "d9fd7ea7e6bc4855ab96d08e70184e3e2f1bb26586bb4eaf129c55013e721890",
+    "edits": "PCM16 44.1kHz; peak level; fades/trim"
+  },
+  "ui_error.wav": {
+    "source_file": "error_004.ogg",
+    "source_page": "https://kenney.nl/assets/interface-sounds",
+    "author": "Kenney",
+    "license": "CC0-1.0",
+    "loop": false,
+    "seconds": 0.104,
+    "sha256": "009cbb798f556f6773490e463363589758753dc4221e87c76d55b816b631377a",
+    "edits": "PCM16 44.1kHz; peak level; fades/trim"
+  },
+  "ship_remove.wav": {
+    "source_file": "drop_002.ogg",
+    "source_page": "https://kenney.nl/assets/interface-sounds",
+    "author": "Kenney",
+    "license": "CC0-1.0",
+    "loop": false,
+    "seconds": 0.188,
+    "sha256": "d7402b3b5540fe6eb1776c0b00d7ea55d325852209f3f9a623650cb674585b07",
+    "edits": "PCM16 44.1kHz; peak level; fades/trim"
+  },
+  "fleet_random.wav": {
+    "source_file": "confirmation_001.ogg",
+    "source_page": "https://kenney.nl/assets/interface-sounds",
+    "author": "Kenney",
+    "license": "CC0-1.0",
+    "loop": false,
+    "seconds": 0.29,
+    "sha256": "107408939d2598dd42836761e7697662aaa2233f070700ff22f44bfb798b7cb2",
+    "edits": "PCM16 44.1kHz; peak level; fades/trim"
+  },
+  "turn_yours.wav": {
+    "source_file": "confirmation_004.ogg",
+    "source_page": "https://kenney.nl/assets/interface-sounds",
+    "author": "Kenney",
+    "license": "CC0-1.0",
+    "loop": false,
+    "seconds": 0.49,
+    "sha256": "5af6443e43c9d108b1d6385d2d22900e10a977b9a6fe8eb62f5dcd99d86869f4",
+    "edits": "PCM16 44.1kHz; peak level; fades/trim"
+  },
+  "turn_enemy.wav": {
+    "source_file": "select_003.ogg",
+    "source_page": "https://kenney.nl/assets/interface-sounds",
+    "author": "Kenney",
+    "license": "CC0-1.0",
+    "loop": false,
+    "seconds": 0.278,
+    "sha256": "b985ee45a8cec299cd5f2363482f78cba3e75916ee58edea6837a166adfdfccd",
+    "edits": "PCM16 44.1kHz; peak level; fades/trim"
+  },
+  "target_select.wav": {
+    "source_file": "select_001.ogg",
+    "source_page": "https://kenney.nl/assets/interface-sounds",
+    "author": "Kenney",
+    "license": "CC0-1.0",
+    "loop": false,
+    "seconds": 0.1,
+    "sha256": "166ae440043342846285d7f3621ff8540e802dbe1e3b93ba438d061f5653e4d6",
+    "edits": "PCM16 44.1kHz; peak level; fades/trim"
+  },
+  "timer_warning.wav": {
+    "source_file": "question_003.ogg",
+    "source_page": "https://kenney.nl/assets/interface-sounds",
+    "author": "Kenney",
+    "license": "CC0-1.0",
+    "loop": false,
+    "seconds": 0.33,
+    "sha256": "46550a5a267caedb7e3ead3343b4375b6cae52e42902b3a8bd818423f4cde34f",
+    "edits": "PCM16 44.1kHz; peak level; fades/trim"
+  },
+  "timer_timeout.wav": {
+    "source_file": "error_003.ogg",
+    "source_page": "https://kenney.nl/assets/interface-sounds",
+    "author": "Kenney",
+    "license": "CC0-1.0",
+    "loop": false,
+    "seconds": 0.533,
+    "sha256": "e7a3bcc7d73b89c2f7e97e27d6ca65d22b5d0a0b9560aed806e65059021d454e",
+    "edits": "PCM16 44.1kHz; peak level; fades/trim"
+  },
+  "chat_receive.wav": {
+    "source_file": "pluck_001.ogg",
+    "source_page": "https://kenney.nl/assets/interface-sounds",
+    "author": "Kenney",
+    "license": "CC0-1.0",
+    "loop": false,
+    "seconds": 0.1,
+    "sha256": "36c2395f55f86a1e1a7f592d555304ba0e09710c99295f0810eb3ea1a5cd9de4",
+    "edits": "PCM16 44.1kHz; peak level; fades/trim"
+  },
+  "invite_receive.wav": {
+    "source_file": "question_002.ogg",
+    "source_page": "https://kenney.nl/assets/interface-sounds",
+    "author": "Kenney",
+    "license": "CC0-1.0",
+    "loop": false,
+    "seconds": 0.333,
+    "sha256": "352850092fa5daf579833aa6fdb8b3452518e68d944dbfb478e8c544617950c1",
+    "edits": "PCM16 44.1kHz; peak level; fades/trim"
+  },
+  "room_join.wav": {
+    "source_file": "confirmation_003.ogg",
+    "source_page": "https://kenney.nl/assets/interface-sounds",
+    "author": "Kenney",
+    "license": "CC0-1.0",
+    "loop": false,
+    "seconds": 0.322,
+    "sha256": "845085d763f47840ab5c3792bb1f8910019a356f12440d8b9b88a6b5592a7796",
+    "edits": "PCM16 44.1kHz; peak level; fades/trim"
+  },
+  "room_leave.wav": {
+    "source_file": "back_002.ogg",
+    "source_page": "https://kenney.nl/assets/interface-sounds",
+    "author": "Kenney",
+    "license": "CC0-1.0",
+    "loop": false,
+    "seconds": 0.1,
+    "sha256": "a29458a5f92ad787abcc2c32b0df90db43962f9e03cfdfe0721744d96dcba286",
+    "edits": "PCM16 44.1kHz; peak level; fades/trim"
+  },
+  "connection_lost.wav": {
+    "source_file": "error_005.ogg",
+    "source_page": "https://kenney.nl/assets/interface-sounds",
+    "author": "Kenney",
+    "license": "CC0-1.0",
+    "loop": false,
+    "seconds": 0.244,
+    "sha256": "43e17931e75ba38c839e5914e37d5cc0546cb862c79705cc52e3e9ba165d07ea",
+    "edits": "PCM16 44.1kHz; peak level; fades/trim"
+  },
+  "rematch_request.wav": {
+    "source_file": "question_001.ogg",
+    "source_page": "https://kenney.nl/assets/interface-sounds",
+    "author": "Kenney",
+    "license": "CC0-1.0",
+    "loop": false,
+    "seconds": 0.491,
+    "sha256": "8ad69c4289cd9333b5258ab306758c66f426a688a0d2a9853e4f149f0d9991d0",
+    "edits": "PCM16 44.1kHz; peak level; fades/trim"
+  },
+  "ui_hover.wav": {
+    "source_file": "rollover2.ogg",
+    "source_page": "https://kenney.nl/assets/ui-audio",
+    "author": "Kenney",
+    "license": "CC0-1.0",
+    "loop": false,
+    "seconds": 0.1,
+    "sha256": "dfc81ea5eff1f701b038567fd2e31935155bbc237ed5136b47cba043c203ffc2",
+    "edits": "PCM16 44.1kHz; peak level; fades/trim"
+  },
+  "ship_rotate.wav": {
+    "source_file": "switch3.ogg",
+    "source_page": "https://kenney.nl/assets/ui-audio",
+    "author": "Kenney",
+    "license": "CC0-1.0",
+    "loop": false,
+    "seconds": 0.291,
+    "sha256": "4d3eef6cfdef6d47751099d0ec3087b083eb558823200480dfca18fb885028b7",
+    "edits": "PCM16 44.1kHz; peak level; fades/trim"
+  },
+  "place.wav": {
+    "source_file": "impactWood_light_000.ogg",
+    "source_page": "https://kenney.nl/assets/impact-sounds",
+    "author": "Kenney",
+    "license": "CC0-1.0",
+    "loop": false,
+    "seconds": 0.263,
+    "sha256": "60d0691c7b3f00be2e56646c52b22d9026bb18dc7f4c9d7bd32d662aae72914c",
+    "edits": "PCM16 44.1kHz; peak level; fades/trim"
+  },
+  "victory.wav": {
+    "source_file": "jingles_PIZZI00.ogg",
+    "source_page": "https://kenney.nl/assets/music-jingles",
+    "author": "Kenney",
+    "license": "CC0-1.0",
+    "loop": false,
+    "seconds": 0.494,
+    "sha256": "36acfe045dfa640dedda91e72318e5ae9f1601663c7d0eeba3377e4b1b65d0dc",
+    "edits": "PCM16 44.1kHz; peak level; fades/trim"
+  },
+  "defeat.wav": {
+    "source_file": "jingles_PIZZI01.ogg",
+    "source_page": "https://kenney.nl/assets/music-jingles",
+    "author": "Kenney",
+    "license": "CC0-1.0",
+    "loop": false,
+    "seconds": 0.992,
+    "sha256": "3012c47f3d7a3afe6ee788645a9d97fad868dd06a762b50a91ccf790b7ad3c1c",
+    "edits": "PCM16 44.1kHz; peak level; fades/trim"
+  },
+  "match_start.wav": {
+    "source_file": "jingles_PIZZI02.ogg",
+    "source_page": "https://kenney.nl/assets/music-jingles",
+    "author": "Kenney",
+    "license": "CC0-1.0",
+    "loop": false,
+    "seconds": 0.951,
+    "sha256": "7f0ce3da177a839cf9fbe03105a724c38260aa9fabda5cbff8eda0f3700be89d",
+    "edits": "PCM16 44.1kHz; peak level; fades/trim"
+  },
+  "cannon.wav": {
+    "source_file": "cannon_fire_1.ogg",
+    "source_page": "https://opengameart.org/content/battle-at-sea",
+    "author": "Thimras",
+    "license": "CC0-1.0",
+    "loop": false,
+    "seconds": 2.933,
+    "sha256": "364f7f6cf2dbf8a9c0bbbe0475546c38c2777b1983f7dd156145b89dea9645b0",
+    "edits": "PCM16 44.1kHz; peak level; fades/trim",
+    "download_url": "https://opengameart.org/sites/default/files/cannon_fire_1.ogg"
+  },
+  "hit.wav": {
+    "source_file": "cannon_hit_ship_short.ogg",
+    "source_page": "https://opengameart.org/content/battle-at-sea",
+    "author": "Thimras",
+    "license": "CC0-1.0",
+    "loop": false,
+    "seconds": 3.19,
+    "sha256": "5badee3506e0ffb5b8d4228ef913067c49a3f79e5eb969f93e118ede95d6f10b",
+    "edits": "PCM16 44.1kHz; peak level; fades/trim",
+    "download_url": "https://opengameart.org/sites/default/files/cannon_hit_ship_short.ogg"
+  },
+  "splash.wav": {
+    "source_file": "cannon_miss_1.ogg",
+    "source_page": "https://opengameart.org/content/battle-at-sea",
+    "author": "Thimras",
+    "license": "CC0-1.0",
+    "loop": false,
+    "seconds": 1.606,
+    "sha256": "ba16ef804de7faf45c64ecf97f1f9a46f43f1a3baf395911563de64ab5cff865",
+    "edits": "PCM16 44.1kHz; peak level; fades/trim",
+    "download_url": "https://opengameart.org/sites/default/files/cannon_miss_1.ogg"
+  },
+  "sunk.wav": {
+    "source_file": "ship_destroyed_short.ogg",
+    "source_page": "https://opengameart.org/content/battle-at-sea",
+    "author": "Thimras",
+    "license": "CC0-1.0",
+    "loop": false,
+    "seconds": 10.274,
+    "sha256": "b7560b3fcf1bbe62fb4b3633389b44ddfaa1e31e424311af9ca231d570c702ca",
+    "edits": "PCM16 44.1kHz; peak level; fades/trim",
+    "download_url": "https://opengameart.org/sites/default/files/ship_destroyed_short.ogg"
+  },
+  "bgm_menu.wav": {
+    "source_file": "sb_signaltonoise.mp3",
+    "source_page": "https://www.scottbuckley.com.au/library/signal-to-noise/",
+    "author": "Scott Buckley",
+    "license": "CC-BY-4.0",
+    "loop": true,
+    "seconds": 64.0,
+    "sha256": "14dfb730dccb11fc5eb858238e338aa3e9b359ff6327d969910f0de59b8826e4",
+    "edits": "PCM16 44.1kHz; peak level; fades/trim; circular crossfade",
+    "download_url": "https://www.scottbuckley.com.au/library/wp-content/uploads/2020/04/sb_signaltonoise.mp3"
+  },
+  "bgm_placement.wav": {
+    "source_file": "sb_intervention_nomelody.mp3",
+    "source_page": "https://www.scottbuckley.com.au/library/intervention/",
+    "author": "Scott Buckley",
+    "license": "CC-BY-4.0",
+    "loop": true,
+    "seconds": 64.0,
+    "sha256": "18ab0c92e34c7ac309e5c1f94241182b2f90839fc272340222b45b29b47aae00",
+    "edits": "PCM16 44.1kHz; peak level; fades/trim; circular crossfade",
+    "download_url": "https://www.scottbuckley.com.au/library/wp-content/uploads/2019/01/sb_intervention_nomelody.mp3"
+  },
+  "bgm_battle.wav": {
+    "source_file": "esa.ogg",
+    "source_page": "https://opengameart.org/content/enemy-ship-approaching",
+    "author": "yd",
+    "license": "CC0-1.0",
+    "loop": true,
+    "seconds": 39.659,
+    "sha256": "ffdfd748ca6cdd41fd0641e7bdcf39a9e7de67f64ed7a6903a957a0bc5347858",
+    "edits": "PCM16 44.1kHz; peak level; fades/trim; circular crossfade",
+    "download_url": "https://opengameart.org/sites/default/files/esa.ogg"
+  },
+  "amb_ocean.wav": {
+    "source_file": "wave_01_cc0-18363__jasinski__alkaibeach.flac + wave_02_cc0-18363__jasinski__alkaibeach.flac + wave_03_cc0-18363__jasinski__alkaibeach.flac + wave_04_cc0-18363__jasinski__alkaibeach.flac",
+    "source_page": "https://opengameart.org/content/beach-ocean-waves",
+    "author": "jasinski / qubodup",
+    "license": "CC0-1.0",
+    "loop": true,
+    "seconds": 9.511,
+    "sha256": "e89b6bbe5e71e0e300e703dc90714e649b02481f75676dd5de654c4623c48430",
+    "edits": "PCM16 44.1kHz; peak level; fades/trim; circular crossfade",
+    "download_url": "https://opengameart.org/sites/default/files/wave_01_cc0-18363__jasinski__alkaibeach.flac"
+  },
+  "amb_wind.wav": {
+    "source_file": "wind1.wav",
+    "source_page": "https://opengameart.org/content/wind1",
+    "author": "Luke.RUSTLTD",
+    "license": "CC0-1.0",
+    "loop": true,
+    "seconds": 57.999,
+    "sha256": "4a2a47b107b071cae76476550c16f893ee53c4ddcde55e02bc8600505f6c5b20",
+    "edits": "PCM16 44.1kHz; peak level; fades/trim; circular crossfade",
+    "download_url": "https://opengameart.org/sites/default/files/wind1.wav"
+  }
+}

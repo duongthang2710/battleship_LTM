@@ -53,7 +53,7 @@ public final class DisplaySettings {
         var sizes = resolutions();
         if (sizes.contains(new ClientPreferences.Resolution(value.width(), value.height()))) return value;
         var size = sizes.getLast();
-        return new ClientPreferences(size.width(), size.height(), value.fullscreen(), value.rotation(), value.zoom());
+        return new ClientPreferences(size.width(), size.height(), value.fullscreen(), value.rotation(), value.zoom(), value.volume(), value.muted());
     }
     public boolean fullscreen() { return GLFW.glfwGetWindowAttrib(window(), GLFW.GLFW_DECORATED) == GLFW.GLFW_FALSE; }
     public ClientPreferences.Resolution windowSize() {

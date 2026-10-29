@@ -25,10 +25,16 @@ public final class SettingsStore {
             if (!fullscreen.equals("true") && !fullscreen.equals("false")) throw new IllegalArgumentException("Invalid fullscreen setting");
             return new Loaded(new ClientPreferences(Integer.parseInt(values.getProperty("width", "1440")),
                     Integer.parseInt(values.getProperty("height", "900")), Boolean.parseBoolean(fullscreen),
-                    Float.parseFloat(values.getProperty("rotation", "1")), Float.parseFloat(values.getProperty("zoom", "1"))), "");
+                    Float.parseFloat(values.getProperty("rotation", "1")), Float.parseFloat(values.getProperty("zoom", "1")),
+                    Float.parseFloat(values.getProperty("volume", "0.75")), parseMuted(values)), "");
         } catch (IOException | IllegalArgumentException | SecurityException exception) {
             return new Loaded(ClientPreferences.defaults(), "Could not read valid settings. Defaults are active; save to replace the file.");
         }
+    }
+    private boolean parseMuted(Properties values) {
+        String muted = values.getProperty("muted", "false");
+        if (!muted.equals("true") && !muted.equals("false")) throw new IllegalArgumentException("Invalid audio setting");
+        return Boolean.parseBoolean(muted);
     }
     public void save(ClientPreferences value) throws IOException {
         Files.createDirectories(path.getParent());
@@ -38,6 +44,7 @@ public final class SettingsStore {
             values.setProperty("width", Integer.toString(value.width())); values.setProperty("height", Integer.toString(value.height()));
             values.setProperty("fullscreen", Boolean.toString(value.fullscreen()));
             values.setProperty("rotation", Float.toString(value.rotation())); values.setProperty("zoom", Float.toString(value.zoom()));
+            values.setProperty("volume", Float.toString(value.volume())); values.setProperty("muted", Boolean.toString(value.muted()));
             try (var writer = Files.newBufferedWriter(temporary, StandardCharsets.UTF_8)) { values.store(writer, "Battleship desktop preferences"); }
             try { Files.move(temporary, path, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING); }
             catch (AtomicMoveNotSupportedException exception) { Files.move(temporary, path, StandardCopyOption.REPLACE_EXISTING); }

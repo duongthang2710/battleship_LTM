@@ -21,7 +21,7 @@ public final class SettingsChecks {
             try (var files = Files.list(store.path().getParent())) {
                 require(files.count() == 1, "No temporary files remain after saving");
             }
-            for (String invalid : new String[] {"rotation=NaN", "zoom=0", "width=1", "fullscreen=perhaps", "width=\\uZZZZ"}) {
+            for (String invalid : new String[] {"rotation=NaN", "zoom=0", "volume=NaN", "volume=2", "muted=perhaps", "width=1", "fullscreen=perhaps", "width=\\uZZZZ"}) {
                 Files.writeString(store.path(), invalid);
                 var loaded = store.load();
                 require(loaded.preferences().equals(ClientPreferences.defaults()) && !loaded.message().isBlank(), "Invalid file has a visible fallback: " + invalid);
@@ -41,6 +41,10 @@ public final class SettingsChecks {
             a.zoom(2); b.zoom(4); c.zoom(1);
             require(normal.getLocation().distance(slow.getLocation()) < .0001f && normal.getLocation().distance(fast.getLocation()) < .0001f, "Zoom sensitivity changes actual camera distance");
             try { b.setSensitivity(Float.NaN, 1); throw new AssertionError("NaN must fail"); } catch (IllegalArgumentException expected) { }
+            var audio = new ClientPreferences(1280, 720, true, 1.5f, .75f, .3f, true);
+            store.save(audio);
+            require(store.load().preferences().equals(audio) && store.load().preferences().forStartup().muted()
+                    && store.load().preferences().forStartup().volume() == .3f, "Saved volume/mute survive reload and Windowed startup");
             checkDisplayShortcut();
             System.out.println("PASS: Settings defaults, persistence, atomic overwrite, malformed/oversize files, save failure and actual orbit/zoom sensitivity.");
         } finally {
