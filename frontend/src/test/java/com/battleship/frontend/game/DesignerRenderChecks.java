@@ -168,7 +168,7 @@ public final class DesignerRenderChecks extends SimpleApplication {
             require(engine.canReady() && engine.state().player().board().ships().size() == 3, "3D drawing stops at the configured three ships and enables Ready");
             var labels = new ArrayList<String>();
             guiNode.depthFirstTraversal(s -> { if (s instanceof BitmapText text) labels.add(text.getText()); });
-            require(labels.contains("3 / 3 SHIPS PLACED") && labels.stream().noneMatch(s -> s.contains("[4] Submarine") || s.contains("[5] Destroyer")),
+            require(labels.contains("3 / 3 READY") && labels.stream().noneMatch(s -> s.equals("Submarine") || s.equals("Destroyer")),
                     "Placement HUD uses configured count and hides disabled types");
             System.out.println("PASS: actual 3D drawing + HUD for Designer/3 ships; disabled hotkeys preserve draft and Ready follows room settings.");
         }

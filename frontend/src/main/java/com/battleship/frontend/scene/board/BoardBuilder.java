@@ -125,11 +125,11 @@ public final class BoardBuilder {
         Node coordinates = new Node("Unobstructed coordinate labels");
         root.attachChild(coordinates);
         for (int i = 0; i < 10; i++) {
-            // Labels counter-rotate so they remain upright for the default player.
-            label(coordinates, font, String.valueOf((char) ('A' + i)), COORDINATE_CENTER, 4.5f - i);
-            label(coordinates, font, String.valueOf((char) ('A' + i)), -COORDINATE_CENTER, 4.5f - i);
-            label(coordinates, font, Integer.toString(i + 1), i - 4.5f, COORDINATE_CENTER);
-            label(coordinates, font, Integer.toString(i + 1), i - 4.5f, -COORDINATE_CENTER);
+            // Top/right belong to the opposite seat. Values stay aligned with the same cells.
+            label(coordinates, font, String.valueOf((char) ('A' + i)), COORDINATE_CENTER, 4.5f - i, true);
+            label(coordinates, font, String.valueOf((char) ('A' + i)), -COORDINATE_CENTER, 4.5f - i, false);
+            label(coordinates, font, Integer.toString(i + 1), i - 4.5f, COORDINATE_CENTER, false);
+            label(coordinates, font, Integer.toString(i + 1), i - 4.5f, -COORDINATE_CENTER, true);
         }
         return root;
     }
@@ -409,7 +409,7 @@ public final class BoardBuilder {
         return outline;
     }
 
-    private static void label(Node board, BitmapFont font, String value, float x, float z) {
+    private static void label(Node board, BitmapFont font, String value, float x, float z, boolean reversed) {
         BitmapText text = new BitmapText(font);
         text.setName("Board coordinate " + value);
         text.setText(value);
@@ -420,7 +420,8 @@ public final class BoardBuilder {
         text.updateGeometricState();
         BoundingBox bounds = (BoundingBox) text.getWorldBound();
         text.setLocalScale(Math.min(0.62f / (2 * bounds.getYExtent()), 0.66f / (2 * bounds.getXExtent())));
-        text.setLocalRotation(new Quaternion().fromAngleAxis(-FastMath.HALF_PI, Vector3f.UNIT_X));
+        text.setLocalRotation(new Quaternion().fromAngleAxis(reversed ? FastMath.PI : 0, Vector3f.UNIT_Y)
+                .mult(new Quaternion().fromAngleAxis(-FastMath.HALF_PI, Vector3f.UNIT_X)));
         text.updateGeometricState();
         Vector3f center = ((BoundingBox) text.getWorldBound()).getCenter();
         text.setLocalTranslation(x - center.x, 0.247f, z - center.z);

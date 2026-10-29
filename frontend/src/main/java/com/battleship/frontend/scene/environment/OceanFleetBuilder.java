@@ -38,6 +38,12 @@ final class OceanFleetBuilder {
             float scale = berth[3] * 1.18f;
             vessel.setLocalScale(scale);
             vessel.setLocalTranslation(0, waterline + 0.12f, 0);
+            for (int side : new int[] {-1, 1}) {
+                Node muzzle = new Node("Ocean broadside muzzle");
+                muzzle.setUserData("firingSide", i % 2 == 0 ? "WHITE" : "BLACK");
+                muzzle.setLocalTranslation(side * .68f, .43f, -.20f);
+                vessel.attachChild(muzzle);
+            }
             vessel.setShadowMode(RenderQueue.ShadowMode.Off);
             anchor.attachChild(vessel);
             vessels.add(vessel);

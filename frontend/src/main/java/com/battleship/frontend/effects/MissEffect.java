@@ -11,10 +11,12 @@ public final class MissEffect {
     private final Node node = new Node("Miss water splash");
     private final List<Geometry> droplets = new ArrayList<>();
     private final List<Geometry> ripples = new ArrayList<>();
+    private final List<Geometry> jets = new ArrayList<>();
 
     public MissEffect(Materials materials) {
-        for (int i = 0; i < 8; i++) {
-            Geometry drop = EffectVisuals.sphere(node, materials, 0xD6F4FF, 0.031f, true);
+        for (int i = 0; i < 3; i++) jets.add(EffectVisuals.sphere(node, materials, i == 0 ? 0xF0FBFF : 0x92CEE9, .075f, false));
+        for (int i = 0; i < 14; i++) {
+            Geometry drop = EffectVisuals.sphere(node, materials, 0xD6F4FF, 0.043f, false);
             drop.setLocalScale(0.55f, 1.8f, 0.55f);
             droplets.add(drop);
         }
@@ -27,12 +29,19 @@ public final class MissEffect {
     public Node node() { return node; }
 
     public void update(float elapsed) {
-        float lifetime = AttackEffectManager.TOTAL_DURATION - AttackEffectManager.IMPACT_TIME;
+        float lifetime = AttackEffectManager.IMPACT_LIFETIME;
         float progress = Math.min(1, elapsed / lifetime);
+        for (int i = 0; i < jets.size(); i++) {
+            float rise = Math.max(0, 1 - elapsed / .50f);
+            Geometry jet = jets.get(i);
+            jet.setLocalTranslation((i - 1) * elapsed * .13f, .12f + elapsed * .28f, (i % 2) * .05f);
+            jet.setLocalScale(.65f + elapsed * 1.7f, rise * (i == 1 ? 6 : 4), .65f + elapsed * 1.7f);
+            EffectVisuals.fade(jet, rise * .80f);
+        }
         for (int i = 0; i < droplets.size(); i++) {
             Geometry drop = droplets.get(i);
-            Vector3f position = EffectVisuals.direction(i, droplets.size()).mult(elapsed * 0.48f);
-            position.y = 0.04f + elapsed * (0.85f + (i % 3) * 0.12f) - elapsed * elapsed * 1.3f;
+            Vector3f position = EffectVisuals.direction(i, droplets.size()).mult(elapsed * 0.62f);
+            position.y = 0.08f + elapsed * (1.4f + (i % 3) * 0.16f) - elapsed * elapsed * 1.9f;
             drop.setLocalTranslation(position);
             EffectVisuals.fade(drop, Math.max(0, 1 - progress * 1.7f) * 0.85f);
         }

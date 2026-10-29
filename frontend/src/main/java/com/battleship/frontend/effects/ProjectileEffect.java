@@ -10,7 +10,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 public final class ProjectileEffect {
-    private final Node node = new Node("Board-local projectile");
+    private final Node node = new Node("Ocean-to-board projectile");
     private final Geometry core;
     private final List<Geometry> trail = new ArrayList<>();
     private final Vector3f start;
@@ -19,9 +19,10 @@ public final class ProjectileEffect {
     public ProjectileEffect(Materials materials, Vector3f start, Vector3f target, boolean radiant) {
         this.start = start.clone();
         this.target = target.clone();
-        core = EffectVisuals.sphere(node, materials, radiant ? 0xFFF4C5 : 0xECD5FF, 0.055f, true);
+        core = EffectVisuals.sphere(node, materials, radiant ? 0xFFF4C5 : 0xECD5FF, 0.105f, true);
+        core.setName("Naval shell");
         for (int i = 0; i < 7; i++) {
-            Geometry particle = EffectVisuals.sphere(node, materials, radiant ? 0x8DDFFF : 0xBC86EC, 0.040f, true);
+            Geometry particle = EffectVisuals.sphere(node, materials, radiant ? 0x8DDFFF : 0xBC86EC, 0.060f, true);
             particle.setLocalScale(1 - i * 0.10f);
             trail.add(particle);
         }
@@ -48,7 +49,7 @@ public final class ProjectileEffect {
 
     private Vector3f path(float progress) {
         Vector3f position = new Vector3f().interpolateLocal(start, target, progress);
-        position.y += FastMath.sin(progress * FastMath.PI) * 2.4f;
+        position.y += FastMath.sin(progress * FastMath.PI) * Math.min(6.5f, 2.2f + start.distance(target) * .16f);
         return position;
     }
 }

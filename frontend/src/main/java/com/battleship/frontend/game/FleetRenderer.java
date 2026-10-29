@@ -20,6 +20,7 @@ public final class FleetRenderer {
     private final Node root = new Node("Gameplay fleet");
     private final BoardCoordinates coordinates;
     private final BoardShipBuilder factory;
+    private final com.battleship.frontend.graphics.ship.ShipWreckBuilder wrecks;
     private final com.battleship.frontend.graphics.ship.DesignedShipBuilder designedFactory;
     private final Map<ShipType, Ship> displayedShips = new EnumMap<>(ShipType.class);
     private ShipType editing;
@@ -31,6 +32,7 @@ public final class FleetRenderer {
         board.attachChild(root);
         coordinates = new BoardCoordinates(board);
         factory = new BoardShipBuilder(materials);
+        wrecks = new com.battleship.frontend.graphics.ship.ShipWreckBuilder(materials);
         designedFactory = new com.battleship.frontend.graphics.ship.DesignedShipBuilder(materials);
     }
 
@@ -49,10 +51,11 @@ public final class FleetRenderer {
                 if (model != null) model.removeFromParent();
                 continue;
             }
-            String shapeKey = ship.custom() ? "CUSTOM:" + ship.shape() : "CLASSIC";
+            String shapeKey = (ship.custom() ? "CUSTOM:" + ship.shape() : "CLASSIC") + (ship.isSunk() ? ":SUNK" : ":INTACT");
             if (model == null || !shapeKey.equals(model.getUserData("footprint"))) {
                 if (model != null) model.removeFromParent();
                 model = ship.custom() ? createDesignedModel(ship, fleet) : createModel(type, fleet);
+                if (ship.isSunk()) wrecks.apply(model, ship);
                 model.setUserData("footprint", shapeKey);
                 models.put(type, model);
             }
