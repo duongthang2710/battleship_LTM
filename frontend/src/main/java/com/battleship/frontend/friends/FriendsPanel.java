@@ -174,8 +174,8 @@ public final class FriendsPanel {
     private void row(FriendEntry entry, int index) {
         float y = 418 - index * 42;
         rect(30, y, 1040, 40, new ColorRGBA(.03f, .075f, .13f, index % 2 == 0 ? .85f : .4f), 91);
-        text(body, entry.displayName(), 13, 45, y + 37, IVORY);
-        text(body, "@" + entry.username(), 9, 45, y + 17, MUTED);
+        UiTypography.fit(text(body, entry.displayName(), 13, 45, y + 37, IVORY), 395);
+        UiTypography.fit(text(body, "@" + entry.username(), 9, 45, y + 17, MUTED), 395);
         String state = entry.relationship();
         String caption = state.equals("FRIEND") ? (entry.online() ? "ONLINE" : "OFFLINE") : switch (state) {
             case "OUTGOING" -> "PENDING - SENT";

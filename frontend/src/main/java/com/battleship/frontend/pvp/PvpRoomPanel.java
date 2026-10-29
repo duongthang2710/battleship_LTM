@@ -157,7 +157,7 @@ public final class PvpRoomPanel {
         this.status = status == null ? "" : status;
         if (statusLabel != null) {
             statusLabel.setText(wrapStatus(this.status));
-            center(statusLabel, view == View.CREATE ? 37 : 107);
+            positionStatus();
         }
     }
 
@@ -262,18 +262,25 @@ public final class PvpRoomPanel {
         } else {
             centered(body, (room.mode() == com.battleship.shared.game.GameMode.CLASSIC ? "BASIC" : "FLEET DESIGNER") + " / " + room.shipCount() + " SHIPS", 10, WIDTH / 2, 433, GOLD);
             centered(body, "ROOM CODE", 10, WIDTH / 2, 414, GOLD);
-            centered(body, room.roomCode(), 32, 192, 388, CYAN);
-            button(314, 354, 72, 34, "COPY", Action.COPY_CODE, false);
+            BitmapText roomCode = centered(body, room.roomCode(), 32, WIDTH / 2, 396, CYAN);
+            copyIcon(Math.min(WIDTH-52, roomCode.getLocalTranslation().x + roomCode.getLineWidth() + 6), 383);
             player(0, 286);
             player(1, 208);
             centered(body, room.turnRule().label(), 10, WIDTH / 2, 196, CYAN);
             boolean ready = room.players().stream().anyMatch(player -> player.clientId().equals(localClientId) && player.ready());
-            button(34, 132, 372, 48, ready ? "NOT READY" : "READY", Action.TOGGLE_READY, true);
+            button(34, 120, 372, 48, ready ? "NOT READY" : "READY", Action.TOGGLE_READY, true);
             button(34, 28, 180, 42, "INVITE FRIENDS", Action.INVITE_FRIENDS, false);
             button(226, 28, 180, 42, "LEAVE ROOM", Action.LEAVE_ROOM, false);
         }
         statusLabel = centered(body, wrapStatus(status), view == View.CREATE ? 9 : 11, WIDTH / 2, view == View.CREATE ? 37 : 107, 0xB9C7DB);
+        positionStatus();
         refreshButtons();
+    }
+
+    private void positionStatus() {
+        if (statusLabel == null) return;
+        if (view == View.WAITING) UiTypography.centerIn(statusLabel, 34, 76, 372, 38);
+        else center(statusLabel, view == View.CREATE ? 37 : 107);
     }
 
     private void player(int index, float y) {
@@ -282,7 +289,7 @@ public final class PvpRoomPanel {
         text(body, "PLAYER " + (index + 1), 10, 48, y + 49, GOLD);
         String name = player == null ? "Waiting for opponent" : player.playerName();
         if (name.length() > 22) name = name.substring(0, 21) + ".";
-        text(display, name, 23, 48, y + 29, player == null ? 0x8793A9 : IVORY);
+        UiTypography.fit(text(display, name, 23, 48, y + 29, player == null ? 0x8793A9 : IVORY), 232);
         if (player != null) {
             String readiness = player.ready() ? "READY" : "NOT READY";
             text(body, readiness, 10, player.ready() ? 335 : 309, y + 29,
@@ -298,12 +305,28 @@ public final class PvpRoomPanel {
     private void refreshButtons() {
         for (Button button : buttons) {
             boolean active = enabled(button.action);
+            if (button.action == Action.COPY_CODE) {
+                button.border.setColor("Color", Materials.rgb(active ? button.action == hovered ? IVORY : CYAN : 0x69788D));
+                continue;
+            }
             boolean highlight = active && (button.primary || button.action == hovered);
             button.fill.setColor("Color", highlight ? new ColorRGBA(0.035f, 0.075f, 0.117f, 0.98f)
                     : new ColorRGBA(0.009f, 0.022f, 0.044f, 0.94f));
             button.border.setColor("Color", Materials.rgb(!active ? 0x334050 : highlight ? GOLD : 0x516275));
             button.label.setColor(Materials.rgb(!active ? 0x69788D : highlight ? IVORY : 0xCFD5E1));
         }
+    }
+
+    private void copyIcon(float x, float y) {
+        Material fill = materials.flat(new ColorRGBA(0,0,0,0));
+        Material border = materials.flat(Materials.rgb(CYAN));
+        for (int i=0;i<2;i++) {
+            float px=x+3+i*4, py=y+3+i*4;
+            line(px,py,px+10,py,border,74); line(px,py+12,px+10,py+12,border,74);
+            line(px,py,px,py+12,border,74); line(px+10,py,px+10,py+12,border,74);
+        }
+        BitmapText label = text(body,"",10,x,y,IVORY);
+        buttons.add(new Button(x,y,24,24,Action.COPY_CODE,false,fill,border,label));
     }
 
     private void button(float x, float y, float width, float height, String caption, Action action, boolean primary) {

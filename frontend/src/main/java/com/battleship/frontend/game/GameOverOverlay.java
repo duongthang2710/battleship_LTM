@@ -20,7 +20,7 @@ import com.jme3.scene.shape.Quad;
 
 public final class GameOverOverlay {
     private static final float WIDTH = 430;
-    private static final float HEIGHT = 220;
+    private static final float HEIGHT = 236;
     private static final float BUTTON_X = 32;
     private static final float MENU_BUTTON_X = 234;
     private static final float BUTTON_Y = 28;
@@ -72,7 +72,7 @@ public final class GameOverOverlay {
             case TURN_TIMEOUT -> "TURN TIME EXPIRED";
             case PLAYER_LEFT -> "PLAYER LEFT THE MATCH";
         });
-        center(resultReason, 131);
+        center(resultReason, 145);
     }
 
     public void setRematchStatus(String status, boolean canPlay, boolean canDecline) {
@@ -81,7 +81,7 @@ public final class GameOverOverlay {
         restartLabel.setColor(Materials.rgb(canPlay ? IVORY : 0x8793A9));
         if (rematchStatus == null) return;
         rematchStatus.setText(status.length() > 48 ? status.substring(0, 45) + "..." : status);
-        center(rematchStatus, 86);
+        UiTypography.centerIn(rematchStatus, canDecline ? 122 : 32, 72, canDecline ? 276 : 366, 22);
         declineLabel.setCullHint(canDecline ? CullHint.Inherit : CullHint.Always);
     }
 
@@ -99,7 +99,8 @@ public final class GameOverOverlay {
         title.setColor(Materials.rgb(victory ? GOLD : 0xC1A3EC));
         winner.setText(victory ? state.player().name() : state.enemy().name());
         center(title, HEIGHT - 42);
-        center(winner, 108);
+        UiTypography.fit(winner, WIDTH - 64);
+        center(winner, 120);
         visible = true;
         root.setCullHint(CullHint.Never);
     }
@@ -141,8 +142,8 @@ public final class GameOverOverlay {
         Geometry crest = panel(WIDTH / 2, HEIGHT - 29, 7, 7, Materials.rgb(GOLD), 41);
         crest.rotate(0, 0, FastMath.QUARTER_PI);
         title = text(display, "VICTORY", 46, HEIGHT - 42, GOLD);
-        resultReason = text(body, "WINNER", 10, 131, GOLD);
-        winner = text(display, "", 25, 108, IVORY);
+        resultReason = text(body, "WINNER", 10, 145, GOLD);
+        winner = text(display, "", 25, 120, IVORY);
         panel(BUTTON_X, BUTTON_Y, BUTTON_WIDTH, BUTTON_HEIGHT,
                 new ColorRGBA(0.025f, 0.055f, 0.095f, 1), 40).setMesh(UiShapes.chamfered(BUTTON_WIDTH, BUTTON_HEIGHT, 10));
         frame(BUTTON_X, BUTTON_Y, BUTTON_WIDTH, BUTTON_HEIGHT);

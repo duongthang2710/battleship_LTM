@@ -120,18 +120,18 @@ public final class LeaderboardPanel {
         refreshButtons();
     }
     private void row(LeaderboardEntry entry, int index) {
-        float y = 474 - index * 37;
+        float y = 474 - index * 40;
         int accent = entry.rank() == 1 ? GOLD : entry.rank() == 2 ? 0xC1CEDD : entry.rank() == 3 ? 0xBC956A : MUTED;
-        rect(30, y, 1040, 35, new ColorRGBA(.03f, .075f, .13f, index % 2 == 0 ? .85f : .4f), 91);
+        rect(30, y, 1040, 38, new ColorRGBA(.03f, .075f, .13f, index % 2 == 0 ? .85f : .4f), 91);
         if (entry.rank() <= 3) {
-            rect(30, y, 2, 35, Materials.rgb(accent), 92);
+            rect(30, y, 2, 38, Materials.rgb(accent), 92);
             Geometry crest = rect(73, y + 5, 17, 17, new ColorRGBA(.12f, .17f, .23f, 1), 92);
             crest.rotate(0, 0, FastMath.QUARTER_PI);
         }
         BitmapText rank = text(body, Long.toString(entry.rank()), 17, 0, y + 29, accent);
         rank.setLocalTranslation(73 - rank.getLineWidth() / 2, y + 29, 94);
-        text(body, entry.displayName(), 13, 132, y + 34, IVORY);
-        text(body, "@" + entry.username(), 9, 132, y + 16, MUTED);
+        UiTypography.fit(text(body, entry.displayName(), 13, 132, y + 36, IVORY), 338);
+        UiTypography.fit(text(body, "@" + entry.username(), 9, 132, y + 16, MUTED), 338);
         number(entry.matches(), 526, y); number(entry.wins(), 634, y); number(entry.losses(), 738, y);
         text(body, String.format(Locale.ROOT, "%.1f%%", entry.winRate()), 14, 825, y + 25, CYAN);
         text(body, entry.currentWinStreak() == null ? "-" : Long.toString(entry.currentWinStreak()), 14, 997, y + 25, accent);
