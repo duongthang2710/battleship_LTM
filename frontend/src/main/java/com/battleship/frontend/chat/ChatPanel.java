@@ -1,6 +1,7 @@
 package com.battleship.frontend.chat;
 
 import com.battleship.frontend.graphics.Materials;
+import com.battleship.frontend.ui.BattleSidebarLayout;
 import com.battleship.frontend.ui.UiTypography;
 import com.battleship.frontend.ui.UiTextField;
 import com.battleship.shared.chat.*;
@@ -82,9 +83,9 @@ public final class ChatPanel {
     public void resize(int w, int h) { scrollDragging = false; viewportWidth = w; viewportHeight = h; layout(); rebuild(); }
     private void layout() {
         scale = UiTypography.scale(viewportWidth, viewportHeight);
-        width = mode == Mode.BATTLE ? 255 : 550; height = mode == Mode.BATTLE ? 280 : 390;
-        left = mode == Mode.BATTLE ? 36 * scale : viewportWidth - (width + 56) * scale;
-        bottom = (mode == Mode.BATTLE ? viewportHeight / scale - 148 - 160 - 24 - height : 170) * scale;
+        width = mode == Mode.BATTLE ? BattleSidebarLayout.CHAT_WIDTH : 550; height = mode == Mode.BATTLE ? 280 : 390;
+        left = mode == Mode.BATTLE ? BattleSidebarLayout.LEFT * scale : viewportWidth - (width + 56) * scale;
+        bottom = (mode == Mode.BATTLE ? BattleSidebarLayout.chatTop(viewportHeight / scale) - (collapsed ? 34 : height) : 170) * scale;
         card.setLocalScale(scale); card.setLocalTranslation(left, bottom, 0);
     }
     public void append(ChatMessage message) {
@@ -102,7 +103,7 @@ public final class ChatPanel {
     public void error(String message) { busy = false; status = message; rebuild(); }
     public void focus() {
         if (!visible() || !writable()) return;
-        if (collapsed) { collapsed = false; firstLine = maxFirst(); unread = 0; }
+        if (collapsed) { collapsed = false; firstLine = maxFirst(); unread = 0; layout(); }
         focused = true; rebuild();
     }
     public void blur() { if (focused) { focused = false; rebuild(); } }
@@ -114,7 +115,7 @@ public final class ChatPanel {
     }
     public void toggle() {
         if (mode != Mode.BATTLE) return;
-        collapsed = !collapsed; focused = false; scrollDragging = false;
+        collapsed = !collapsed; focused = false; scrollDragging = false; layout();
         if (!collapsed && atBottom()) unread = 0;
         rebuild();
     }

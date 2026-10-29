@@ -85,11 +85,15 @@ public final class ScreenController implements AutoCloseable {
     private boolean roomRequested;
     private RoomSnapshot placementRequested;
     private Screen screen;
+    private Screen settingsOrigin = Screen.MAIN_MENU;
+    private boolean gameReturnRequested;
+    private final com.battleship.frontend.audio.GameAudio audio;
     private final ConnectionNoticePanel connectionNotice;
     private final ConnectionNoticeInput connectionNoticeInput;
     private final NavigationInput navigationInput;
     private final ClipboardService clipboard = new ClipboardService();
     private boolean backRequested, connectionSettingsRequested;
+    private MainMenu.Action hoveredMenu;
 
     public ScreenController(AssetManager assets, Node gui, InputManager input, Camera camera, OrbitCamera orbit,
                             Node board, String player, Runnable exit) {
@@ -103,7 +107,11 @@ public final class ScreenController implements AutoCloseable {
         this.exit = exit;
         menu = new MainMenu(assets);
         settingsPanel = new SettingsPanel(assets);
-        settings = new SettingsController(settingsPanel, orbit, display, this::requestMainMenu);
+        audio = new com.battleship.frontend.audio.GameAudio(assets);
+        settings = new SettingsController(settingsPanel, orbit, display, () -> {
+            if (settingsOrigin == Screen.PVP_PLACEMENT) gameReturnRequested = true; else requestMainMenu();
+        });
+        settings.onAudioSettings(audio::configure);
         gui.attachChild(settingsPanel.root());
         accountPanel = new AccountPanel(assets);
         gui.attachChild(accountPanel.root());
@@ -123,6 +131,8 @@ public final class ScreenController implements AutoCloseable {
                 new FleetRenderer(board, materials), new PlacementFeedback(board, materials), placementHud, hud, minimap,
                 new TargetingRenderer(board, materials), new AttackEffectManager(board, materials), gameOver,
                 this::requestMainMenu);
+        game.onSettings(() -> pendingAction = MainMenu.Action.SETTINGS);
+        game.onSound(audio::play);
         pvp = new PvpController(roomPanel, player, room -> {
             placementRequested = room;
             roomRequested = false;
@@ -130,6 +140,7 @@ public final class ScreenController implements AutoCloseable {
             placementRequested = null;
             roomRequested = true;
         }, this::requestMainMenu, game::applyNetworkState, game::networkError);
+        pvp.onSound(audio::play);
         connectionNotice = new ConnectionNoticePanel(assets);
         gui.attachChild(connectionNotice.root());
         connectionNoticeInput = new ConnectionNoticeInput(input, connectionNotice, this::connectionAction);
@@ -145,11 +156,13 @@ public final class ScreenController implements AutoCloseable {
         chatPanel = new ChatPanel(assets);
         gui.attachChild(chatPanel.root());
         chat = new ChatController(pvp, chatPanel);
+        chat.onSound(audio::play);
+        gameInvites.onSound(audio::play);
         chatInput = new ChatInput(input, chatPanel, chat::handle);
         navigationInput = new NavigationInput(input, () -> backRequested = true);
         friends = new FriendsController(pvp, friendsPanel, () -> {
             if (pvp.room() != null) roomRequested = true; else requestMainMenu();
-        }, menu::friendsUpdated, gameInvites::send);
+        }, notice -> { menu.friendsUpdated(notice); if (notice) audio.play(com.battleship.frontend.audio.GameAudio.Cue.INVITE); }, gameInvites::send);
         pvp.setInviteFriendsAction(() -> pendingAction = MainMenu.Action.FRIENDS);
         showAccount();
     }
@@ -213,7 +226,7 @@ public final class ScreenController implements AutoCloseable {
         if (backRequested) { backRequested = false; navigateBack(); }
         if (pvp.account() == null) {
             pendingAction = null;
-            menuRequested = roomRequested = false;
+            menuRequested = roomRequested = gameReturnRequested = false;
             placementRequested = null;
             loginRequired = true;
             chatPanel.setMode(ChatPanel.Mode.HIDDEN);
@@ -229,7 +242,9 @@ public final class ScreenController implements AutoCloseable {
             menuRequested = true;
         }
         // Switch listeners after input dispatch, so the release cannot click the next screen.
-        if (menuRequested) {
+        if (gameReturnRequested) {
+            gameReturnRequested = false; resumeGame();
+        } else if (menuRequested) {
             menuRequested = false;
             pendingAction = null;
             roomRequested = false;
@@ -259,11 +274,33 @@ public final class ScreenController implements AutoCloseable {
         boolean battleChat = screen == Screen.PVP_PLACEMENT && (game.state().phase() == com.battleship.shared.game.GamePhase.BATTLE
                 || game.state().phase() == com.battleship.shared.game.GamePhase.GAME_OVER);
         chatPanel.setMode(waitingChat ? ChatPanel.Mode.WAITING : battleChat ? ChatPanel.Mode.BATTLE : ChatPanel.Mode.HIDDEN);
-        if (screen == Screen.MAIN_MENU) menu.update(cursor);
+        if (screen == Screen.MAIN_MENU) {
+            menu.update(cursor);
+            MainMenu.Action nextHover = menu.actionAt(cursor).orElse(null);
+            if (nextHover != null && hoveredMenu != nextHover) audio.play(com.battleship.frontend.audio.GameAudio.Cue.HOVER);
+            hoveredMenu = nextHover;
+        }
         else if (screen == Screen.PVP) roomPanel.update(cursor);
         else if (screen == Screen.FRIENDS) friendsPanel.update(cursor);
         else if (screen == Screen.LEADERBOARD) leaderboardPanel.update(cursor);
-        else if (screen != Screen.ACCOUNT && screen != Screen.SETTINGS) game.update(delta, cursor);
+        else if (screen == Screen.SETTINGS && settingsOrigin == Screen.PVP_PLACEMENT) {
+            game.update(delta, new Vector2f(-1,-1)); setGameHudVisible(false);
+        } else if (screen != Screen.ACCOUNT && screen != Screen.SETTINGS) game.update(delta, cursor);
+        updateAudioScene();
+    }
+
+    private void updateAudioScene() {
+        Screen effective = screen == Screen.SETTINGS ? settingsOrigin : screen;
+        var music = com.battleship.frontend.audio.GameAudio.Music.MENU;
+        boolean sea = effective == Screen.PVP || effective == Screen.PVP_PLACEMENT;
+        if (effective == Screen.PVP) music = com.battleship.frontend.audio.GameAudio.Music.PLACEMENT;
+        if (effective == Screen.PVP_PLACEMENT) music = switch (game.state().phase()) {
+            case PLACEMENT -> com.battleship.frontend.audio.GameAudio.Music.PLACEMENT;
+            case BATTLE -> com.battleship.frontend.audio.GameAudio.Music.BATTLE;
+            case GAME_OVER -> game.attackAnimating() ? com.battleship.frontend.audio.GameAudio.Music.BATTLE
+                    : com.battleship.frontend.audio.GameAudio.Music.SILENT;
+        };
+        audio.scene(music, sea);
     }
 
     private void connectionAction(ConnectionNoticePanel.Action action) {
@@ -275,6 +312,7 @@ public final class ScreenController implements AutoCloseable {
     }
 
     private void roomAction(PvpRoomPanel.Action action) {
+        audio.play(com.battleship.frontend.audio.GameAudio.Cue.CLICK);
         if (action != PvpRoomPanel.Action.COPY_CODE) { pvp.handle(action); return; }
         if (pvp.room() == null) return;
         String code = pvp.room().roomCode();
@@ -285,6 +323,7 @@ public final class ScreenController implements AutoCloseable {
 
     private void navigateBack() {
         if (screen == null) return;
+        audio.play(com.battleship.frontend.audio.GameAudio.Cue.BACK);
         if (gameInvitePanel.visible()) { gameInvitePanel.hide(); return; }
         switch (screen) {
             case ACCOUNT -> {
@@ -307,19 +346,34 @@ public final class ScreenController implements AutoCloseable {
 
     private void menuClick(Vector2f cursor) {
         menu.actionAt(cursor).ifPresent(action -> {
+            audio.play(com.battleship.frontend.audio.GameAudio.Cue.CLICK);
             if (action == MainMenu.Action.SETTINGS || action == MainMenu.Action.FRIENDS || action == MainMenu.Action.LEADERBOARD || action == MainMenu.Action.PROFILE || action == MainMenu.Action.EXIT
                     || action == MainMenu.Action.PVP) pendingAction = action;
         });
     }
 
     private void showSettings() {
+        audio.play(com.battleship.frontend.audio.GameAudio.Cue.OPEN);
+        settingsOrigin = screen;
         closeInputs(); menu.hide(); roomPanel.hide(); setGameHudVisible(false);
         screen = Screen.SETTINGS; settings.show();
-        settingsInput = new SettingsInput(input, settingsPanel, settings::handle);
-        settingsPointer = new PointerInput(input, orbit, cursor -> settingsPanel.actionAt(cursor).ifPresent(settings::handle));
+        settingsInput = new SettingsInput(input, settingsPanel, this::settingsAction);
+        settingsPointer = new PointerInput(input, orbit, cursor -> settingsPanel.actionAt(cursor).ifPresent(this::settingsAction));
+    }
+
+    private void settingsAction(SettingsPanel.Action action) {
+        audio.play(action == SettingsPanel.Action.BACK ? com.battleship.frontend.audio.GameAudio.Cue.CLOSE
+                : com.battleship.frontend.audio.GameAudio.Cue.CLICK); settings.handle(action);
+    }
+    private void resumeGame() {
+        closeInputs(); screen = Screen.PVP_PLACEMENT;
+        setGameHudVisible(true);
+        if (game.state().phase() == com.battleship.shared.game.GamePhase.GAME_OVER && !game.attackAnimating()) gameOver.show(game.state());
+        gameInput = new GameInput(input, game, orbit);
     }
 
     private void showFriends() {
+        audio.play(com.battleship.frontend.audio.GameAudio.Cue.OPEN);
         closeInputs(); menu.hide(); roomPanel.hide(); setGameHudVisible(false);
         screen = Screen.FRIENDS; friendsPanel.setInRoom(pvp.room() != null); friends.show();
         friendsInput = new FriendsInput(input, friendsPanel, friends::handle);
@@ -327,6 +381,7 @@ public final class ScreenController implements AutoCloseable {
     }
 
     private void showLeaderboard() {
+        audio.play(com.battleship.frontend.audio.GameAudio.Cue.OPEN);
         closeInputs();
         menu.hide(); roomPanel.hide(); setGameHudVisible(false);
         screen = Screen.LEADERBOARD;
@@ -354,6 +409,7 @@ public final class ScreenController implements AutoCloseable {
         roomPanel.hide();
         setGameHudVisible(false);
         screen = Screen.ACCOUNT;
+        audio.scene(com.battleship.frontend.audio.GameAudio.Music.MENU, false);
         loginRequired = pvp.account() == null;
         pvp.openAccount(firstScreen);
         accountPanel.show();
@@ -362,6 +418,7 @@ public final class ScreenController implements AutoCloseable {
     }
 
     private void accountAction(AccountPanel.Action action) {
+        audio.play(com.battleship.frontend.audio.GameAudio.Cue.CLICK);
         if (!accountPanel.enabled(action)) return;
         switch (action) {
             case BACK -> requestMainMenu();
@@ -414,6 +471,7 @@ public final class ScreenController implements AutoCloseable {
     }
 
     private void closeInputs() {
+        hoveredMenu = null;
         settings.hide();
         if (settingsPointer != null) { settingsPointer.close(); settingsPointer = null; }
         if (settingsInput != null) { settingsInput.close(); settingsInput = null; }
@@ -447,6 +505,7 @@ public final class ScreenController implements AutoCloseable {
         gameInviteInput.close();
         chatInput.close();
         settings.close();
+        audio.close();
         pvp.close();
     }
 }

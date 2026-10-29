@@ -1,241 +1,194 @@
 package com.battleship.frontend.game;
 
-import com.battleship.frontend.graphics.Materials;
-import com.battleship.frontend.ui.UiTypography;
+import com.battleship.frontend.ui.NavalHudSkin;
+import com.battleship.frontend.ui.BattleSidebarLayout;
+import com.battleship.shared.game.*;
 import com.jme3.asset.AssetManager;
-import com.jme3.font.BitmapFont;
 import com.jme3.font.BitmapText;
-import com.jme3.material.Material;
-import com.jme3.material.RenderState.BlendMode;
-import com.jme3.math.ColorRGBA;
-import com.jme3.math.FastMath;
-import com.jme3.math.Vector2f;
-import com.jme3.renderer.queue.RenderQueue.Bucket;
-import com.jme3.scene.Geometry;
-import com.jme3.scene.Node;
-import com.jme3.scene.shape.Quad;
+import com.jme3.math.*;
+import com.jme3.scene.*;
+import static com.battleship.frontend.ui.NavalHudSkin.*;
 
 public final class BattleHud {
-    private static final int GOLD = 0xDEB663;
-    private static final int IVORY = 0xF4EAD1;
-    private final Node root = new Node("Battle HUD");
-    private final Node layout = new Node("HUD layout");
-    private final Node turnClock = new Node("Turn countdown");
-    private final Materials materials;
-    private final BitmapFont display;
-    private final BitmapFont body;
-    private String playerName;
-    private BitmapText playerText;
-    private BitmapText connectionText;
-    private BitmapText opponentText;
-    private BitmapText playerSideText;
-    private BitmapText opponentSideText;
-    private com.battleship.shared.game.Side side;
-    private BitmapText statusTitleText;
-    private BitmapText statusDetailText;
-    private BitmapText controlsText;
-    private String connectionStatus = "Connecting";
-    private String opponentName = "Awaiting captain";
-    private String statusTitle = "Awaiting the next tide";
-    private String statusDetail = "Visual preview - no match in progress";
-    private String controlHints = "DRAG TO ORBIT  /  SCROLL TO ZOOM  /  R TO RESET";
-    private float uiScale = 1;
-    private float logicalWidth;
-    private float logicalHeight;
-    private BitmapText clockPlayer;
-    private BitmapText clockTime;
-    private String clockOwner = "";
-    private int clockSeconds = -1;
-
-    public BattleHud(AssetManager assets, String playerName) {
-        this.playerName = playerName;
-        materials = new Materials(assets);
-        display = UiTypography.display(assets);
-        body = UiTypography.body(assets);
-        root.attachChild(layout);
+    private final Node root=new Node("Battle HUD"), layout=new Node("Commander HUD layout");
+    private final Node fleetList=new Node("Enemy fleet status"), feedback=new Node("Commander shot feedback");
+    private final Node intro=new Node("Match countdown");
+    private String introText="";
+    private final AssetManager assets;
+    private NavalHudSkin skin;
+    private String playerName, opponentName="Opponent", statusTitle="Deploy Fleet", detail="", turnTitle="YOUR TURN";
+    private Side side=Side.WHITE;
+    private GamePhase phase=GamePhase.PLACEMENT;
+    private GameRules rules=GameRules.DEFAULT;
+    private int sunkMask;
+    private float scale=1, w=1280, h=800, left, flagWidth, ownX, ownY, rivalX, rivalY;
+    private Geometry ownArc, rivalArc;
+    private BitmapText header, caption;
+    private boolean clockVisible, ownTurn=true;
+    private long remaining=60_000, drawnRemaining=-1;
+    private String shotResult="";
+    private boolean playerFired;
+    private boolean opponentReady;
+    public void setOpponentReady(boolean ready) { if(opponentReady!=ready) { opponentReady=ready; rebuild(); } }
+    public BattleHud(AssetManager assets,String playerName) {
+        this.assets=assets; this.playerName=playerName; root.attachChild(layout);
     }
-
     public Node root() { return root; }
-
-    public void resize(int width, int height) {
-        float scale = UiTypography.scale(width, height);
-        float w = width / scale, h = height / scale;
-        uiScale = scale;
-        logicalWidth = w;
-        logicalHeight = h;
-        layout.detachAllChildren();
-        layout.setLocalScale(scale);
-        frame(18, 18, w - 36, h - 36);
-        ornatePanel(36, h - 130, 350, 94);
-        text(display, "Battleship", 43, 57, h - 52, IVORY);
-        text(body, "F A N T A S Y   N A V A L   S T R A T E G Y", 10, 60, h - 106, GOLD);
-        ornatePanel(w - 427, h - 119, 391, 83);
-        playerSideText = text(body, "RADIANT", 10, w - 406, h - 55, 0x91CEFF);
-        playerText = text(body, playerName, 17, w - 406, h - 79, IVORY);
-        line(w - 240, h - 100, w - 240, h - 55, GOLD);
-        opponentSideText = text(body, "ABYSSAL", 10, w - 221, h - 55, 0xC1A3EC);
-        setPlayerSide(side);
-        opponentText = text(body, opponentName, 16, w - 221, h - 79, IVORY);
-        ornatePanel(36, 43, 294, 85);
-        text(body, "TURN STATUS", 10, 55, 109, GOLD);
-        statusTitleText = text(display, statusTitle, 26, 54, 91, IVORY);
-        statusDetailText = text(body, statusDetail, 10, 56, 62, 0xB6BDCF);
-        ornatePanel(w - 374, 43, 338, 85);
-        controlsText = text(body, controlHints, 10, w - 355, 116, IVORY);
-        connectionText = text(body, connectionStatus, 11, w - 355, 65, GOLD);
-        UiTypography.fit(playerText, 155); UiTypography.fit(opponentText, 165);
-        UiTypography.fit(statusDetailText, 254);
-        buildClock(w, h);
+    public void resize(int width,int height) {
+        scale=Math.min(width/1280f,height/800f); w=width/scale; h=height/scale; rebuild();
     }
-
-    public boolean contains(Vector2f screen) {
-        if (logicalWidth == 0) return false;
-        float x = screen.x / uiScale, y = screen.y / uiScale;
-        return inside(x, y, 36, logicalHeight - 130, 350, 94)
-                || inside(x, y, logicalWidth - 427, logicalHeight - 119, 391, 83)
-                || inside(x, y, 36, 43, 294, 85)
-                || (turnClock.getCullHint() != com.jme3.scene.Spatial.CullHint.Always
-                    && inside(x, y, logicalWidth / 2 - 132, logicalHeight - 116, 264, 80))
-                || inside(x, y, logicalWidth - 374, 43, 338, 85);
+    public void setBattleState(GameState state,GameRules rules) {
+        int mask=0;
+        for(Ship ship:state.enemy().board().ships()) if(ship.isSunk()) mask|=1<<ship.type().ordinal();
+        GamePhase next=state.phase()==GamePhase.PLACEMENT?GamePhase.PLACEMENT:GamePhase.BATTLE;
+        boolean layoutChanged=phase!=next; boolean fleetChanged=!rules.equals(this.rules)||mask!=sunkMask;
+        phase=next; this.rules=rules; sunkMask=mask;
+        if(layoutChanged) rebuild(); else if(fleetChanged) rebuildFleet();
     }
-
-    private void buildClock(float width, float height) {
-        turnClock.detachAllChildren();
-        turnClock.setLocalTranslation(width / 2 - 132, height - 116, 4);
-        layout.attachChild(turnClock);
-        float[][] rectangles = {{0, 0, 264, 80}, {10, 0, 244, 1}, {10, 79, 244, 1},
-                {0, 10, 1, 60}, {263, 10, 1, 60}};
-        for (int i = 0; i < rectangles.length; i++) {
-            float[] rect = rectangles[i];
-            Geometry quad = new Geometry("Turn clock panel", new Quad(rect[2], rect[3]));
-            Material material = materials.flat(i == 0 ? new ColorRGBA(0.003f, 0.007f, 0.021f, 0.90f) : Materials.rgb(GOLD));
-            material.getAdditionalRenderState().setBlendMode(BlendMode.Alpha);
-            quad.setMaterial(material);
-            quad.setQueueBucket(Bucket.Gui);
-            quad.setLocalTranslation(rect[0], rect[1], i == 0 ? 0 : 1);
-            turnClock.attachChild(quad);
+    private void rebuild() {
+        layout.detachAllChildren(); layout.setLocalScale(scale); header=null; caption=null;
+        skin=new NavalHudSkin(assets,layout,10);
+        left=BattleSidebarLayout.flagLeft(w); flagWidth=BattleSidebarLayout.flagWidth(w);
+        ownX=left+flagWidth/2; ownY=h-142; rivalX=w-116; rivalY=132;
+        skin.banner(left,phase==GamePhase.PLACEMENT?70:h-BattleSidebarLayout.BANNER_HEIGHT,flagWidth,h);
+        skin.text(playerName,22,left+6,h-50,flagWidth-12,35,WHITE);
+        skin.line(left+6,h-65,left+flagWidth-6,h-65,WHITE,1);
+        avatar(ownX,ownY,74,side!=Side.BLACK,true);
+        avatar(rivalX,rivalY,62,side==Side.BLACK,false);
+        skin.panel(rivalX-88,30,176,33,ORANGE);
+        skin.text(opponentName,16,rivalX-84,31,168,31,WHITE);
+        if(phase==GamePhase.PLACEMENT) {
+            skin.panel(rivalX-88,67,176,24,0x092B43);
+            skin.text(opponentReady?"READY!":"DEPLOYING",18,rivalX-84,67,168,24,WHITE);
+            if(opponentReady) {
+                skin.line(rivalX+24,rivalY-8,rivalX+40,rivalY-22,0x6EE448,7);
+                skin.line(rivalX+40,rivalY-22,rivalX+74,rivalY+17,0x6EE448,7);
+            }
+            if (!statusTitle.equals("Fleet confirmed")) {
+                skin.panel(w*.30f,h-60,w*.40f,32,BLUE);
+                header=skin.text("DEPLOY FLEET",22,w*.30f,h-60,w*.40f,32,WHITE);
+            }
+        } else {
+            caption=skin.text(detail,15,w*.29f,76,w*.45f,24,WHITE);
         }
-        clockPlayer = new BitmapText(body);
-        clockPlayer.setSize(UiTypography.bodySize(11));
-        clockPlayer.setColor(Materials.rgb(GOLD));
-        turnClock.attachChild(clockPlayer);
-        clockTime = new BitmapText(body);
-        clockTime.setSize(36);
-        turnClock.attachChild(clockTime);
-        clockSeconds = -1;
-        hideTurnClock();
+        layout.attachChild(fleetList); layout.attachChild(feedback); layout.attachChild(intro);
+        rebuildFleet(); redrawFeedback(); redrawIntro(); drawnRemaining=-1; drawClock();
     }
-
-    public void hideTurnClock() { turnClock.setCullHint(com.jme3.scene.Spatial.CullHint.Always); }
-
-    public void setTurnClock(String player, long remainingMillis) {
-        if (clockTime == null) return;
-        turnClock.setCullHint(com.jme3.scene.Spatial.CullHint.Inherit);
-        int seconds = (int) Math.min(60, (Math.max(0, remainingMillis) + 999) / 1000);
-        if (seconds == clockSeconds && player.equals(clockOwner)) return;
-        clockOwner = player;
-        clockSeconds = seconds;
-        String name = player.length() > 24 ? player.substring(0, 23) + "." : player;
-        clockPlayer.setText("TURN: " + name);
-        UiTypography.fit(clockPlayer, 244);
-        clockPlayer.setLocalTranslation((264 - clockPlayer.getLineWidth()) / 2, 64, 2);
-        clockTime.setText(String.format(java.util.Locale.ROOT, "%02d:%02d", seconds / 60, seconds % 60));
-        clockTime.setColor(Materials.rgb(seconds <= 10 ? 0xF5A38E : IVORY));
-        clockTime.setLocalTranslation((264 - clockTime.getLineWidth()) / 2, 45, 2);
+    private void avatar(float x,float y,float radius,boolean radiant,boolean own) {
+        Node commander=new Node(own?"Own commander foreground":"Enemy commander foreground");
+        commander.setLocalTranslation(0,0,6); layout.attachChild(commander);
+        var portraitSkin=new NavalHudSkin(assets,commander,10);
+        // Opaque backing prevents the fleet pennant showing through portrait alpha edges.
+        if(!own) new NavalHudSkin(assets,commander,7)
+                .arc("Enemy portrait underlay",x,y,(radius-1)/2,radius-1,0,FastMath.TWO_PI,0x092B43);
+        portraitSkin.arc("Portrait rim",x,y,radius,3,0,FastMath.TWO_PI,WHITE);
+        Geometry portrait=portraitSkin.portrait("textures/portraits/"+(radiant?"radiant-admiral.png":"abyssal-admiral.png"),x,y,radius-3);
+        portrait.setName(own?"Own commander portrait":"Enemy commander portrait");
+        portrait.setUserData("commanderRole",own?"self":"opponent");
+        portraitSkin.arc("Timer segment track",x,y,radius+3,10,FastMath.PI,FastMath.PI,0xD7E2DE)
+                .setMesh(NavalHudSkin.arcMesh(radius+3,10,FastMath.PI,FastMath.PI,true));
+        Geometry arc=portraitSkin.arc(own?"Player turn arc":"Opponent turn arc",x,y,radius+3,7,FastMath.PI,FastMath.PI,own?0x21BDE5:ORANGE);
+        arc.move(0,0,.3f);
+        if(own) ownArc=arc; else rivalArc=arc;
     }
-
-    private boolean inside(float x, float y, float left, float bottom, float width, float height) {
-        return x >= left && x <= left + width && y >= bottom && y <= bottom + height;
-    }
-
-    public void setConnectionStatus(String status) {
-        connectionStatus = status;
-        if (connectionText != null) connectionText.setText(status);
-    }
-
-    public void setPlayerSide(com.battleship.shared.game.Side side) {
-        this.side = side;
-        if (playerSideText == null) return;
-        playerSideText.setText(side == null ? "RADIANT" : side + " / YOU");
-        opponentSideText.setText(side == null ? "ABYSSAL" : side.opponent() + " / OPPONENT");
-        playerSideText.setColor(Materials.rgb(side == com.battleship.shared.game.Side.BLACK ? 0xC1A3EC : 0x91CEFF));
-        opponentSideText.setColor(Materials.rgb(side == com.battleship.shared.game.Side.BLACK ? 0x91CEFF : 0xC1A3EC));
-    }
-
-    public void setPlayerName(String name) {
-        playerName = name;
-        if (playerText != null) { playerText.setText(name); UiTypography.fit(playerText, 155); }
-    }
-
-    public void setOpponentName(String name) {
-        opponentName = name;
-        if (opponentText != null) { opponentText.setText(name); UiTypography.fit(opponentText, 165); }
-    }
-
-    public void setGameStatus(String title, String detail) {
-        statusTitle = title;
-        statusDetail = detail;
-        if (statusTitleText != null) statusTitleText.setText(title);
-        if (statusDetailText != null) { statusDetailText.setText(detail); UiTypography.fit(statusDetailText, 254); }
-    }
-
-    public void setControlHints(String hints) {
-        controlHints = hints;
-        if (controlsText != null) controlsText.setText(hints);
-    }
-
-    private void ornatePanel(float x, float y, float width, float height) {
-        panel(x, y, width, height, new ColorRGBA(0.003f, 0.007f, 0.021f, 0.86f));
-        frame(x, y, width, height);
-    }
-
-    private void frame(float x, float y, float width, float height) {
-        line(x + 12, y, x + width - 12, y, GOLD);
-        line(x + 12, y + height, x + width - 12, y + height, GOLD);
-        line(x, y + 12, x, y + height - 12, GOLD);
-        line(x + width, y + 12, x + width, y + height - 12, GOLD);
-        for (int sx : new int[] {-1, 1}) {
-            for (int sy : new int[] {-1, 1}) {
-                float px = sx < 0 ? x : x + width, py = sy < 0 ? y : y + height;
-                float dx = -sx, dy = -sy;
-                line(px, py + dy * 12, px + dx * 12, py, GOLD);
-                line(px + dx * 4, py + dy * 22, px + dx * 22, py + dy * 4, GOLD);
-                diamond(px + dx * 11, py + dy * 11, 2.8f, GOLD);
+    private void rebuildFleet() {
+        fleetList.detachAllChildren(); if(phase==GamePhase.PLACEMENT) return;
+        var draw=new NavalHudSkin(assets,fleetList,13);
+        float top=h-185, bottom=rivalY+45, halfWidth=36, pitch=9;
+        float spacing=Math.min(80,(top-230)/rules.shipCount());
+        // The backing joins behind the opponent portrait; it must not wash over the face.
+        var backing=new NavalHudSkin(assets,fleetList,8);
+        backing.hazePennant(rivalX-halfWidth,bottom,halfWidth*2,top+55,25,.09f);
+        backing.line(rivalX-halfWidth,bottom,rivalX-halfWidth,top+55,0xE1EBEF,1.8f);
+        backing.line(rivalX+halfWidth,bottom,rivalX+halfWidth,top+55,0xE1EBEF,1.8f);
+        backing.line(rivalX-halfWidth,top+55,rivalX,top+80,0xE1EBEF,1.8f);
+        backing.line(rivalX,top+80,rivalX+halfWidth,top+55,0xE1EBEF,1.8f);
+        fleetList.setUserData("fleetOwner","opponent");
+        for(int i=0;i<rules.shipCount();i++) {
+            ShipType type=rules.shipTypes().get(i); boolean sunk=(sunkMask&(1<<type.ordinal()))!=0;
+            float y=top-i*spacing;
+            for(int cell=0;cell<type.length();cell++) {
+                float cellY=y-cell*pitch;
+                Geometry border=draw.rect(rivalX-6.1f,cellY-.6f,12.2f,9.2f,WHITE,.94f);
+                border.setName("Enemy ship cell border");
+                Geometry fill=draw.rect(rivalX-5.5f,cellY,11,8,sunk?0x70545A:ORANGE,1);
+                fill.setName("Enemy ship cell"); fill.setUserData("shipType",type.name()); fill.move(0,0,.1f);
+            }
+            if(sunk) {
+                draw.line(rivalX-14,y+6,rivalX+14,y-(type.length()-1)*pitch-2,0xE4A396,2);
+                draw.line(rivalX+14,y+6,rivalX-14,y-(type.length()-1)*pitch-2,0xE4A396,2);
             }
         }
     }
-
-    private void line(float x, float y, float endX, float endY, int color) {
-        float dx = endX - x, dy = endY - y;
-        Geometry geometry = panel(x, y, FastMath.sqrt(dx * dx + dy * dy), 1, Materials.rgb(color));
-        geometry.rotate(0, 0, FastMath.atan2(dy, dx));
-        geometry.setLocalTranslation(x, y, 1);
+    public void setShotResult(String result,boolean playerFired) {
+        if(result.equals(shotResult)&&playerFired==this.playerFired) return;
+        shotResult=result; this.playerFired=playerFired; redrawFeedback();
     }
-
-    private void diamond(float x, float y, float size, int color) {
-        Geometry geometry = panel(x, y - size, size * 1.414f, size * 1.414f, Materials.rgb(color));
-        geometry.rotate(0, 0, FastMath.QUARTER_PI);
-        geometry.setLocalTranslation(x, y - size, 1);
+    public void clearShotResult() { if(!shotResult.isEmpty()) { shotResult=""; redrawFeedback(); } }
+    public void setStartCountdown(long millis,boolean start) {
+        String next=millis>0?Long.toString(Math.min(3,(millis+999)/1000)):start?"START":"";
+        if(next.equals(introText)) return;
+        introText=next; redrawIntro();
     }
-
-    private BitmapText text(BitmapFont font, String value, float size, float x, float y, int color) {
-        BitmapText text = new BitmapText(font);
-        text.setText(UiTypography.normalize(value));
-        text.setSize(font == body ? UiTypography.bodySize(size) : size);
-        text.setColor(Materials.rgb(color));
-        text.setLocalTranslation(x, y, 2);
-        layout.attachChild(text);
-        return text;
+    private void redrawIntro() {
+        intro.detachAllChildren(); intro.setUserData("countdownValue",introText);
+        if(introText.isEmpty()) return;
+        var draw=new NavalHudSkin(assets,intro,80);
+        draw.panel(w/2-100,h/2-88,200,176,0x092D47);
+        draw.text(introText,introText.equals("START")?55:110,w/2-94,h/2-80,188,160,WHITE);
     }
-
-    private Geometry panel(float x, float y, float width, float height, ColorRGBA color) {
-        Geometry geometry = new Geometry("Ornamental HUD", new Quad(width, height));
-        Material material = materials.flat(color);
-        material.getAdditionalRenderState().setBlendMode(BlendMode.Alpha);
-        geometry.setMaterial(material);
-        geometry.setQueueBucket(Bucket.Gui);
-        geometry.setLocalTranslation(x, y, 0);
-        layout.attachChild(geometry);
-        return geometry;
+    private void redrawFeedback() {
+        feedback.detachAllChildren(); if(shotResult.isBlank()) return;
+        var draw=new NavalHudSkin(assets,feedback,19);
+        float x=playerFired?ownX:rivalX, y=playerFired?ownY-48:rivalY-36;
+        boolean miss=shotResult.equals("MISS");
+        draw.panel(x-86,y-22,172,44,miss?0x45637B:0x9D2824);
+        draw.text(shotResult,28,x-82,y-22,164,44,WHITE);
+    }
+    public void hideTurnClock() {
+        if(!clockVisible && drawnRemaining>=0) return;
+        clockVisible=false; remaining=60_000; drawnRemaining=-1; drawClock();
+    }
+    public void setTurnClock(String player,long millis) { setTurnClock(player.equals(playerName),millis); }
+    public void setTurnClock(boolean ownTurn,long millis) {
+        boolean changed=!clockVisible||this.ownTurn!=ownTurn;
+        clockVisible=true; this.ownTurn=ownTurn; remaining=Math.max(0,Math.min(60_000,millis));
+        if(changed) drawnRemaining=-1; drawClock();
+    }
+    private void drawClock() {
+        if(ownArc==null||drawnRemaining>=0&&Math.abs(remaining-drawnRemaining)<50) return;
+        drawnRemaining=remaining;
+        for(boolean own:new boolean[]{true,false}) {
+            Geometry arc=own?ownArc:rivalArc; float radius=own?77:65;
+            float fraction=!clockVisible?(phase==GamePhase.PLACEMENT?1:0):own==ownTurn?remaining/60_000f:0;
+            arc.setMesh(NavalHudSkin.arcMesh(radius,7,FastMath.PI,FastMath.PI*fraction,true));
+            arc.setUserData("remainingMillis",own==ownTurn&&clockVisible?remaining:0L);
+            arc.setUserData("active",clockVisible&&own==ownTurn);
+        }
+    }
+    public boolean contains(Vector2f point) {
+        float x=point.x/scale,y=point.y/scale;
+        return x>=left&&x<=left+flagWidth&&y>=(phase==GamePhase.PLACEMENT?70:h-BattleSidebarLayout.BANNER_HEIGHT)
+                || x>=rivalX-92&&x<=rivalX+92&&y<=rivalY+72&&y>=25
+                || phase!=GamePhase.PLACEMENT&&x>=rivalX-39&&x<=rivalX+39&&y>=rivalY+45&&y<=h-105
+                || phase==GamePhase.PLACEMENT&&!statusTitle.equals("Fleet confirmed")
+                    &&y>=h-62&&y<=h-25&&x>=w*.30f&&x<=w*.70f;
+    }
+    public void setPlayerSide(Side side) { if(this.side!=side){this.side=side;rebuild();} }
+    public void setPlayerName(String name) { if(!name.equals(playerName)){playerName=name;rebuild();} }
+    public void setOpponentName(String name) { if(!name.equals(opponentName)){opponentName=name;rebuild();} }
+    public void setGameStatus(String title,String detail) {
+        if(title.equals(statusTitle)&&detail.equals(this.detail)) return;
+        boolean waitingChanged=statusTitle.equals("Fleet confirmed")!=title.equals("Fleet confirmed");
+        statusTitle=title; this.detail=detail;
+        if(phase==GamePhase.PLACEMENT && waitingChanged) { rebuild(); return; }
+        if(title.startsWith("Your turn")||title.startsWith("Radiant turn")) turnTitle="YOUR TURN";
+        else if(title.startsWith("Opponent turn")||title.startsWith("Abyssal turn")) turnTitle="ENEMY TURN";
+        if(header!=null) {
+            header.setText("DEPLOY FLEET");
+            com.battleship.frontend.ui.UiTypography.centerIn(header,phase==GamePhase.PLACEMENT?w*.30f:w*.42f,h-60,
+                    phase==GamePhase.PLACEMENT?w*.40f:w*.37f,phase==GamePhase.PLACEMENT?32:30);
+        }
+        if(caption!=null){ caption.setText(detail); com.battleship.frontend.ui.UiTypography.centerIn(caption,w*.29f,76,w*.45f,24); }
     }
 }

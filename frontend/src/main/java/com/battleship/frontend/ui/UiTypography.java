@@ -13,6 +13,7 @@ import java.text.Normalizer;
 public final class UiTypography {
     private UiTypography() { }
 
+    public static BitmapFont hud(AssetManager assets) { return load(assets, "fonts/NavalHud.fnt"); }
     public static BitmapFont body(AssetManager assets) { return load(assets, "fonts/Manrope.fnt"); }
     public static BitmapFont display(AssetManager assets) { return load(assets, "fonts/CormorantGaramond.fnt"); }
 

@@ -1,6 +1,7 @@
 package com.battleship.frontend.game;
 
 import com.battleship.frontend.effects.AttackEffectManager;
+import com.battleship.frontend.audio.GameAudio.Cue;
 import com.battleship.frontend.graphics.ship.ShipFactory;
 import com.battleship.shared.game.GameEngine;
 import com.battleship.shared.game.GamePhase;
@@ -45,9 +46,20 @@ public final class GameController {
     private boolean networkPlacement;
     private PvpController network;
     private GameState networkState;
+    private GameState beforeShot;
     private Side ownSide = Side.WHITE;
     private boolean submitted;
     private Runnable leaveRoom = () -> { };
+    private java.util.function.Consumer<Cue> sound = cue -> { };
+    public void onSound(java.util.function.Consumer<Cue> sound) { this.sound = sound; }
+    private Board lastPlacementBoard;
+    private boolean resultSoundPlayed;
+    private boolean countingIntoBattle;
+    private float startFlash;
+    private int soundedTurn = -1, warnedTurn = -1;
+    private boolean placementSoundHandled;
+    private Runnable openSettings = () -> { };
+    public void onSettings(Runnable action) { openSettings = action; }
     private String message = "Choose a ship, then click a cell.";
 
     public GameController(GameEngine engine, BoardPicker picker, FleetRenderer fleet,
@@ -73,15 +85,18 @@ public final class GameController {
         this.gameOver = gameOver;
         this.returnToMenu = returnToMenu;
         hud.setOpponentName(engine.state().enemy().name());
-        hud.setConnectionStatus("Local game - no server required");
         refresh();
     }
 
     public GameState state() { return networkState == null ? engine.state() : networkState; }
     public boolean enemyView() { return enemyView; }
     public boolean attackAnimating() { return effects.isBusy(); }
+    public boolean inputBusy() { return effects.isBusy() || introBlocked(); }
 
     public void useLocalMode() {
+        soundedTurn = warnedTurn = -1;
+        effects.clear(); beforeShot = null; lastPlacementBoard = null; resultSoundPlayed = false;
+        countingIntoBattle = false; startFlash = 0; hud.setStartCountdown(0, false);
         networkPlacement = false;
         designer.clear(); drawingMode = false;
         engine.restart(); engine.setRules(com.battleship.shared.game.GameRules.DEFAULT);
@@ -96,7 +111,6 @@ public final class GameController {
         gameOver.setNetworkMode(false);
         controls.setNetworkPlacement(false);
         hud.setOpponentName(state().enemy().name());
-        hud.setConnectionStatus("Local game - no server required");
         refresh();
     }
 
@@ -108,6 +122,9 @@ public final class GameController {
                 com.battleship.shared.game.TurnRule.ALTERNATING), network);
     }
     public void useNetworkPlacement(String opponent, String roomCode, Side side, com.battleship.shared.game.GameRules rules, PvpController network) {
+        soundedTurn = warnedTurn = -1;
+        effects.clear(); beforeShot = null; lastPlacementBoard = null; resultSoundPlayed = false;
+        countingIntoBattle = false; startFlash = 0; hud.setStartCountdown(0, false);
         engine.setRules(rules); designer.clear(); drawingMode = designerMode();
         networkPlacement = true;
         this.network = network;
@@ -121,7 +138,6 @@ public final class GameController {
         controls.setNetworkPlacement(true);
         hud.setPlayerName(network.account().displayName());
         hud.setOpponentName(opponent);
-        hud.setConnectionStatus("PVP " + roomCode + " / " + side + " / Player 1 starts");
         message = designerMode() ? "Draw connected cells. Right click erases." : side + " fleet. Place ships, then Ready.";
         refresh();
     }
@@ -131,10 +147,12 @@ public final class GameController {
         submitted = snapshot.fleetSubmitted();
         gameOver.setEndReason(snapshot.endReason());
         if (snapshot.phase() == GamePhase.PLACEMENT) {
-            message = submitted ? "Fleet locked. Waiting for opponent." : "Opponent ready. Finish your fleet.";
+            message = submitted ? "Fleet locked. Waiting for opponent." : snapshot.opponentSubmitted()
+                    ? "Opponent confirmed fleet. Finish yours." : "Deploy your fleet, then Ready.";
             refreshHud();
             return;
         }
+        GameState previous = state();
         networkState = new GameState(snapshot.phase(),
                 new Player(snapshot.playerId(), network.account().displayName(), snapshot.ownBoard().board()),
                 new Player(snapshot.opponentId(), snapshot.opponentName(), snapshot.enemyBoard().board()),
@@ -143,20 +161,24 @@ public final class GameController {
         AttackResult attack = snapshot.lastAttack();
         effects.clear();
         if (snapshot.phase() == GamePhase.GAME_OVER && snapshot.endReason() != com.battleship.shared.match.MatchEndReason.FLEET_DESTROYED) {
+            if (snapshot.timedOut()) sound.accept(Cue.TIMEOUT);
             message = snapshot.timedOut() ? "Turn time expired." : "A player left the match.";
             refresh();
-            gameOver.show(state());
+            showGameOver();
             return;
         }
         enemyView = attack == null || attack.attackerId().equals(snapshot.playerId());
         message = attack == null ? "Battle started. Player 1 goes first." : attack.type() + " at " + cellName(attack.coordinate());
-        refresh();
+        beforeShot = previous;
+        if (attack != null) sound.accept(Cue.CANNON);
         if (attack != null) effects.play(attack, attack.sunk() ? attack.affectedCells() : List.of(),
-                this::refresh, () -> {
-                    if (state().phase() == GamePhase.GAME_OVER) gameOver.show(state());
+                attack.attackerId().equals(snapshot.playerId()) ? snapshot.side() : snapshot.side().opponent(),
+                () -> { impactSound(attack); refresh(); }, () -> {
+                    if (state().phase() == GamePhase.GAME_OVER) showGameOver();
                     else enemyView = state().currentPlayerId().equals(state().player().id());
                     refresh();
                 });
+        refresh();
     }
 
     public void networkError(String detail) {
@@ -168,13 +190,15 @@ public final class GameController {
     private boolean placementLocked() { return networkPlacement && (submitted || network.pending()); }
 
     private boolean canTarget(Coordinate cell) {
-        return networkPlacement ? state().phase() == GamePhase.BATTLE && enemyView && !network.pending()
+        return networkPlacement ? state().phase() == GamePhase.BATTLE && !introBlocked() && enemyView && !network.pending()
                 && state().currentPlayerId().equals(state().player().id()) && !state().enemy().board().wasAttacked(cell)
                 : engine.canAttack(viewAttacker(), cell);
     }
 
     public void update(float delta, Vector2f cursor) {
+        updateIntro(delta);
         effects.update(delta);
+        if (effects.isBusy()) refreshShotStatus();
         update(cursor);
     }
 
@@ -210,7 +234,10 @@ public final class GameController {
     }
 
     public void primaryClick(Vector2f cursor) {
-        if (effects.isBusy() || draggedShip != null) return;
+        if (controls.actionAt(cursor).filter(a -> a == PlacementHud.Action.SETTINGS).isPresent()) {
+            perform(PlacementHud.Action.SETTINGS); return;
+        }
+        if (introBlocked() || effects.isBusy() || draggedShip != null) return;
         if (gameOver.mainMenuAt(cursor)) {
             if (networkPlacement) network.returnToMainMenu(); else returnToMenu.run();
             return;
@@ -232,6 +259,7 @@ public final class GameController {
                 message = selectionMessage();
             } else if (!designerMode() && hover != null && state().player().board().ship(state().placement().selectedType()) == null) {
                 PlacementResult result = engine.clickPlacement(hover);
+                if (!result.success()) sound.accept(Cue.ERROR);
                 message = result.success() ? selectionMessage() : failureMessage(result);
             } else {
                 message = "Drag a placed ship to move it.";
@@ -311,6 +339,7 @@ public final class GameController {
         if (draggedShip == null) return;
         dragShip(cursor);
         PlacementResult result = hover == null ? null : engine.clickPlacement(hover);
+        if (result != null && !result.success()) sound.accept(Cue.ERROR);
         ShipType type = draggedShip;
         draggedShip = null;
         dragCursor = null;
@@ -331,8 +360,10 @@ public final class GameController {
     }
 
     public void restartLocalMatch() {
+        soundedTurn = warnedTurn = -1;
         cancelShipDrag();
         engine.restart();
+        lastPlacementBoard = null; resultSoundPlayed = false;
         designer.clear(); drawingMode = designerMode();
         networkState = null;
         effects.clear();
@@ -348,10 +379,14 @@ public final class GameController {
     }
 
     public void perform(PlacementHud.Action action) {
+        if (action == PlacementHud.Action.SETTINGS) { sound.accept(Cue.CLICK); cancelShipDrag(); openSettings.run(); return; }
         if (action.name().startsWith("SELECT_")
                 && !engine.rules().allows(ShipType.valueOf(action.name().substring(7)))) return;
         if (networkPlacement && action == PlacementHud.Action.LEAVE_ROOM) { cancelShipDrag(); leaveRoom.run(); return; }
+        if (introBlocked()) return;
         if (effects.isBusy()) return;
+        if (action == PlacementHud.Action.MORE) { sound.accept(Cue.CLICK); controls.toggleMore(); return; }
+        if (action.name().startsWith("SELECT_") || action == PlacementHud.Action.TOGGLE_BOARD || action == PlacementHud.Action.TOGGLE_DRAW) sound.accept(Cue.CLICK);
         if (networkPlacement && (action == PlacementHud.Action.RESTART
                 || (action == PlacementHud.Action.READY && state().phase() == GamePhase.GAME_OVER))) {
             if (state().phase() == GamePhase.GAME_OVER) network.requestRematch();
@@ -364,10 +399,12 @@ public final class GameController {
                 return;
             }
             cancelShipDrag();
-            if (designer.hasDraft()) { message = "Finish or clear your draft before Ready."; refreshHud(); return; }
+            if (designer.hasDraft()) { sound.accept(Cue.ERROR); message = "Finish or clear your draft before Ready."; refreshHud(); return; }
             if (engine.canReady()) {
-                message = network.submitFleet(state().player().board()) ? "Submitting fleet..." : "Connection unavailable.";
-            } else message = submitted ? "Waiting for opponent." : "Place all " + engine.rules().shipCount() + " ships.";
+                boolean sent = network.submitFleet(state().player().board());
+                message = sent ? "Submitting fleet..." : "Connection unavailable.";
+                if (sent) sound.accept(Cue.READY);
+            } else { sound.accept(Cue.ERROR); message = submitted ? "Waiting for opponent." : "Place all " + engine.rules().shipCount() + " ships."; }
             refreshHud();
             return;
         }
@@ -377,7 +414,7 @@ public final class GameController {
             message = drawingMode ? "Left drag draws; right drag erases." : "Drag ships to move; T rotates.";
             refresh(); return;
         }
-        if (designerMode() && action == PlacementHud.Action.REMOVE && designer.hasDraft()) { designer.clear(); message = "Draft cancelled."; refresh(); return; }
+        if (designerMode() && action == PlacementHud.Action.REMOVE && designer.hasDraft()) { sound.accept(Cue.REMOVE); designer.clear(); message = "Draft cancelled."; refresh(); return; }
         if (designerMode() && action == PlacementHud.Action.ROTATE && draggedShip != null) cancelShipDrag();
         if (designerMode() && action == PlacementHud.Action.ROTATE && designer.hasDraft()) { message = "Finish or clear the draft before rotating."; refreshHud(); return; }
         if (action.name().startsWith("SELECT_") || action == PlacementHud.Action.RESET || action == PlacementHud.Action.RANDOM) designer.clear();
@@ -412,6 +449,16 @@ public final class GameController {
             case READY -> result = engine.ready();
             default -> { return; }
         }
+        if (!result.success()) sound.accept(Cue.ERROR);
+        else if (action == PlacementHud.Action.ROTATE || action == PlacementHud.Action.REMOVE
+                || action == PlacementHud.Action.RESET || action == PlacementHud.Action.RANDOM) {
+            sound.accept(switch (action) {
+                case ROTATE -> Cue.ROTATE;
+                case RANDOM -> Cue.RANDOM;
+                default -> Cue.REMOVE;
+            });
+            placementSoundHandled = true;
+        }
         message = result.success() ? switch (action) {
             case ROTATE -> "Ship orientation updated.";
             case REMOVE -> state().placement().selectedType().displayName() + " removed.";
@@ -421,7 +468,7 @@ public final class GameController {
             default -> selectionMessage();
         } : failureMessage(result);
         if (action == PlacementHud.Action.READY && result.success()) {
-            enemyView = true;
+            enemyView = true; sound.accept(Cue.READY);
             LOG.info("Local match: PLACEMENT -> BATTLE; both fleets complete");
         }
         if (action == PlacementHud.Action.ROTATE && !result.success() && draggedShip == null)
@@ -455,9 +502,10 @@ public final class GameController {
     private void attack() {
         if (networkPlacement) {
             if (!canTarget(hover)) { message = "Wait for your turn; target enemy waters."; refreshHud(); return; }
-            if (network.attack(hover)) { message = "Volley sent. Awaiting server."; targeting.clear(); refreshHud(); }
+            if (network.attack(hover)) { sound.accept(Cue.TARGET); message = "Volley sent. Awaiting server."; targeting.clear(); refreshHud(); }
             return;
         }
+        beforeShot = state();
         AttackResult result = engine.attack(viewAttacker(), hover);
         if (!result.accepted()) {
             message = switch (result.type()) {
@@ -474,13 +522,16 @@ public final class GameController {
         feedback.clearPreview();
         hud.setGameStatus("Volley incoming", "Target " + cellName(result.coordinate()));
         LOG.info("Local attack: " + result.type() + " at " + result.coordinate());
-        effects.play(result, result.sunk() ? result.affectedCells() : List.of(), () -> {
+        sound.accept(Cue.CANNON);
+        effects.play(result, result.sunk() ? result.affectedCells() : List.of(),
+                result.attackerId().equals(state().player().id()) ? ownSide : ownSide.opponent(), () -> {
+            impactSound(result);
             message = result.sunk() ? result.shipType().displayName().toUpperCase(java.util.Locale.ROOT) + " SUNK"
                     : result.type() + " at " + cellName(result.coordinate());
             refresh();
             hud.setGameStatus(result.sunk() ? message : result.type().toString(), "Target " + cellName(result.coordinate()));
         }, () -> {
-            if (state().phase() == GamePhase.GAME_OVER) gameOver.show(state());
+            if (state().phase() == GamePhase.GAME_OVER) showGameOver();
             else enemyView = state().currentPlayerId().equals(state().player().id());
             refresh();
         });
@@ -490,8 +541,25 @@ public final class GameController {
 
     private static String cellName(Coordinate cell) { return "" + (char) ('A' + cell.column()) + (cell.row() + 1); }
 
+    private void impactSound(AttackResult shot) {
+        sound.accept(shot.sunk() ? Cue.SUNK : shot.type() == com.battleship.shared.game.AttackResultType.MISS ? Cue.MISS : Cue.HIT);
+    }
+    private void showGameOver() {
+        gameOver.show(state());
+        if (!resultSoundPlayed) {
+            resultSoundPlayed = true;
+            sound.accept(state().player().id().equals(state().winnerId()) ? Cue.VICTORY : Cue.DEFEAT);
+        }
+    }
     private void refresh() {
-        Board visible = enemyView ? state().enemy().board() : state().player().board();
+        if (state().phase() == GamePhase.PLACEMENT) {
+            Board placement = state().player().board();
+            if (!placementSoundHandled && lastPlacementBoard != null && lastPlacementBoard != placement) sound.accept(Cue.PLACE);
+            lastPlacementBoard = placement;
+        }
+        placementSoundHandled = false;
+        GameState shown = effects.isBusy() && !effects.hasImpacted() && beforeShot != null ? beforeShot : state();
+        Board visible = enemyView ? shown.enemy().board() : shown.player().board();
         Side visibleSide = enemyView ? ownSide.opponent() : ownSide;
         fleet.setEditing(designer.hasDraft() ? designer.type() : null);
         fleet.display(visible, !enemyView, visibleSide == Side.WHITE ? ShipFactory.Fleet.RADIANT : ShipFactory.Fleet.ABYSSAL);
@@ -508,33 +576,72 @@ public final class GameController {
 
     private void refreshHud() {
         updateTurnClock();
-        minimap.update(state().player().board());
+        hud.setBattleState(state(), engine.rules());
+        hud.setOpponentReady(networkPlacement && network.match() != null && network.match().opponentSubmitted());
+        minimap.setBattleVisible(state().phase() != GamePhase.PLACEMENT);
+        GameState shown = effects.isBusy() && !effects.hasImpacted() && beforeShot != null ? beforeShot : state();
+        minimap.update(shown.player().board());
         controls.setNetworkLocked(placementLocked());
         controls.setRules(engine.rules());
         controls.setDesigner(designerMode(), drawingMode, designer.cells().size(), designer.hasDraft());
         controls.update(state(), message, enemyView);
-        hud.setControlHints(state().phase() == GamePhase.PLACEMENT
-                ? designerMode() ? "G: draw/move / T: rotate / Enter: Ready\nDraw: left drag / Erase: right drag" : "Drag ship: move / Click: place\nDrag sea: orbit / Scroll: zoom / R: reset"
-                : "Click: fire / Tab: switch board\nDrag sea: orbit / Scroll: zoom / R: reset");
+        if (effects.isBusy()) { refreshShotStatus(); return; }
+        hud.clearShotResult();
         if (state().phase() == GamePhase.PLACEMENT) {
-            hud.setGameStatus(submitted ? "Waiting for opponent" : "Deploy your fleet", state().player().board().ships().size()
-                    + "/" + engine.rules().shipCount() + " ships - " + (networkPlacement ? ownSide + " fleet" : "cyan valid / red blocked"));
+            hud.setGameStatus(submitted ? "Fleet confirmed" : "Ship placement", submitted ? "Waiting for opponent"
+                    : state().player().board().ships().size() + " / " + engine.rules().shipCount() + " ships ready");
         } else if (state().phase() == GamePhase.GAME_OVER) {
             hud.setGameStatus(networkPlacement && network.match() != null && network.match().timedOut() ? "Time expired" : "Game over",
                     state().winnerId().equals(state().player().id()) ? "Your fleet wins." : "Enemy fleet wins.");
         } else {
             boolean ourTurn = state().currentPlayerId().equals(state().player().id());
-            hud.setGameStatus(networkPlacement ? (ourTurn ? "Your turn / " + ownSide : "Opponent turn / " + ownSide.opponent())
+            hud.setGameStatus(networkPlacement ? (ourTurn ? "Your turn" : "Opponent turn")
                             : ourTurn ? "Radiant turn" : "Abyssal turn",
-                    "Turn " + state().turnNumber() + (networkPlacement ? " / server synchronized"
-                            : ourTurn ? " - fire at Abyssal waters." : " - fire at Radiant waters."));
+                    ourTurn ? "Choose a target" : "Awaiting enemy volley");
         }
+    }
+
+    private void refreshShotStatus() {
+        AttackResult shot = effects.result();
+        if (shot == null) return;
+        String title = !effects.hasImpacted() ? "Volley incoming"
+                : shot.sunk() ? "Ship sunk" : shot.type().toString();
+        hud.setShotResult(effects.hasImpacted() ? shot.sunk() ? "SUNK!" : shot.type().toString() : "",
+                shot.attackerId().equals(state().player().id()));
+        hud.setGameStatus(title, "Target " + cellName(shot.coordinate())
+                + (effects.hasImpacted() ? " / resolving volley" : ""));
     }
 
     private void updateTurnClock() {
         if (networkPlacement && state().phase() == GamePhase.BATTLE) {
-            String owner = state().currentPlayerId().equals(state().player().id()) ? state().player().name() : state().enemy().name();
-            hud.setTurnClock(owner, network.remainingTurnMillis());
+            hud.setTurnClock(state().currentPlayerId().equals(state().player().id()), network.remainingTurnMillis());
         } else hud.hideTurnClock();
+        if (state().phase() == GamePhase.BATTLE && !effects.isBusy() && !introBlocked()) {
+            boolean own = state().currentPlayerId().equals(state().player().id());
+            int turn = state().turnNumber();
+            if (soundedTurn != turn) {
+                soundedTurn = turn;
+                sound.accept(own ? Cue.YOUR_TURN : Cue.ENEMY_TURN);
+            }
+            if (networkPlacement && own && !network.pending() && network.remainingTurnMillis() > 0
+                    && network.remainingTurnMillis() <= 10_000 && warnedTurn != turn) {
+                warnedTurn = turn; sound.accept(Cue.TIMER_WARNING);
+            }
+        }
+    }
+    private boolean introBlocked() {
+        return networkPlacement && state().phase() == GamePhase.BATTLE
+                && (network.remainingStartMillis() > 0 || startFlash > 0);
+    }
+    private void updateIntro(float delta) {
+        if (!networkPlacement || state().phase() != GamePhase.BATTLE) {
+            countingIntoBattle = false; startFlash = 0; hud.setStartCountdown(0, false); return;
+        }
+        long delay = network.remainingStartMillis();
+        if (delay > 0) { countingIntoBattle = true; startFlash = 0; }
+        else if (countingIntoBattle) { countingIntoBattle = false; startFlash = .45f; sound.accept(Cue.MATCH_START); }
+        else startFlash = Math.max(0, startFlash - Math.max(0, delta));
+        if (effects.isBusy()) startFlash = 0;
+        hud.setStartCountdown(delay, startFlash > 0);
     }
 }

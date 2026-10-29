@@ -57,6 +57,8 @@ public final class PvpController implements AutoCloseable {
     private TurnTimer turnTimer;
     private long clockReceivedAt;
     private long sentAt;
+    private Consumer<com.battleship.frontend.audio.GameAudio.Cue> sound = cue -> { };
+    public void onSound(Consumer<com.battleship.frontend.audio.GameAudio.Cue> sound) { this.sound = sound; }
 
     public PvpController(PvpRoomPanel panel, String playerName, Consumer<RoomSnapshot> startPlacement,
                          Runnable showWaiting, Runnable mainMenu, Consumer<MatchSnapshot> matchUpdates,
@@ -183,7 +185,12 @@ public final class PvpController implements AutoCloseable {
     public long remainingTurnMillis() {
         if (match == null || match.phase() != com.battleship.shared.game.GamePhase.BATTLE || turnTimer == null) return 0;
         long elapsed = java.util.concurrent.TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - clockReceivedAt);
-        return Math.max(0, turnTimer.remainingMillis() - elapsed);
+        return Math.max(0, turnTimer.remainingMillis() - Math.max(0, elapsed - turnTimer.startsInMillis()));
+    }
+    public long remainingStartMillis() {
+        if (match == null || match.phase() != com.battleship.shared.game.GamePhase.BATTLE || turnTimer == null) return 0;
+        long elapsed = java.util.concurrent.TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - clockReceivedAt);
+        return Math.max(0, turnTimer.startsInMillis() - elapsed);
     }
 
     public boolean submitFleet(Board board) {
@@ -296,6 +303,7 @@ public final class PvpController implements AutoCloseable {
         if (state.connected()) {
             clientId = state.player().clientId();
         } else if (!state.connecting()) {
+            if (account != null) sound.accept(com.battleship.frontend.audio.GameAudio.Cue.DISCONNECTED);
             if (account != null) LOG.warning("Authenticated TCP session ended: " + state.detail());
             account = null;
             inviteRoomRequest = null;
@@ -342,6 +350,7 @@ public final class PvpController implements AutoCloseable {
             case REGISTER_OK -> setStatus("Account created. Sign in to continue.");
             case LOGOUT_OK -> { account = null; setStatus("Signed out."); }
             case AUTH_FAILED -> {
+                sound.accept(com.battleship.frontend.audio.GameAudio.Cue.ERROR);
                 leaderboardListener.accept(message);
                 friendsListener.accept(message);
                 gameInviteListener.accept(message);
@@ -354,6 +363,9 @@ public final class PvpController implements AutoCloseable {
                 setStatus(error.message());
             }
             case ROOM_CREATED, ROOM_JOINED, PLAYER_JOINED, ROOM_UPDATED, PLAYER_LEFT -> {
+                if (message.type() == MessageType.PLAYER_JOINED || message.type() == MessageType.ROOM_JOINED)
+                    sound.accept(com.battleship.frontend.audio.GameAudio.Cue.JOIN);
+                if (message.type() == MessageType.PLAYER_LEFT) sound.accept(com.battleship.frontend.audio.GameAudio.Cue.LEAVE);
                 room = message.payloadAs(RoomSnapshot.class);
                 if (message.type() == MessageType.PLAYER_LEFT && match != null
                         && match.phase() == com.battleship.shared.game.GamePhase.GAME_OVER) {
@@ -376,6 +388,7 @@ public final class PvpController implements AutoCloseable {
                 }
             }
             case ROOM_LEFT -> {
+                sound.accept(com.battleship.frontend.audio.GameAudio.Cue.LEAVE);
                 room = null;
                 chatListener.accept(message);
                 match = null;
@@ -409,6 +422,10 @@ public final class PvpController implements AutoCloseable {
                         || match.phase() != com.battleship.shared.game.GamePhase.GAME_OVER) return;
                 RematchState next = message.payloadAs(RematchState.class);
                 if (!next.roomCode().equals(room.roomCode())) return;
+                boolean opponentRequest = next.available() && !next.declined()
+                        && next.acceptedPlayerIds().stream().anyMatch(id -> !id.equals(clientId))
+                        && (rematch == null || rematch.acceptedPlayerIds().stream().noneMatch(id -> !id.equals(clientId)));
+                if (opponentRequest) sound.accept(com.battleship.frontend.audio.GameAudio.Cue.REMATCH);
                 rematch = next;
                 rematchStatus = !next.available() ? "Opponent left. Rematch cancelled."
                         : next.declined() ? "Rematch declined."
@@ -437,6 +454,7 @@ public final class PvpController implements AutoCloseable {
                 clockReceivedAt = System.nanoTime();
             }
             case ERROR -> {
+                sound.accept(com.battleship.frontend.audio.GameAudio.Cue.ERROR);
                 // A rejected earlier request must not cancel a queued Main Menu action.
                 if (leaving) menuAfterLeave = false;
                 leaving = false;

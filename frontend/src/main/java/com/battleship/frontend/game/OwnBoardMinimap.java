@@ -1,6 +1,7 @@
 package com.battleship.frontend.game;
 
 import com.battleship.frontend.graphics.Materials;
+import com.battleship.frontend.ui.BattleSidebarLayout;
 import com.battleship.shared.game.Board;
 import com.battleship.shared.game.CellState;
 import com.battleship.shared.game.Coordinate;
@@ -40,7 +41,8 @@ public final class OwnBoardMinimap {
     private Board displayedBoard;
     private float scale = 1;
     private float left;
-    private final float bottom = 170;
+    private float bottom;
+    public void setBattleVisible(boolean visible) { layout.setCullHint(visible ? CullHint.Inherit : CullHint.Always); }
     private com.battleship.shared.game.Side side;
 
     public OwnBoardMinimap(AssetManager assets) {
@@ -74,8 +76,9 @@ public final class OwnBoardMinimap {
     }
 
     public void resize(int width, int height) {
-        scale = Math.min(width / 1440f, height / 900f);
-        left = width / scale - 60 - SIZE;
+        scale = com.battleship.frontend.ui.UiTypography.scale(width, height);
+        left = BattleSidebarLayout.mapLeft();
+        bottom = BattleSidebarLayout.mapBottom(height / scale);
         layout.setLocalScale(scale);
         position();
         layout.detachAllChildren();
@@ -92,6 +95,11 @@ public final class OwnBoardMinimap {
                 markers[row][column] = marker;
             }
         }
+        Material border = materials.flat(Materials.linear(0xCEB97D));
+        quad(layout, "Minimap bottom rim", -1.2f, -1.2f, SIZE+2.4f, 1.2f, 27, border);
+        quad(layout, "Minimap top rim", -1.2f, SIZE, SIZE+2.4f, 1.2f, 27, border);
+        quad(layout, "Minimap left rim", -1.2f, 0, 1.2f, SIZE, 27, border);
+        quad(layout, "Minimap right rim", SIZE, 0, 1.2f, SIZE, 27, border);
         layout.attachChild(fleet);
         if (displayedBoard != null) renderBoard();
     }
@@ -104,8 +112,8 @@ public final class OwnBoardMinimap {
 
     public boolean contains(Vector2f screen) {
         float x = screen.x / scale, y = screen.y / scale;
-        return cells[0][0] != null && x >= left && x <= left + SIZE
-                && y >= bottom && y <= bottom + SIZE;
+        return layout.getLocalCullHint() != CullHint.Always && cells[0][0] != null && x >= left - 2 && x <= left + SIZE + 2
+                && y >= bottom - 2 && y <= bottom + SIZE + 2;
     }
 
     private void renderBoard() {

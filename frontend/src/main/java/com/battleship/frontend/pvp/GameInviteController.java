@@ -13,6 +13,8 @@ public final class GameInviteController {
     private Received current;
     private String requestId;
     private long sentAt;
+    private java.util.function.Consumer<com.battleship.frontend.audio.GameAudio.Cue> sound = cue -> { };
+    public void onSound(java.util.function.Consumer<com.battleship.frontend.audio.GameAudio.Cue> sound) { this.sound = sound; }
 
     public GameInviteController(PvpController network, GameInvitePanel panel) {
         this.network = network; this.panel = panel; network.setGameInviteListener(this::onMessage);
@@ -64,6 +66,8 @@ public final class GameInviteController {
         if (network.account() == null || !invite.inviter().id().equals(network.account().id()) && !invite.recipient().id().equals(network.account().id())) return;
         Received received = new Received(invite, System.nanoTime());
         if (invite.status() == GameInviteStatus.PENDING) {
+            if (!pending.containsKey(invite.inviteId()) && invite.recipient().id().equals(network.account().id()))
+                sound.accept(com.battleship.frontend.audio.GameAudio.Cue.INVITE);
             pending.put(invite.inviteId(), received);
             if (current == null || current.invite.status() != GameInviteStatus.PENDING || response
                     || invite.recipient().id().equals(network.account().id()) && !current.invite.recipient().id().equals(network.account().id())) current = received;

@@ -13,6 +13,8 @@ public final class ChatController {
     private ChatContext context;
     private String requestId;
     private long sentAt, lastSequence;
+    private java.util.function.Consumer<com.battleship.frontend.audio.GameAudio.Cue> sound = cue -> { };
+    public void onSound(java.util.function.Consumer<com.battleship.frontend.audio.GameAudio.Cue> sound) { this.sound = sound; }
 
     public ChatController(PvpController network, ChatPanel panel) {
         this.network = network; this.panel = panel; network.setChatListener(this::onMessage);
@@ -59,6 +61,8 @@ public final class ChatController {
             var delivered = message.payloadAs(ChatMessage.class);
             if (context == null || !context.contextId().equals(delivered.contextId()) || delivered.sequence() <= lastSequence) return;
             lastSequence = delivered.sequence(); panel.append(delivered);
+            if (network.account() != null && !delivered.sender().id().equals(network.account().id()))
+                sound.accept(com.battleship.frontend.audio.GameAudio.Cue.CHAT);
             if (response) panel.sent();
         } else if (response) panel.error(message.type() == MessageType.CHAT_ERROR
                 ? message.payloadAs(RoomError.class).message() : "Sign in before using room chat.");

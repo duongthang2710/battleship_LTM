@@ -45,6 +45,9 @@ public final class GameplayRenderChecks extends SimpleApplication {
     private Node board;
     private BoardCoordinates coordinates;
     private GameController game;
+    private PlacementHud controls;
+    private int settingsRequests;
+    private final java.util.List<com.battleship.frontend.audio.GameAudio.Cue> soundEvents = new java.util.ArrayList<>();
     private GameInput gameInput;
     private OwnBoardMinimap minimap;
     private GameOverOverlay gameOver;
@@ -90,7 +93,7 @@ public final class GameplayRenderChecks extends SimpleApplication {
         scene.installOceanReflections(viewPort);
         SceneEffects.install(assetManager, viewPort, scene.keyLight());
         BattleHud hud = new BattleHud(assetManager, "Captain");
-        PlacementHud controls = new PlacementHud(assetManager);
+        controls = new PlacementHud(assetManager);
         minimap = new OwnBoardMinimap(assetManager);
         gameOver = new GameOverOverlay(assetManager);
         hud.resize(1440, 900);
@@ -108,6 +111,7 @@ public final class GameplayRenderChecks extends SimpleApplication {
                 new FleetRenderer(board, materials), new PlacementFeedback(board, materials), controls, hud, minimap,
                 new TargetingRenderer(board, materials), new AttackEffectManager(board, materials), gameOver,
                 () -> returnedToMenu = true);
+        game.onSettings(() -> settingsRequests++); game.onSound(soundEvents::add);
         gameInput = new GameInput(input, game, orbit);
     }
 
@@ -204,26 +208,33 @@ public final class GameplayRenderChecks extends SimpleApplication {
             require(game.state() == afterAttack && game.attackAnimating(), "Busy attack blocks repeat click");
             require(((Node) board.getChild("Gameplay attack markers")).getQuantity() == 0, "Markers wait for impact");
         } else if (frame == 55) {
+            GameState beforeSettings = game.state();
+            game.primaryClick(controls.buttonCenter(PlacementHud.Action.SETTINGS));
+            require(settingsRequests == 1 && game.state() == beforeSettings && game.attackAnimating(), "Settings gear remains reachable during volley without resetting state");
+            require(soundEvents.stream().filter(c -> c == com.battleship.frontend.audio.GameAudio.Cue.CANNON).count() == 1,
+                    "One accepted shot emits one cannon cue");
             game.update(0.4f, screen(firstHit));
-            require(board.getChild("Board-local projectile").getLocalCullHint() == com.jme3.scene.Spatial.CullHint.Inherit,
+            require(board.getChild("Ocean-to-board projectile").getLocalCullHint() == com.jme3.scene.Spatial.CullHint.Inherit,
                     "Projectile flies before impact");
             checkCamera();
         } else if (frame == 65) {
-            game.update(0.4f, screen(firstHit));
-            require(board.getChild("Hit light burst") != null, "Hit burst exists at impact");
+            game.update(0.7f, screen(firstHit));
+            require(board.getChild("Hit explosion") != null, "Hit burst exists at impact");
+            require(soundEvents.stream().filter(c -> c == com.battleship.frontend.audio.GameAudio.Cue.HIT).count() == 1,
+                    "Hit cue fires at impact exactly once");
             require(((Node) board.getChild("Gameplay attack markers")).getQuantity() == 2, "Hit cross marker committed at impact");
         } else if (frame == 75) {
-            game.update(1, screen(firstHit));
+            game.update(AttackEffectManager.TOTAL_DURATION, screen(firstHit));
             require(!game.attackAnimating() && !game.enemyView(), "Completion opens manual Abyssal turn");
             require(visibleShips() == 5, "Own fleet view preserves existing models");
             Coordinate miss = emptyCell(fleet());
             click(miss);
             require(game.state().lastAttack().type() == AttackResultType.MISS, "Other player manually fires a miss");
-            game.update(0.8f, screen(miss));
-            require(board.getChild("Miss water splash") != null && board.getChild("Hit light burst") == null, "Miss has splash without explosion");
+            game.update(AttackEffectManager.IMPACT_TIME + .10f, screen(miss));
+            require(board.getChild("Miss water splash") != null && board.getChild("Hit explosion") == null, "Miss has splash without explosion");
             requireMinimap(miss, 0x071F38);
         } else if (frame == 85) {
-            game.update(1, screen(firstHit));
+            game.update(AttackEffectManager.TOTAL_DURATION, screen(firstHit));
             GameState beforeRepeat = game.state();
             click(firstHit);
             require(game.state() == beforeRepeat && !game.attackAnimating(), "Previously attacked cell cannot animate again");
@@ -284,21 +295,21 @@ public final class GameplayRenderChecks extends SimpleApplication {
                 if (game.state().enemy().board().wasAttacked(cell)) continue;
                 click(cell);
                 require(game.attackAnimating() && game.state().lastAttack().accepted(), "Player shot accepted");
-                game.update(0.8f, screen(cell));
+                game.update(AttackEffectManager.IMPACT_TIME + .05f, screen(cell));
                 if (game.state().lastAttack().sunk())
                     require(visibleShips() == game.state().enemy().board().ships().stream().filter(Ship::isSunk).count(),
                             "Sunk ships revealed using existing models");
-                game.update(1, screen(cell));
+                game.update(AttackEffectManager.TOTAL_DURATION, screen(cell));
                 if (game.state().phase() == GamePhase.GAME_OVER) return;
                 Coordinate response = enemyHitChecked ? emptyCell(fleet()) : fleet().ship(ShipType.CARRIER).occupiedCells().getFirst();
                 click(response);
                 require(game.attackAnimating() && game.state().lastAttack().attackerId().equals("enemy"), "Manual enemy shot accepted");
-                game.update(0.8f, screen(response));
+                game.update(AttackEffectManager.IMPACT_TIME + .05f, screen(response));
                 if (!enemyHitChecked) {
                     requireMinimap(response, 0x743440);
                     enemyHitChecked = true;
                 }
-                game.update(1, screen(response));
+                game.update(AttackEffectManager.TOTAL_DURATION, screen(response));
             }
         }
     }
@@ -456,7 +467,7 @@ public final class GameplayRenderChecks extends SimpleApplication {
         renderer.getRenderer().readFrameBufferWithFormat(null, buffer, Image.Format.BGRA8);
         BufferedImage image = new BufferedImage(1440, 900, BufferedImage.TYPE_4BYTE_ABGR);
         Screenshots.convertScreenShot(buffer, image);
-        Path directory = Path.of(System.getProperty("battleship.previewDir", "docs"));
+        Path directory = Path.of(System.getProperty("battleship.previewDir", "build/gameplay-review"));
         Files.createDirectories(directory);
         ImageIO.write(image, "png", directory.resolve(name).toFile());
     }

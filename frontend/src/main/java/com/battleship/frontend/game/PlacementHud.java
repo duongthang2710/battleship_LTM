@@ -3,6 +3,7 @@ package com.battleship.frontend.game;
 import com.battleship.frontend.graphics.Materials;
 import com.battleship.frontend.ui.UiTypography;
 import com.battleship.frontend.ui.UiShapes;
+import com.battleship.frontend.ui.NavalHudSkin;
 import com.battleship.shared.game.GamePhase;
 import com.battleship.shared.game.GameState;
 import com.battleship.shared.game.ShipOrientation;
@@ -26,7 +27,7 @@ import java.util.Optional;
 public final class PlacementHud {
     public enum Action {
         SELECT_CARRIER, SELECT_BATTLESHIP, SELECT_CRUISER, SELECT_SUBMARINE,
-        SELECT_DESTROYER, ROTATE, REMOVE, RESET, RANDOM, READY, TOGGLE_BOARD, RESTART, LEAVE_ROOM, TOGGLE_DRAW
+        SELECT_DESTROYER, ROTATE, REMOVE, RESET, RANDOM, READY, TOGGLE_BOARD, RESTART, LEAVE_ROOM, TOGGLE_DRAW, MORE, SETTINGS
     }
 
     private static final int GOLD = 0xDEB663;
@@ -35,8 +36,10 @@ public final class PlacementHud {
     private final Node root = new Node("Placement HUD");
     private final Node layout = new Node("Placement controls");
     private final Materials materials;
+    private final AssetManager assets;
     private final BitmapFont display;
     private final BitmapFont body;
+    private final BitmapFont hudFont;
     private final List<Button> buttons = new ArrayList<>();
     private GameState state;
     private ShipType selected;
@@ -47,8 +50,9 @@ public final class PlacementHud {
     private boolean networkPlacement;
     private boolean networkLocked;
     private float scale = 1;
-    private float top;
-    private float panelHeight;
+    private float logicalWidth = 1280, logicalHeight = 800;
+    private boolean more;
+    private final List<Region> regions = new ArrayList<>();
     private boolean designer, drawing, draft;
     private com.battleship.shared.game.GameRules rules = com.battleship.shared.game.GameRules.DEFAULT;
     public void setRules(com.battleship.shared.game.GameRules rules) { this.rules = rules; }
@@ -58,9 +62,11 @@ public final class PlacementHud {
     }
 
     public PlacementHud(AssetManager assets) {
+        this.assets = assets;
         materials = new Materials(assets);
         display = UiTypography.display(assets);
         body = UiTypography.body(assets);
+        hudFont = UiTypography.hud(assets);
         root.attachChild(layout);
     }
 
@@ -81,7 +87,7 @@ public final class PlacementHud {
 
     public void resize(int width, int height) {
         scale = UiTypography.scale(width, height);
-        top = height / scale - 148;
+        logicalWidth = width / scale; logicalHeight = height / scale;
         layout.setLocalScale(scale);
         rebuild();
     }
@@ -107,8 +113,15 @@ public final class PlacementHud {
     }
 
     public boolean contains(Vector2f screen) {
-        return state != null && screen.x / scale >= 36 && screen.x / scale <= 291
-                && screen.y / scale >= top - panelHeight && screen.y / scale <= top;
+        return regions.stream().anyMatch(r -> r.contains(screen.x / scale, screen.y / scale));
+    }
+
+    public void toggleMore() { more = !more; rebuild(); }
+
+    public Vector2f buttonCenter(Action action) {
+        return buttons.stream().filter(b -> b.action == action).findFirst()
+                .map(b -> new Vector2f((b.x + b.width / 2) * scale, (b.y + b.height / 2) * scale))
+                .orElseThrow(() -> new IllegalArgumentException("Hidden action: " + action));
     }
 
     public Optional<Action> actionAt(Vector2f screen) {
@@ -123,68 +136,85 @@ public final class PlacementHud {
     }
 
     private void rebuild() {
-        layout.detachAllChildren();
-        buttons.clear();
+        layout.detachAllChildren(); buttons.clear(); regions.clear();
         if (state == null) return;
-        boolean placing = state.phase() == GamePhase.PLACEMENT;
-        panelHeight = placing ? (designer ? 435 : 397) : 160;
-        panel(36, top - panelHeight, 255, panelHeight,
-                new ColorRGBA(0.003f, 0.007f, 0.021f, 0.89f));
-        frame(36, top - panelHeight, 255, panelHeight, GOLD);
-        text(display, placing ? (designer ? "Design fleet" : "Assemble fleet")
-                : state.phase() == GamePhase.GAME_OVER ? "Battle complete" : networkPlacement ? "PVP battle" : "Local battle", 25, 54, top - 18, IVORY);
-        if (!placing) {
-            text(body, enemyView ? "ENEMY WATERS" : "YOUR FLEET", 10, 55, top - 46, GOLD);
-            button(54, top - 97, 219, 31, enemyView ? "Your fleet [Tab]" : "Target enemy [Tab]",
-                    Action.TOGGLE_BOARD, true, false);
-            text(body, state.phase() == GamePhase.GAME_OVER ? "Use Tab to inspect your fleet."
-                    : "Click a target cell to fire.", 11, 55, top - 101, CYAN);
-            if (networkPlacement) button(54, top - 151, 219, 28, "Leave", Action.LEAVE_ROOM, true, false);
-            else if (state.phase() != GamePhase.GAME_OVER)
-                text(body, "Local: fire both fleets in turn.", 10, 55, top - 137, 0xB6BDCF);
+        var draw = new NavalHudSkin(assets, layout, 30);
+        float w = logicalWidth, h = logicalHeight;
+        draw.gear(w - 48, h - 44, 27);
+        regions.add(new Region(w - 78, h - 74, 60, 60));
+        buttons.add(new Button(w - 78, h - 74, 60, 60, Action.SETTINGS, true));
+        if (state.phase() != GamePhase.PLACEMENT) {
+            more = false;
+            button(w / 2 - 110, 24, 180, 31, enemyView ? "Your fleet  [Tab]" : "Enemy waters  [Tab]", Action.TOGGLE_BOARD, true, false);
+            if (networkPlacement) button(w / 2 + 80, 24, 72, 31, "Leave", Action.LEAVE_ROOM, true, false);
+            regions.add(new Region(w / 2 - 110,24,262,31));
             return;
         }
+        float left = com.battleship.frontend.ui.BattleSidebarLayout.flagLeft(w);
+        float flagWidth = com.battleship.frontend.ui.BattleSidebarLayout.flagWidth(w);
         int placed = state.player().board().ships().size();
-        text(body, placed + " / " + rules.shipCount() + " SHIPS PLACED", 10, 55, top - 40, GOLD);
-        ShipType[] types = rules.shipTypes().toArray(ShipType[]::new);
-        Action[] selectionActions = {Action.SELECT_CARRIER, Action.SELECT_BATTLESHIP,
-                Action.SELECT_CRUISER, Action.SELECT_SUBMARINE, Action.SELECT_DESTROYER};
-        for (int i = 0; i < types.length; i++) {
-            ShipType type = types[i];
-            float y = top - 90 - i * 33;
-            button(54, y, 219, 28, "[" + (i + 1) + "] " + type.displayName(),
-                    selectionActions[i], !networkLocked, type == selected);
-            UiTypography.centerIn(text(body, state.player().board().ship(type) == null ? type.length() + " cells" : "Placed",
-                    10, 209, y, state.player().board().ship(type) == null ? 0xB6BDCF : CYAN), 209, y, 64, 28);
+        draw.text("YOUR FLEET",17,left+6,h-282,flagWidth-12,30,IVORY).setUserData("uiRole", "fleet-tray-title");
+        draw.text(placed+" / "+rules.shipCount()+" READY",12,left+6,h-306,flagWidth-12,24,CYAN);
+        regions.add(new Region(left,70,flagWidth,h-70));
+        for (int i=0;i<rules.shipCount();i++) shipCard(left+10,h-371-i*58,flagWidth-20,rules.shipTypes().get(i));
+        boolean ready=state.canReady(rules)&&!networkLocked&&!draft;
+        button(w/2-148,44,296,48,networkLocked?"WAITING...":"READY!",Action.READY,ready,ready);
+        button(w/2+160,49,49,37,"...",Action.MORE,true,more);
+        regions.add(new Region(w/2-148,44,357,48));
+        float tipsX=w*.76f, tipsY=h-438;
+        draw.panel(tipsX,tipsY,112,326,0x123C58); regions.add(new Region(tipsX,tipsY,112,326));
+        draw.text(designer&&drawing?"Drag to\ndraw":"Drag to\nmove",19,tipsX+8,tipsY+242,96,62,IVORY);
+        draw.text(designer&&drawing?"Right drag\nto erase":"T to rotate",14,tipsX+8,tipsY+198,96,45,CYAN);
+        draw.moveArrows(tipsX+56,tipsY+153);
+        button(tipsX+10,tipsY+79,92,36,"Rotate",Action.ROTATE,!networkLocked&&!draft,false);
+        if(designer) button(tipsX+10,tipsY+24,92,36,drawing?"Draw [G]":"Move [G]",Action.TOGGLE_DRAW,!networkLocked,drawing);
+        else draw.text("Click a cell\nto place",14,tipsX+8,tipsY+19,96,48,IVORY);
+        float cy=tipsY-63, cx=tipsX+56;
+        draw.arc("Random medallion",cx,cy,15,30,0,FastMath.TWO_PI,0x12557C);
+        draw.arc("Random rim",cx,cy,30,2,0,FastMath.TWO_PI,GOLD);
+        draw.refreshIcon(cx,cy);
+        buttons.add(new Button(cx-31,cy-31,62,62,Action.RANDOM,!networkLocked));
+        regions.add(new Region(cx-31,cy-31,62,62));
+        draw.text("RANDOM [F]",12,cx-48,cy-55,96,20,IVORY);
+        String hint=networkLocked?"Fleet locked. Waiting for opponent.":draft?draftCount+" / "+selected.length()+" cells | Enter to confirm":message;
+        draw.text(hint,14,w*.26f,106,w*.48f,25,CYAN);
+        if(more) {
+            float mx=w/2-149,my=150;
+            card(mx,my,298,networkPlacement?154:110);
+            button(mx+14,my+62,130,34,"Rotate [T]",Action.ROTATE,!networkLocked&&!draft,false);
+            button(mx+154,my+62,130,34,draft?"Clear draft":"Remove",Action.REMOVE,!networkLocked&&selected!=null&&(draft||state.player().board().ship(selected)!=null),false);
+            button(mx+14,my+16,270,34,"Reset fleet [C]",Action.RESET,!networkLocked,false);
+            if(networkPlacement) button(mx+14,my+110,270,30,"Leave room",Action.LEAVE_ROOM,true,false);
         }
-        text(body, designer ? (draft ? "DRAWN " + draftCount + " / " + selected.length() + " CELLS" : "CONNECT CELLS / T: ROTATE")
-                : orientation == ShipOrientation.HORIZONTAL ? "HORIZONTAL  /  T TO ROTATE" : "VERTICAL  /  T TO ROTATE", 10, 55, top - 231, CYAN);
-        if (designer) button(54, top - 282, 219, 26, drawing ? "DRAW MODE [G]" : "MOVE MODE [G]", Action.TOGGLE_DRAW, !networkLocked, drawing);
-        float shift = designer ? 32 : 0;
-        button(54, top - 281 - shift, 106, 27, "Rotate [T]", Action.ROTATE, selected != null && !networkLocked, false);
-        button(167, top - 281 - shift, 106, 27, draft ? "Cancel" : "Remove", Action.REMOVE,
-                selected != null && (draft || state.player().board().ship(selected) != null) && !networkLocked, false);
-        button(54, top - 313 - shift, 106, 27, "Reset [C]", Action.RESET, !networkLocked, false);
-        button(167, top - 313 - shift, 106, 27, "Random [F]", Action.RANDOM, !networkLocked, false);
-        if (networkPlacement) {
-            button(54, top - 350 - shift, 106, 30, "Ready", Action.READY, state.canReady(rules) && !networkLocked && !draft, false);
-            button(167, top - 350 - shift, 106, 30, "Leave", Action.LEAVE_ROOM, true, false);
-        } else {
-            button(54, top - 350 - shift, 219, 30, "Ready", Action.READY, state.canReady(rules), false);
-        }
-        String note = message.isBlank() ? "Hover to preview. Click to place." : message;
-        text(body, note, 10, 55, top - 369 - shift, 0xB6BDCF);
+    }
+
+    private void shipCard(float x,float y,float width,ShipType type) {
+        boolean placed=state.player().board().ship(type)!=null;
+        button(x,y,width,51,"",Action.valueOf("SELECT_"+type.name()),!networkLocked,type==selected);
+        BitmapText name=text(body,type.displayName(),11,x,y,IVORY);
+        name.setUserData("uiRole","fleet-card-name"); UiTypography.centerIn(name,x,y+27,width,23);
+        float length=12+type.length()*8;
+        Geometry hull=panel(x+(width-length)/2,y+14,length,9,Materials.rgb(placed?CYAN:0x92A5B7));
+        hull.setMesh(UiShapes.chamfered(length,9,4));
+        float start=x+(width-(type.length()*8-2))/2;
+        for(int i=0;i<type.length();i++) panel(start+i*8,y+5,6,3,Materials.rgb(placed?GOLD:0x4E6C86));
+    }
+
+    private void card(float x, float y, float width, float height) {
+        panel(x, y, width, height, new ColorRGBA(.003f, .009f, .023f, .94f))
+                .setMesh(UiShapes.chamfered(width, height, 7));
+        frame(x, y, width, height, 0x8D7956);
+        regions.add(new Region(x, y, width, height));
     }
 
     private void button(float x, float y, float width, float height, String label,
                         Action action, boolean enabled, boolean selected) {
-        ColorRGBA fill = selected ? new ColorRGBA(0.09f, 0.105f, 0.115f, 0.98f)
+        ColorRGBA fill = selected ? Materials.linear(0x175D85)
                 : new ColorRGBA(0.009f, 0.022f, 0.044f, enabled ? 0.9f : 0.55f);
         panel(x, y, width, height, fill).setMesh(UiShapes.chamfered(width, height, 7));
         frame(x, y, width, height, enabled ? (selected ? GOLD : 0x617D94) : 0x394659);
-        boolean fleetChoice = action.name().startsWith("SELECT_");
-        UiTypography.centerIn(text(body, label, 12, x, y, enabled ? IVORY : 0x6E7989),
-                x, y, fleetChoice ? width - 64 : width, height);
+        UiTypography.centerIn(text(action == Action.READY ? hudFont : body, label, action == Action.READY ? 25 : 12, x, y, enabled ? IVORY : 0x6E7989),
+                x, y, width, height);
         buttons.add(new Button(x, y, width, height, action, enabled));
     }
 
@@ -205,7 +235,7 @@ public final class PlacementHud {
         float dx = endX - x, dy = endY - y;
         Geometry geometry = panel(x, y, FastMath.sqrt(dx * dx + dy * dy), 0.7f, Materials.rgb(color));
         geometry.rotate(0, 0, FastMath.atan2(dy, dx));
-        geometry.setLocalTranslation(x, y, 11);
+        geometry.setLocalTranslation(x, y, 31);
     }
 
     private BitmapText text(BitmapFont font, String value, float size, float x, float y, int color) {
@@ -213,8 +243,7 @@ public final class PlacementHud {
         label.setText(UiTypography.normalize(value));
         label.setSize(font == body ? UiTypography.bodySize(size) : size);
         label.setColor(Materials.rgb(color));
-        label.setLocalTranslation(x, y, 12);
-        if (size <= 11) UiTypography.fit(label, 219);
+        label.setLocalTranslation(x, y, 32);
         layout.attachChild(label);
         return label;
     }
@@ -225,10 +254,13 @@ public final class PlacementHud {
         material.getAdditionalRenderState().setBlendMode(BlendMode.Alpha);
         geometry.setMaterial(material);
         geometry.setQueueBucket(Bucket.Gui);
-        geometry.setLocalTranslation(x, y, 10);
+        geometry.setLocalTranslation(x, y, 30);
         layout.attachChild(geometry);
         return geometry;
     }
 
+    private record Region(float x, float y, float width, float height) {
+        boolean contains(float px, float py) { return px >= x && px <= x + width && py >= y && py <= y + height; }
+    }
     private record Button(float x, float y, float width, float height, Action action, boolean enabled) {}
 }
