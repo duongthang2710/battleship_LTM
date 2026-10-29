@@ -45,3 +45,13 @@ Yêu cầu ngày 28/10/2026 cho phép thêm **chế độ riêng** tự vẽ tà
 Giữ 5 loại/kích thước 5/4/3/3/2; không chồng lấn hoặc vượt biên. Chế độ Classic và thao tác cũ vẫn giữ tàu thẳng.
 Server chọn bộ luật từ phòng, xác thực đội hình và giữ luật 60 giây hết lượt thì thua. Đây là mở rộng được
 người dùng yêu cầu trực tiếp, thay cho giới hạn chỉ dùng tàu thẳng đối với chế độ mới.
+
+
+## Cấu hình phòng theo yêu cầu mới
+
+Người tạo phòng chọn Basic hoặc Fleet Designer, 3–5 tàu và luật bắn luân phiên
+hoặc trúng/đánh chìm được bắn tiếp. Thứ tự loại tàu là Carrier, Battleship, Cruiser,
+Submarine, Destroyer; số lượng chọn quyết định lấy 3, 4 hoặc cả 5 loại đầu tiên.
+Đây là thay đổi trực tiếp từ người dùng cho cả hai chế độ. Giữ timeout 60 giây;
+mỗi phát bắn hợp lệ reset thời gian, phát sai hoặc trùng không reset. Server sở hữu
+cấu hình phòng, giữ cấu hình khi chơi lại và không nhận luật từ lệnh bắn của client.

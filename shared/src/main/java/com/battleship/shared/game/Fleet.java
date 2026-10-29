@@ -18,6 +18,8 @@ public final class Fleet {
     public Ship ship(ShipType type) { return type == null ? null : ships.get(type); }
     public boolean isComplete() { return ships.size() == ShipType.values().length; }
     public boolean isSunk() { return isComplete() && ships.values().stream().allMatch(Ship::isSunk); }
+    public boolean isComplete(GameRules rules) { return ships.keySet().equals(java.util.Set.copyOf(rules.shipTypes())); }
+    public boolean isSunk(GameRules rules) { return isComplete(rules) && ships.values().stream().allMatch(Ship::isSunk); }
 
     public Fleet withShip(Ship ship) {
         EnumMap<ShipType, Ship> replacement = new EnumMap<>(ShipType.class);

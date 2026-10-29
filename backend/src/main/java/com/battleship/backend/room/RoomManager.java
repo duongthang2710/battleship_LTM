@@ -147,12 +147,26 @@ public final class RoomManager implements AutoCloseable {
             for (int i = 0; i < 6; i++) builder.append(CODE_ALPHABET.charAt(random.nextInt(CODE_ALPHABET.length())));
             code = builder.toString();
         } while (rooms.containsKey(code));
-        com.battleship.shared.game.GameMode mode;
+        com.battleship.shared.game.GameRules rules;
         try {
-            mode = message.payload().has("mode") ? com.battleship.shared.game.GameMode.valueOf(message.payload().get("mode").getAsString())
+            var payload = message.payload();
+            // Parse enums explicitly: Gson maps unknown enum strings to null.
+            var mode = payload.has("mode") ? com.battleship.shared.game.GameMode.valueOf(payload.get("mode").getAsString())
                     : com.battleship.shared.game.GameMode.CLASSIC;
-        } catch (RuntimeException invalid) { error(player, message, "INVALID_MODE", "Choose Classic or Fleet designer."); return; }
-        Room room = new Room(code, mode);
+            var turnRule = payload.has("turnRule") ? com.battleship.shared.game.TurnRule.valueOf(payload.get("turnRule").getAsString())
+                    : com.battleship.shared.game.TurnRule.ALTERNATING;
+            int count = 5;
+            if (payload.has("shipCount")) {
+                var value = payload.get("shipCount");
+                if (!value.isJsonPrimitive() || !value.getAsJsonPrimitive().isNumber()) throw new IllegalArgumentException();
+                count = value.getAsBigDecimal().intValueExact();
+            }
+            rules = new com.battleship.shared.game.GameRules(mode, count, turnRule);
+        } catch (RuntimeException invalid) {
+            error(player, message, "INVALID_ROOM_SETTINGS", "Choose Basic or Fleet designer, 3-5 ships and a valid turn rule.");
+            return;
+        }
+        Room room = new Room(code, rules);
         room.players.put(player.clientId(), new RoomPlayer(player.clientId(), player.playerName(), false));
         rooms.put(code, room);
         memberships.put(player.clientId(), code);
@@ -236,7 +250,7 @@ public final class RoomManager implements AutoCloseable {
         room.rematchRequests.clear();
         room.rematchDeclined = false;
         // A fresh match also discards the old deadline, shot history and winner.
-        room.match = new MatchService(room.snapshot().players(), room.mode);
+        room.match = new MatchService(room.snapshot().players(), room.rules);
         room.historyId = null;
         room.historyFinished = false;
         room.accountIds = Map.of();

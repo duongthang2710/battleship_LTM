@@ -81,3 +81,20 @@ tasks.register('checkDesignerTcp', JavaExec) {
     workingDir rootProject.projectDir
     onlyIf { providers.gradleProperty('databaseChecks').isPresent() }
 }
+
+
+tasks.register('checkRoomRules', JavaExec) {
+    dependsOn testClasses
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'com.battleship.backend.match.RoomRulesChecks'
+}
+tasks.named('check') { dependsOn 'checkRoomRules' }
+
+tasks.register('checkRoomSettingsTcp', JavaExec) {
+    group = 'verification'
+    dependsOn testClasses
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'com.battleship.backend.match.RoomSettingsTcpChecks'
+    workingDir rootProject.projectDir
+    onlyIf { providers.gradleProperty('databaseChecks').isPresent() }
+}

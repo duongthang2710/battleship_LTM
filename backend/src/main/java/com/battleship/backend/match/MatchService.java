@@ -23,19 +23,23 @@ public final class MatchService {
     private MatchEndReason endReason;
 
     public MatchService(List<RoomPlayer> players) {
-        this(players, GameMode.CLASSIC, System::nanoTime);
+        this(players, GameRules.DEFAULT, System::nanoTime);
     }
 
     public MatchService(List<RoomPlayer> players, GameMode mode) { this(players, mode, System::nanoTime); }
     MatchService(List<RoomPlayer> players, LongSupplier nanoTime) { this(players, GameMode.CLASSIC, nanoTime); }
     MatchService(List<RoomPlayer> players, GameMode mode, LongSupplier nanoTime) {
+        this(players, new GameRules(mode, 5, TurnRule.ALTERNATING), nanoTime);
+    }
+    public MatchService(List<RoomPlayer> players, GameRules rules) { this(players, rules, System::nanoTime); }
+    MatchService(List<RoomPlayer> players, GameRules rules, LongSupplier nanoTime) {
         this.nanoTime = nanoTime;
         RoomPlayer first = players.get(0);
         RoomPlayer second = players.get(1);
         firstSide = first.side();
         engine = new GameEngine(new Player(first.clientId(), first.playerName(), new Board()),
                 new Player(second.clientId(), second.playerName(), new Board()));
-        engine.setMode(mode);
+        engine.setRules(rules);
     }
 
     public GamePhase phase() { return engine.state().phase(); }
@@ -48,7 +52,7 @@ public final class MatchService {
             if (ship.cells() != null && engine.mode() != GameMode.DESIGNER)
                 throw new IllegalArgumentException("Custom ships require Fleet designer mode.");
         }
-        if (request.ships().size() != ShipType.values().length) throw new IllegalArgumentException("Exactly five ships required.");
+        if (request.ships().size() != engine.rules().shipCount()) throw new IllegalArgumentException(engine.rules().shipCount() == 5 ? "Exactly five ships required." : "Exactly " + engine.rules().shipCount() + " ships required.");
         engine.submitFleet(clientId, request.ships().stream().map(ship -> ship.ship()).toList());
         revision++;
         if (phase() == GamePhase.BATTLE) startTurn();
@@ -130,7 +134,7 @@ public final class MatchService {
                 false, false, attack.attackerId(), attack.defenderId(), null, attack.affectedCells());
         return new MatchSnapshot(revision, state.phase(), own.id(), enemy.id(), enemy.name(),
                 first ? firstSide : firstSide.opponent(), BoardView.from(own.board(), false), BoardView.from(enemy.board(), true),
-                own.fleet().isComplete(), enemy.fleet().isComplete(), state.currentPlayerId(), state.turnNumber(),
+                own.fleet().isComplete(engine.rules()), enemy.fleet().isComplete(engine.rules()), state.currentPlayerId(), state.turnNumber(),
                 state.winnerId(), attack, timer(), endReason == MatchEndReason.TURN_TIMEOUT, endReason);
     }
 
