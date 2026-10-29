@@ -23,7 +23,8 @@ public final class SettingsController implements AutoCloseable {
         files.submit(() -> { var loaded = store.load(); completed.add(() -> loaded(loaded)); });
     }
     private void loaded(SettingsStore.Loaded loaded) {
-        current = loaded.preferences(); status = loaded.message();
+        // A saved fullscreen flag must not remove the native window controls on the next launch.
+        current = loaded.preferences().forStartup(); status = loaded.message();
         try {
             if (display != null) {
                 sizes = display.resolutions(); current = display.fit(current); display.apply(current); displayAvailable = true;
@@ -49,13 +50,19 @@ public final class SettingsController implements AutoCloseable {
             default -> panel.edit(action);
         }
     }
+    public void toggleFullscreen() {
+        if (!ready || saving || !displayAvailable) return;
+        save(new ClientPreferences(current.width(), current.height(), !display.fullscreen(), current.rotation(), current.zoom()));
+    }
     private void apply(ClientPreferences value) {
         if (displayAvailable) display.apply(value);
         orbit.setSensitivity(value.rotation(), value.zoom());
     }
-    private void save() {
-        ClientPreferences next = panel.draft(), previous = current;
-        try { apply(next); }
+    private void save() { save(panel.draft()); }
+    private void save(ClientPreferences requested) {
+        ClientPreferences previous = current;
+        ClientPreferences next;
+        try { next = displayAvailable ? display.fit(requested) : requested; apply(next); }
         catch (RuntimeException exception) {
             try { apply(previous); } catch (RuntimeException ignored) { }
             panel.message("Could not apply display: " + exception.getMessage(), false); return;
@@ -64,7 +71,7 @@ public final class SettingsController implements AutoCloseable {
         files.submit(() -> {
             try {
                 store.save(next);
-                completed.add(() -> { current = next; saving = false; status = "Settings saved. They will be restored next launch."; refresh(); });
+                completed.add(() -> { current = next; saving = false; status = "Settings saved. Next launch starts Windowed; Alt+Enter enables fullscreen."; refresh(); });
             } catch (IOException | SecurityException exception) {
                 completed.add(() -> {
                     saving = false;

@@ -246,3 +246,15 @@ tasks.register('checkDesignerRendering', JavaExec) {
     jvmArgs '--enable-native-access=ALL-UNNAMED'
     if (hostOs.contains('mac')) jvmArgs '-XstartOnFirstThread'
 }
+
+
+tasks.register('checkDisplayWindows', JavaExec) {
+    group = 'verification'
+    description = 'Checks actual native window bounds, controls and fullscreen on every connected monitor.'
+    dependsOn testClasses
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'com.battleship.frontend.settings.DisplayWindowChecks'
+    workingDir rootProject.projectDir
+    jvmArgs '--enable-native-access=ALL-UNNAMED'
+    if (hostOs.contains('mac')) jvmArgs '-XstartOnFirstThread'
+}

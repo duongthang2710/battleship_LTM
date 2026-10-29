@@ -171,6 +171,7 @@ public final class ScreenController implements AutoCloseable {
     public PvpController pvp() { return pvp; }
     public PvpRoomPanel roomPanel() { return roomPanel; }
     public boolean networkPlacement() { return screen == Screen.PVP_PLACEMENT; }
+    public void toggleFullscreen() { settings.toggleFullscreen(); }
 
     public void requestMainMenu() { menuRequested = true; }
 

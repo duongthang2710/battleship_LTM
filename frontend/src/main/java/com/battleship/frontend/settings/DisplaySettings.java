@@ -18,11 +18,31 @@ public final class DisplaySettings {
             throw new IllegalStateException("Display controls require a desktop window.");
         return context.getWindowHandle();
     }
+    private long monitor(long handle) {
+        long attached = GLFW.glfwGetWindowMonitor(handle);
+        if (attached != 0) return attached;
+        long selected = GLFW.glfwGetPrimaryMonitor();
+        var monitors = GLFW.glfwGetMonitors();
+        if (monitors == null || selected == 0) throw new IllegalStateException("No display monitor is available.");
+        try (var stack = MemoryStack.stackPush()) {
+            var x = stack.mallocInt(1); var y = stack.mallocInt(1); var w = stack.mallocInt(1); var h = stack.mallocInt(1);
+            GLFW.glfwGetWindowPos(handle, x, y); GLFW.glfwGetWindowSize(handle, w, h);
+            int wx = x.get(0), wy = y.get(0), ww = w.get(0), wh = h.get(0);
+            long largestArea = 0;
+            for (int i = 0; i < monitors.limit(); i++) {
+                long candidate = monitors.get(i);
+                GLFW.glfwGetMonitorWorkarea(candidate, x, y, w, h);
+                long area = (long) Math.max(0, Math.min(wx + ww, x.get(0) + w.get(0)) - Math.max(wx, x.get(0)))
+                        * Math.max(0, Math.min(wy + wh, y.get(0) + h.get(0)) - Math.max(wy, y.get(0)));
+                if (area > largestArea) { largestArea = area; selected = candidate; }
+            }
+        }
+        return selected;
+    }
     public List<ClientPreferences.Resolution> resolutions() {
         try (var stack = MemoryStack.stackPush()) {
             var x = stack.mallocInt(1); var y = stack.mallocInt(1); var w = stack.mallocInt(1); var h = stack.mallocInt(1);
-            long monitor = GLFW.glfwGetPrimaryMonitor();
-            if (monitor == 0) throw new IllegalStateException("No display monitor is available.");
+            long monitor = monitor(window());
             GLFW.glfwGetMonitorWorkarea(monitor, x, y, w, h);
             var sizes = ClientPreferences.RESOLUTIONS.stream().filter(s -> s.width() <= w.get(0) - 64 && s.height() <= h.get(0) - 64).toList();
             if (sizes.isEmpty()) throw new IllegalStateException("Display needs at least a 960 x 600 usable window.");
@@ -43,8 +63,7 @@ public final class DisplaySettings {
         }
     }
     public void apply(ClientPreferences value) {
-        long handle = window(), monitor = GLFW.glfwGetPrimaryMonitor();
-        if (monitor == 0) throw new IllegalStateException("No display monitor is available.");
+        long handle = window(), monitor = monitor(handle);
         var video = GLFW.glfwGetVideoMode(monitor);
         if (video == null) throw new IllegalStateException("No display monitor is available.");
         if (GLFW.glfwGetWindowAttrib(handle, GLFW.GLFW_MAXIMIZED) == GLFW.GLFW_TRUE) GLFW.glfwRestoreWindow(handle);
@@ -59,13 +78,20 @@ public final class DisplaySettings {
                 GLFW.glfwSetWindowSize(handle, video.width(), video.height());
             } else {
                 GLFW.glfwSetWindowAttrib(handle, GLFW.GLFW_DECORATED, GLFW.GLFW_TRUE);
-                GLFW.glfwSetWindowSize(handle, value.width(), value.height());
-                if (wasFullscreen) {
-                    GLFW.glfwGetMonitorWorkarea(monitor, x, y, w, h);
-                    int px = restorePosition ? Math.max(x.get(0), Math.min(windowX, x.get(0) + w.get(0) - value.width())) : x.get(0) + (w.get(0) - value.width()) / 2;
-                    int py = restorePosition ? Math.max(y.get(0) + 32, Math.min(windowY, y.get(0) + h.get(0) - value.height())) : y.get(0) + 32;
-                    GLFW.glfwSetWindowPos(handle, px, py);
-                }
+                GLFW.glfwSetWindowAttrib(handle, GLFW.GLFW_RESIZABLE, GLFW.GLFW_TRUE);
+                var size = fit(value);
+                GLFW.glfwSetWindowSize(handle, size.width(), size.height());
+                GLFW.glfwGetWindowPos(handle, x, y);
+                int px = wasFullscreen && restorePosition ? windowX : x.get(0);
+                int py = wasFullscreen && restorePosition ? windowY : y.get(0);
+                GLFW.glfwGetMonitorWorkarea(monitor, x, y, w, h);
+                var left = stack.mallocInt(1); var top = stack.mallocInt(1);
+                var right = stack.mallocInt(1); var bottom = stack.mallocInt(1);
+                GLFW.glfwGetWindowFrameSize(handle, left, top, right, bottom);
+                // Clamp the complete native frame, including the title bar, to one monitor.
+                px = Math.max(x.get(0) + left.get(0), Math.min(px, x.get(0) + w.get(0) - size.width() - right.get(0)));
+                py = Math.max(y.get(0) + top.get(0), Math.min(py, y.get(0) + h.get(0) - size.height() - bottom.get(0)));
+                GLFW.glfwSetWindowPos(handle, px, py);
             }
         }
         if (fullscreen() != value.fullscreen()) throw new IllegalStateException("The requested display mode could not be applied.");

@@ -721,8 +721,8 @@ public final class PvpRoomRenderChecks extends SimpleApplication {
             }
             case 2 -> {
                 if (Boolean.getBoolean("battleship.settingsReload")) {
-                    require(controller.current().equals(new ClientPreferences(1280, 720, true, 1.5f, .75f)), "Restart restores saved mode, size and sensitivities");
-                    if (!display.fullscreen() || uiWidth < 1280 || uiHeight < 720) return;
+                    require(controller.current().equals(new ClientPreferences(1280, 720, false, 1.5f, .75f)), "Restart preserves size/sensitivities and always starts Windowed");
+                    if (display.fullscreen() || uiWidth != 1280 || uiHeight != 720) return;
                     capture = "settings-reloaded.png"; stage = 8; return;
                 }
                 chooseSize(960, 600); settingsAction(SettingsPanel.Action.SAVE); stage = 3;

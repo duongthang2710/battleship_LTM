@@ -14,6 +14,8 @@ public final class SettingsChecks {
             var saved = new ClientPreferences(1280, 720, true, 1.5f, .75f);
             store.save(saved);
             require(new SettingsStore(store.path()).load().preferences().equals(saved), "Fresh store restores every preference");
+            require(store.load().preferences().forStartup().equals(new ClientPreferences(1280, 720, false, 1.5f, .75f)),
+                    "A saved fullscreen profile starts Windowed while preserving size and sensitivities");
             store.save(ClientPreferences.defaults()); store.save(saved);
             require(store.load().preferences().equals(saved), "Repeated atomic replacement keeps the latest settings");
             try (var files = Files.list(store.path().getParent())) {
@@ -39,12 +41,35 @@ public final class SettingsChecks {
             a.zoom(2); b.zoom(4); c.zoom(1);
             require(normal.getLocation().distance(slow.getLocation()) < .0001f && normal.getLocation().distance(fast.getLocation()) < .0001f, "Zoom sensitivity changes actual camera distance");
             try { b.setSensitivity(Float.NaN, 1); throw new AssertionError("NaN must fail"); } catch (IllegalArgumentException expected) { }
+            checkDisplayShortcut();
             System.out.println("PASS: Settings defaults, persistence, atomic overwrite, malformed/oversize files, save failure and actual orbit/zoom sensitivity.");
         } finally {
             try (var files = Files.walk(directory)) {
                 for (Path path : files.sorted(java.util.Comparator.reverseOrder()).toList()) Files.delete(path);
             }
         }
+    }
+    private static void checkDisplayShortcut() {
+        var mouse = new com.jme3.input.dummy.DummyMouseInput(); var keys = new com.jme3.input.dummy.DummyKeyInput();
+        mouse.initialize(); keys.initialize(); var input = new com.jme3.input.InputManager(mouse, keys, null, null);
+        try (var shortcut = new com.battleship.frontend.input.DisplayModeInput(input)) {
+            shortcut.onKeyEvent(new com.jme3.input.event.KeyInputEvent(com.jme3.input.KeyInput.KEY_LMENU, '\0', true, false));
+            var enter = new com.jme3.input.event.KeyInputEvent(com.jme3.input.KeyInput.KEY_RETURN, '\n', true, false);
+            shortcut.onKeyEvent(enter); require(enter.isConsumed() && shortcut.pollToggle() && !shortcut.pollToggle(), "Alt+Enter queues exactly one display toggle without submitting a form");
+            var repeat = new com.jme3.input.event.KeyInputEvent(com.jme3.input.KeyInput.KEY_RETURN, '\n', false, true);
+            shortcut.onKeyEvent(repeat); require(repeat.isConsumed() && !shortcut.pollToggle(), "Held Enter cannot repeatedly toggle display");
+            shortcut.onKeyEvent(new com.jme3.input.event.KeyInputEvent(com.jme3.input.KeyInput.KEY_LMENU, '\0', false, false));
+            var release = new com.jme3.input.event.KeyInputEvent(com.jme3.input.KeyInput.KEY_RETURN, '\n', false, false);
+            shortcut.onKeyEvent(release); require(release.isConsumed(), "Captured Enter release cannot reach a form");
+            var plain = new com.jme3.input.event.KeyInputEvent(com.jme3.input.KeyInput.KEY_RETURN, '\n', true, false);
+            shortcut.onKeyEvent(plain); require(!plain.isConsumed() && !shortcut.pollToggle(), "Plain Enter still submits normally");
+            shortcut.onKeyEvent(new com.jme3.input.event.KeyInputEvent(com.jme3.input.KeyInput.KEY_LMENU, '\0', true, false));
+            shortcut.reset();
+            var afterFocus = new com.jme3.input.event.KeyInputEvent(com.jme3.input.KeyInput.KEY_RETURN, '\n', true, false);
+            shortcut.onKeyEvent(afterFocus);
+            require(!afterFocus.isConsumed() && !shortcut.pollToggle(), "Losing focus clears Alt even if its key release was not received");
+        }
+        System.out.println("PASS: global Alt+Enter capture, repeat guard and ordinary Enter preserved.");
     }
     private static void require(boolean value, String message) { if (!value) throw new AssertionError(message); }
 }

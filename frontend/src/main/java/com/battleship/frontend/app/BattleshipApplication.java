@@ -15,6 +15,7 @@ public final class BattleshipApplication extends SimpleApplication {
     private BattleScene battleScene;
     private OrbitCamera orbit;
     private ScreenController screens;
+    private com.battleship.frontend.input.DisplayModeInput displayModeInput;
     private int hudWidth;
     private int hudHeight;
 
@@ -28,6 +29,7 @@ public final class BattleshipApplication extends SimpleApplication {
         settings.setResolution(saved.preferences().width(), saved.preferences().height());
         settings.setMinResolution(960, 600);
         settings.setResizable(true);
+        settings.setFullscreen(false);
         settings.setSamples(4);
         settings.setVSync(true);
         settings.setFrameRate(60);
@@ -46,6 +48,7 @@ public final class BattleshipApplication extends SimpleApplication {
         flyCam.setEnabled(false);
         inputManager.setCursorVisible(true);
         if (inputManager.hasMapping(INPUT_MAPPING_EXIT)) inputManager.deleteMapping(INPUT_MAPPING_EXIT);
+        displayModeInput = new com.battleship.frontend.input.DisplayModeInput(inputManager);
         viewPort.setBackgroundColor(Materials.rgb(0x07101C));
         battleScene = new BattleScene(assetManager);
         rootNode.attachChild(battleScene.root());
@@ -66,6 +69,7 @@ public final class BattleshipApplication extends SimpleApplication {
                 && (hudWidth != guiCamera.getWidth() || hudHeight != guiCamera.getHeight())) resizeHud();
         battleScene.update(delta, cam);
         screens.update(delta, inputManager.getCursorPosition());
+        if (displayModeInput.pollToggle()) screens.toggleFullscreen();
     }
 
     @Override
@@ -87,6 +91,25 @@ public final class BattleshipApplication extends SimpleApplication {
     }
 
     @Override
+    public void gainFocus() {
+        super.gainFocus();
+        enqueue(() -> {
+            if (inputManager == null || context == null || !context.isCreated()) return;
+            inputManager.reset();
+            inputManager.setCursorVisible(true);
+            // InputManager caches visibility; reapply to native input even when its flag is already true.
+            context.getMouseInput().setCursorVisible(true);
+            inputManager.setMouseCursor(null);
+        });
+    }
+
+    @Override
+    public void loseFocus() {
+        super.loseFocus();
+        if (displayModeInput != null) displayModeInput.reset();
+    }
+
+    @Override
     public void handleError(String message, Throwable error) {
         if (battleScene == null && message != null && (message.startsWith("WGL:")
                 || message.contains("Failed to create display") || message.contains("Unable to initialize GLFW"))) {
@@ -103,6 +126,7 @@ public final class BattleshipApplication extends SimpleApplication {
 
     @Override
     public void destroy() {
+        if (displayModeInput != null) displayModeInput.close();
         if (screens != null) screens.close();
         super.destroy();
     }

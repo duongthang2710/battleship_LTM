@@ -15,4 +15,7 @@ public record ClientPreferences(int width, int height, boolean fullscreen, float
             throw new IllegalArgumentException("Unsupported display size or sensitivity. Using defaults.");
     }
     public static ClientPreferences defaults() { return new ClientPreferences(1440, 900, false, 1, 1); }
+    public ClientPreferences forStartup() {
+        return new ClientPreferences(width, height, false, rotation, zoom);
+    }
 }
