@@ -175,6 +175,12 @@ public final class PvpRoomPanel {
         }
     }
 
+    public void pasteRoomCode(String value) {
+        if(!acceptsRoomCode() || value==null) return;
+        String normalized=value.strip().replaceAll("\\s+", "").toUpperCase(java.util.Locale.ROOT);
+        if(!normalized.matches("[A-Z2-9]{6}")) { setStatus("Clipboard must contain a six-character room code."); return; }
+        code=normalized; setStatus("Room code pasted. Press Enter to join."); refreshCode();
+    }
     public void selectOption(Action action) {
         if(!enabled(action)) return;
         switch(action) {
