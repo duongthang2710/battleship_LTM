@@ -148,6 +148,7 @@ public final class RoomManager implements AutoCloseable {
             code = builder.toString();
         } while (rooms.containsKey(code));
         com.battleship.shared.game.GameRules rules;
+        var options=com.battleship.shared.room.RoomOptions.DEFAULT;
         try {
             var payload = message.payload();
             // Parse enums explicitly: Gson maps unknown enum strings to null.
@@ -162,11 +163,20 @@ public final class RoomManager implements AutoCloseable {
                 count = value.getAsBigDecimal().intValueExact();
             }
             rules = new com.battleship.shared.game.GameRules(mode, count, turnRule);
+            if(payload.has("options")) {
+                var data=payload.getAsJsonObject("options");
+                for(String key:new String[]{"shuffleFleet","hideFleetReport"}) {
+                    if(data.has(key) && (!data.get(key).isJsonPrimitive() || !data.getAsJsonPrimitive(key).isBoolean()))
+                        throw new IllegalArgumentException("Invalid room preference.");
+                }
+                options=new com.battleship.shared.room.RoomOptions(data.has("shuffleFleet")&&data.get("shuffleFleet").getAsBoolean(),
+                        data.has("hideFleetReport")&&data.get("hideFleetReport").getAsBoolean());
+            }
         } catch (RuntimeException invalid) {
             error(player, message, "INVALID_ROOM_SETTINGS", "Choose Basic or Fleet designer, 3-5 ships and a valid turn rule.");
             return;
         }
-        Room room = new Room(code, rules);
+        Room room = new Room(code, rules, options);
         room.players.put(player.clientId(), new RoomPlayer(player.clientId(), player.playerName(), false));
         rooms.put(code, room);
         memberships.put(player.clientId(), code);

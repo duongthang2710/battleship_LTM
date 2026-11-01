@@ -21,17 +21,19 @@ public final class RoomSettingsTcpChecks {
                 try (var a = new TcpMatchChecks.Peer(server.port(), "Room rules A"); var b = new TcpMatchChecks.Peer(server.port(), "Room rules B")) {
                     accounts.add(a.accountId); accounts.add(b.accountId);
                     for (String invalid : List.of("{\"shipCount\":2}", "{\"shipCount\":6}", "{\"shipCount\":3.5}",
-                            "{\"shipCount\":\"3\"}", "{\"mode\":\"UNKNOWN\"}", "{\"turnRule\":\"UNKNOWN\"}")) {
+                            "{\"shipCount\":\"3\"}", "{\"mode\":\"UNKNOWN\"}", "{\"turnRule\":\"UNKNOWN\"}", "{\"options\":{\"shuffleFleet\":\"yes\"}}", "{\"options\":{\"hideFleetReport\":1}}")) {
                         a.send(MessageType.CREATE_ROOM, JsonParser.parseString(invalid));
                         require(a.read(MessageType.ERROR).payloadAs(RoomError.class).code().equals("INVALID_ROOM_SETTINGS"), "Server rejects malformed rules before room creation");
                     }
                     for (GameMode mode : GameMode.values()) for (int count = 3; count <= 5; count++) for (TurnRule turn : TurnRule.values()) {
                         var rules = new GameRules(mode, count, turn);
-                        a.send(MessageType.CREATE_ROOM, new CreateRoomRequest(rules));
+                        var options=new com.battleship.shared.room.RoomOptions(count%2==1,turn==TurnRule.HIT_CONTINUES);
+                        a.send(MessageType.CREATE_ROOM, new CreateRoomRequest(rules,options));
                         var created = a.read(MessageType.ROOM_CREATED).payloadAs(RoomSnapshot.class);
-                        require(created.rules().equals(rules), "Creator receives authoritative rules");
+                        require(created.rules().equals(rules)&&created.options().equals(options), "Creator receives authoritative rules");
                         b.send(MessageType.JOIN_ROOM, new JoinRoomRequest(created.roomCode()));
-                        require(b.read(MessageType.ROOM_JOINED).payloadAs(RoomSnapshot.class).rules().equals(rules), "Joiner inherits rules");
+                        var joined=b.read(MessageType.ROOM_JOINED).payloadAs(RoomSnapshot.class);
+                        require(joined.rules().equals(rules)&&joined.options().equals(options),"Joiner inherits all settings");
                         a.read(MessageType.PLAYER_JOINED);
                         a.send(MessageType.READY, null); a.read(MessageType.ROOM_UPDATED); b.read(MessageType.ROOM_UPDATED);
                         b.send(MessageType.READY, null); a.read(MessageType.ROOM_UPDATED); b.read(MessageType.ROOM_UPDATED);
@@ -42,7 +44,7 @@ public final class RoomSettingsTcpChecks {
                             a.send(MessageType.REMATCH_REQUEST, null); a.read(MessageType.REMATCH_UPDATED); b.read(MessageType.REMATCH_UPDATED);
                             b.send(MessageType.REMATCH_REQUEST, null); a.read(MessageType.REMATCH_UPDATED); b.read(MessageType.REMATCH_UPDATED);
                             var next = a.read(MessageType.START_PLACEMENT).payloadAs(RoomSnapshot.class); b.read(MessageType.START_PLACEMENT);
-                            require(next.rules().equals(rules) && next.roomCode().equals(created.roomCode()), "Rematch preserves settings and room");
+                            require(next.rules().equals(rules) && next.options().equals(options) && next.roomCode().equals(created.roomCode()), "Rematch preserves settings and room");
                             play(a, b, rules);
                         }
                         a.send(MessageType.LEAVE_ROOM, null); a.read(MessageType.ROOM_LEFT); b.read(MessageType.REMATCH_UPDATED); b.read(MessageType.PLAYER_LEFT);
