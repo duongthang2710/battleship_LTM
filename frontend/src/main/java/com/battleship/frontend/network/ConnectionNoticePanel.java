@@ -72,8 +72,7 @@ public final class ConnectionNoticePanel {
         UiTypography.centerIn(text(body, label, 15, x, y, busy ? 0x69788D : 0xF4EAD1), x, y, width, 40);
     }
     private void frame(float x, float y, float width, float height, int color) {
-        ColorRGBA c = Materials.rgb(color); rect(x, y, width, .8f, c); rect(x, y + height, width, .8f, c);
-        rect(x, y, .8f, height, c); rect(x + width, y, .8f, height, c);
+        com.battleship.frontend.ui.UiShapes.frame(card,x,y,width,height,6,1.6f,materials.flat(Materials.rgb(color)),301);
     }
     private void rect(float x, float y, float width, float height, ColorRGBA color) {
         Geometry geometry = new Geometry("Connection notice detail", new Quad(width, height)); var material = materials.flat(color);

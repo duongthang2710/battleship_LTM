@@ -122,7 +122,7 @@ public final class SettingsPanel {
         var label = text(body, value, 13, 0, y + 24, enabled(action) ? IVORY : 0x69788D); UiTypography.centerIn(label, x, y, w, 36);
     }
     private void frame(float x, float y, float w, float h, int color) {
-        ColorRGBA c = Materials.rgb(color); rect(x, y, w, .8f, c); rect(x, y + h, w, .8f, c); rect(x, y, .8f, h, c); rect(x + w, y, .8f, h, c);
+        com.battleship.frontend.ui.UiShapes.frame(card,x,y,w,h,5,1.6f,materials.flat(Materials.rgb(color)),91);
     }
     private void rect(float x, float y, float w, float h, ColorRGBA color) {
         var material = materials.flat(color); material.getAdditionalRenderState().setBlendMode(BlendMode.Alpha);

@@ -101,8 +101,7 @@ public final class GameInvitePanel {
     }
 
     private void frame(float x, float y, float w, float h, int color) {
-        ColorRGBA c = Materials.rgb(color);
-        rect(x, y, w, .8f, c); rect(x, y + h, w, .8f, c); rect(x, y, .8f, h, c); rect(x + w, y, .8f, h, c);
+        com.battleship.frontend.ui.UiShapes.frame(card,x,y,w,h,6,1.6f,materials.flat(Materials.rgb(color)),201);
     }
     private void rect(float x, float y, float w, float h, ColorRGBA color) {
         var material = materials.flat(color); material.getAdditionalRenderState().setBlendMode(BlendMode.Alpha);

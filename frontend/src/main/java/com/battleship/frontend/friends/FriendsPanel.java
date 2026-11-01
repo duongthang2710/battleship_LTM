@@ -214,9 +214,7 @@ public final class FriendsPanel {
         }
     }
     private void frame(float x, float y, float w, float h, int color) {
-        Material m = materials.flat(Materials.rgb(color));
-        rect(x, y, w, .8f, m, 92); rect(x, y + h, w, .8f, m, 92);
-        rect(x, y, .8f, h, m, 92); rect(x + w, y, .8f, h, m, 92);
+        com.battleship.frontend.ui.UiShapes.frame(card,x,y,w,h,5,1.6f,materials.flat(Materials.rgb(color)),92);
     }
     private void line(float x, float y, float w, int color) { rect(x, y, w, .8f, Materials.rgb(color), 92); }
     private Geometry rect(float x, float y, float w, float h, ColorRGBA color, float z) { return rect(x, y, w, h, materials.flat(color), z); }

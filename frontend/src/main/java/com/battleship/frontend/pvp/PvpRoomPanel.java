@@ -360,15 +360,7 @@ public final class PvpRoomPanel {
     }
 
     private void frame(float x, float y, float width, float height, Material material, float depth) {
-        line(x + 9, y, x + width - 9, y, material, depth);
-        line(x + 9, y + height, x + width - 9, y + height, material, depth);
-        line(x, y + 9, x, y + height - 9, material, depth);
-        line(x + width, y + 9, x + width, y + height - 9, material, depth);
-        for (int sx : new int[] {-1, 1}) for (int sy : new int[] {-1, 1}) {
-            float px = sx < 0 ? x : x + width;
-            float py = sy < 0 ? y : y + height;
-            line(px, py - sy * 9, px - sx * 9, py, material, depth);
-        }
+        com.battleship.frontend.ui.UiShapes.frame(layout,x,y,width,height,9,2,material,depth);
     }
 
     private void line(float x, float y, float endX, float endY, Material material, float depth) {

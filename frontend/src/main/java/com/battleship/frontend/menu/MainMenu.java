@@ -190,17 +190,7 @@ public final class MainMenu {
     }
 
     private void frame(float x, float y, float width, float height, Material material, float depth) {
-        line(x + 10, y, x + width - 10, y, material, depth);
-        line(x + 10, y + height, x + width - 10, y + height, material, depth);
-        line(x, y + 10, x, y + height - 10, material, depth);
-        line(x + width, y + 10, x + width, y + height - 10, material, depth);
-        for (int sx : new int[] {-1, 1}) {
-            for (int sy : new int[] {-1, 1}) {
-                float px = sx < 0 ? x : x + width;
-                float py = sy < 0 ? y : y + height;
-                line(px, py - sy * 10, px - sx * 10, py, material, depth);
-            }
-        }
+        com.battleship.frontend.ui.UiShapes.frame(layout,x,y,width,height,10,2,material,depth);
     }
 
     private void line(float x, float y, float endX, float endY, Material material, float depth) {

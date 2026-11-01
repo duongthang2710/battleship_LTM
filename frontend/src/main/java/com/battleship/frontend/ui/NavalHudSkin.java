@@ -34,10 +34,16 @@ public final class NavalHudSkin {
         Geometry g = rect(x, y, FastMath.sqrt(dx*dx+dy*dy), thickness, color, 1);
         g.rotate(0,0,FastMath.atan2(dy,dx)); g.move(0,0,2.2f);
     }
+    public void taperedRule(String name,float x,float y,float width,float thickness,int color,float alpha) {
+        Mesh mesh=new Mesh();
+        mesh.setBuffer(VertexBuffer.Type.Position,3,new float[]{0,0,0,width/2,-thickness/2,0,width,0,0,width/2,thickness/2,0});
+        mesh.setBuffer(VertexBuffer.Type.Index,3,new int[]{0,1,3,1,2,3}); mesh.updateBound();
+        ColorRGBA tint=Materials.rgb(color); tint.a=alpha;
+        Geometry g=new Geometry(name,mesh); g.setMaterial(materials.flat(tint)); g.setLocalTranslation(x,y,z); attach(g);
+    }
     public void panel(float x, float y, float w, float h, int color) {
         rect(x,y,w,h,color,.91f);
-        line(x,y,x+w,y,GOLD,1); line(x,y+h,x+w,y+h,GOLD,1);
-        line(x,y,x,y+h,GOLD,1); line(x+w,y,x+w,y+h,GOLD,1);
+        UiShapes.frame(parent,x,y,w,h,5,1.6f,materials.flat(Materials.linear(GOLD)),z+2.2f);
     }
     public void hazePennant(float x,float bottom,float width,float shoulder,float peak,float alpha) {
         ColorRGBA tint=new ColorRGBA(1,1,1,alpha);
@@ -47,6 +53,9 @@ public final class NavalHudSkin {
         mesh.setBuffer(VertexBuffer.Type.Index,3,new int[]{0,1,2,0,2,3,0,3,4}); mesh.updateBound();
         Geometry g=new Geometry("Fleet translucent backing",mesh); g.setMaterial(materials.flat(tint));
         g.setLocalTranslation(0,0,z); attach(g);
+        Geometry rim=new Geometry("Joined fleet pennant rim",UiShapes.polygonFrame(new float[]{x,bottom,x+width,bottom,
+                x+width,shoulder,x+width/2,shoulder+peak,x,shoulder},1.8f));
+        rim.setMaterial(materials.flat(Materials.linear(0xE1EBEF)));rim.setLocalTranslation(0,0,z+2.2f);attach(rim);
     }
     public void banner(float x, float bottom, float width, float top) {
         float point = Math.min(width*.46f,72);
@@ -57,8 +66,9 @@ public final class NavalHudSkin {
         Geometry g=new Geometry("Captain pennant",mesh); g.setMaterial(materials.flat(Materials.linear(0x073453)));
         g.setLocalTranslation(0,0,z); attach(g);
         rect(x+3,bottom+point,width-6,top-bottom-point,BLUE,.78f);
-        line(x,bottom+point,x,top,GOLD,1.3f); line(x+width,bottom+point,x+width,top,GOLD,1.3f);
-        line(x,bottom+point,x+width/2,bottom,GOLD,1.3f); line(x+width/2,bottom,x+width,bottom+point,GOLD,1.3f);
+        Geometry rim=new Geometry("Joined commander pennant rim",UiShapes.polygonFrame(new float[]{x+width/2,bottom,x+width,bottom+point,
+                x+width,top,x,top,x,bottom+point},1.8f));
+        rim.setMaterial(materials.flat(Materials.linear(GOLD)));rim.setLocalTranslation(0,0,z+2.2f);attach(rim);
     }
     public BitmapText text(String value, float size, float x, float y, float width, float height, int color) {
         BitmapText t=new BitmapText(font); t.setText(UiTypography.normalize(value)); t.setSize(size);

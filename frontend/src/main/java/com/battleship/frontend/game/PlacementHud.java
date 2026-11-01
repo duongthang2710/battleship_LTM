@@ -219,16 +219,7 @@ public final class PlacementHud {
     }
 
     private void frame(float x, float y, float width, float height, int color) {
-        line(x + 7, y, x + width - 7, y, color);
-        line(x + 7, y + height, x + width - 7, y + height, color);
-        line(x, y + 7, x, y + height - 7, color);
-        line(x + width, y + 7, x + width, y + height - 7, color);
-        for (int sx : new int[] {-1, 1}) {
-            for (int sy : new int[] {-1, 1}) {
-                float px = sx < 0 ? x : x + width, py = sy < 0 ? y : y + height;
-                line(px, py - sy * 7, px - sx * 7, py, color);
-            }
-        }
+        com.battleship.frontend.ui.UiShapes.frame(layout,x,y,width,height,7,1.8f,materials.flat(Materials.rgb(color)),31);
     }
 
     private void line(float x, float y, float endX, float endY, int color) {

@@ -229,9 +229,7 @@ public final class AccountPanel {
         buttons.add(new Button(y, action));
     }
     private void outline(float x, float y, float w, float h, int color) {
-        ColorRGBA c = Materials.rgb(color);
-        rect(x, y, w, .8f, c, 82); rect(x, y + h, w, .8f, c, 82);
-        rect(x, y, .8f, h, c, 82); rect(x + w, y, .8f, h, c, 82);
+        com.battleship.frontend.ui.UiShapes.frame(card,x,y,w,h,5,1.6f,materials.flat(Materials.rgb(color)),82);
     }
     private Geometry rect(float x, float y, float w, float h, ColorRGBA color, float z) {
         Geometry geometry = new Geometry("Account panel detail", new Quad(w, h));

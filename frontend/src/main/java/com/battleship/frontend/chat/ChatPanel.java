@@ -228,7 +228,7 @@ public final class ChatPanel {
         UiTypography.centerIn(text(body, value, h < 25 ? 8 : 10, x, y, action == Action.SEND && (!writable() || busy) ? MUTED : IVORY), x, y, w, h);
     }
     private void frame(float x, float y, float w, float h, int color) {
-        ColorRGBA c = Materials.rgb(color); rect(x, y, w, .7f, c); rect(x, y + h, w, .7f, c); rect(x, y, .7f, h, c); rect(x + w, y, .7f, h, c);
+        com.battleship.frontend.ui.UiShapes.frame(card,x,y,w,h,4,1.4f,materials.flat(Materials.rgb(color)),111);
     }
     private void rect(float x, float y, float w, float h, ColorRGBA color) {
         var material = materials.flat(color); material.getAdditionalRenderState().setBlendMode(BlendMode.Alpha);
