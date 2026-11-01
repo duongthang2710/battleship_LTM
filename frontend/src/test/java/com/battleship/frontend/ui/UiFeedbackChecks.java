@@ -80,21 +80,32 @@ public final class UiFeedbackChecks {
         require(room.selectedRules().turnRule() == com.battleship.shared.game.TurnRule.HIT_CONTINUES, "Hit-again option is selectable");
         for (int[] size : new int[][] {{960, 600}, {1280, 800}, {1920, 1080}}) {
             room.resize(size[0], size[1]);
-            for (var action : new PvpRoomPanel.Action[] {PvpRoomPanel.Action.TOGGLE_MODE, PvpRoomPanel.Action.FEWER_SHIPS,
-                    PvpRoomPanel.Action.TOGGLE_TURN_RULE, PvpRoomPanel.Action.CREATE_ROOM, PvpRoomPanel.Action.BACK})
+            for (var action : new PvpRoomPanel.Action[] {PvpRoomPanel.Action.MODE_BASIC, PvpRoomPanel.Action.FLEET_FOUR,
+                    PvpRoomPanel.Action.RULE_HIT_CONTINUES, PvpRoomPanel.Action.CREATE_ROOM, PvpRoomPanel.Action.BACK})
                 require(room.actionAt(room.buttonCenter(action)).orElseThrow() == action, "Settings hit areas scale with the panel");
         }
         require(room.selectedMode() == com.battleship.shared.game.GameMode.CLASSIC, "Classic remains the default");
-        require(room.actionAt(room.buttonCenter(PvpRoomPanel.Action.TOGGLE_MODE)).orElseThrow() == PvpRoomPanel.Action.TOGGLE_MODE, "Mode selection hit target");
+        require(room.actionAt(room.buttonCenter(PvpRoomPanel.Action.MODE_DESIGNER)).orElseThrow() == PvpRoomPanel.Action.MODE_DESIGNER, "Mode selection hit target");
         room.toggleMode(); require(room.selectedMode() == com.battleship.shared.game.GameMode.DESIGNER, "Room creator can choose designer");
+        room.selectOption(PvpRoomPanel.Action.DEPLOY_SHUFFLED);room.selectOption(PvpRoomPanel.Action.REPORT_HIDE);
+        require(room.selectedOptions().shuffleFleet()&&room.selectedOptions().hideFleetReport(),"New options are selectable independently of existing room rules");
         room.showJoin();
+        room.pasteRoomCode(" abc234 "); require(room.roomCode().equals("ABC234"),"Pasted room code is normalized and replaces old entry");
+        room.pasteRoomCode("invalid clipboard"); require(room.roomCode().equals("ABC234"),"Invalid paste cannot corrupt a valid code");
+        for(int i=0;i<6;i++) room.backspace();
         for (char c : "ABC234".toCharArray()) room.inputCharacter(c);
         room.updateCaret(.6f); require(!room.caretVisible(), "Join caret blinks off");
         room.updateCaret(.5f); require(room.caretVisible(), "Join caret blinks on");
-        try (var keys = new RoomCodeInput(input, room, a -> { })) {
+        try (var keys = new RoomCodeInput(input, room, a -> { },new ClipboardService(value->{},()->" abc234 "))) {
             keys.onKeyEvent(new KeyInputEvent(KeyInput.KEY_BACK, '\0', true, false));
             for (int i = 0; i < 2; i++) keys.onKeyEvent(new KeyInputEvent(KeyInput.KEY_BACK, '\0', false, true));
             require(room.roomCode().equals("ABC"), "Join code supports held Backspace");
+            keys.onKeyEvent(new KeyInputEvent(KeyInput.KEY_LCONTROL,'\0',true,false));
+            keys.onKeyEvent(new KeyInputEvent(KeyInput.KEY_V,'v',true,false));
+            keys.onKeyEvent(new KeyInputEvent(KeyInput.KEY_LCONTROL,'\0',false,false));
+            long deadline=System.nanoTime()+java.util.concurrent.TimeUnit.SECONDS.toNanos(2);
+            while(!room.roomCode().equals("ABC234")&&System.nanoTime()<deadline) { Thread.sleep(10); keys.beginInput(); }
+            require(room.roomCode().equals("ABC234"),"Ctrl+V asynchronously pastes full code through the input listener");
         }
         require(Arrays.stream(PvpRoomPanel.Action.values()).noneMatch(a -> a.name().equals("CONNECT") || a.name().equals("DISCONNECT")), "No transport buttons in PvP");
         room.showRoom(new RoomSnapshot("ABC234", List.of(new RoomPlayer("a", "Admiral", false)), RoomPhase.WAITING), "a");
@@ -126,6 +137,20 @@ public final class UiFeedbackChecks {
         for (int i = 1; i < 9; i++) {
             float x = points.get(i * 3), y = points.get(i * 3 + 1);
             require(!(x == 0 || x == 100) || y >= 9 && y <= 31, "Fill excludes protruding square corners");
+        }
+        var parent=new com.jme3.scene.Node();
+        UiShapes.frame(parent,0,0,100,40,9,2,new com.battleship.frontend.graphics.Materials(assets).flat(com.jme3.math.ColorRGBA.White),1);
+        var border=(com.jme3.scene.Geometry)parent.getChild(0);var vertices=border.getMesh().getFloatBuffer(com.jme3.scene.VertexBuffer.Type.Position);
+        for(int i=0;i<vertices.limit();i+=3) require(vertices.get(i)>=0&&vertices.get(i)<=100&&vertices.get(i+1)>=0&&vertices.get(i+1)<=40,"Joined frame vertices stay within the panel bounds");
+        var confirm=new LeaveConfirmationPanel(assets);int[] leaves={0};confirm.resize(1280,800);
+        try(var modal=new com.battleship.frontend.input.LeaveConfirmationInput(input,confirm)) {
+            confirm.show(()->leaves[0]++);var key=new KeyInputEvent(KeyInput.KEY_T,'t',true,false);modal.onKeyEvent(key);
+            require(key.isConsumed()&&leaves[0]==0,"Leave modal blocks gameplay without leaving early");
+            confirm.click(confirm.buttonCenter(false));require(!confirm.visible()&&leaves[0]==0,"Cancel keeps the room");
+            confirm.show(()->leaves[0]++);modal.onKeyEvent(new KeyInputEvent(KeyInput.KEY_ESCAPE,'\0',true,false));
+            require(!confirm.visible()&&leaves[0]==0,"Esc cancels the leave dialog");
+            confirm.show(()->leaves[0]++);confirm.click(confirm.buttonCenter(true));confirm.confirm();
+            require(leaves[0]==1&&!confirm.visible(),"Confirm leaves exactly once");
         }
         System.out.println("PASS: caret blink, repeated Backspace, Esc, removed transport buttons, copy targets/clipboard, connection modal and chamfered fills.");
     }
