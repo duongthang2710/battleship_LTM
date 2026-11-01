@@ -14,6 +14,32 @@ application {
     applicationDefaultJvmArgs = ['--enable-native-access=ALL-UNNAMED']
 }
 
+tasks.register('checkAiMatch', JavaExec) {
+    group = 'verification'
+    dependsOn testClasses
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'com.battleship.frontend.ai.AiMatchChecks'
+}
+tasks.named('check') { dependsOn 'checkAiMatch' }
+
+tasks.register('checkAiScreens', JavaExec) {
+    group = 'verification'
+    dependsOn testClasses
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'com.battleship.frontend.ai.AiScreenFlowChecks'
+}
+tasks.named('check') { dependsOn 'checkAiScreens' }
+
+tasks.register('checkAiGameplayRendering', JavaExec) {
+    group = 'verification'
+    description = 'Renders PvAI setup and plays through attacks, timeout and rematch without a server.'
+    dependsOn testClasses
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'com.battleship.frontend.game.AiGameplayRenderChecks'
+    workingDir rootProject.projectDir
+    jvmArgs '--enable-native-access=ALL-UNNAMED'
+}
+
 tasks.register('checkBoardCoordinates', JavaExec) {
     group = 'verification'
     dependsOn testClasses

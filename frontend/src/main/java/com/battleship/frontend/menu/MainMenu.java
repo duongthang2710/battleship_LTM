@@ -22,7 +22,7 @@ import java.util.Optional;
 
 public final class MainMenu {
     public enum Action {
-        PVP, LEADERBOARD, FRIENDS, PROFILE, SETTINGS, EXIT
+        PVP, AI, LEADERBOARD, FRIENDS, PROFILE, SETTINGS, EXIT
     }
 
     private static final float WIDTH = 400;
@@ -131,7 +131,8 @@ public final class MainMenu {
         divider(405);
         button(28, 316, 344, 66, "PVP", Action.PVP, true);
         UiTypography.centerIn(centered(body, "ONLINE MATCH", 10, WIDTH / 2, 334, CYAN), 28, 318, 344, 25);
-        button(28, 247, 344, 52, "LEADERBOARD", Action.LEADERBOARD, false);
+        button(28, 247, 165, 52, "AI BATTLE", Action.AI, false);
+        button(207, 247, 165, 52, "LEADERBOARD", Action.LEADERBOARD, false);
         button(28, 183, 165, 52, "FRIENDS", Action.FRIENDS, false);
         button(207, 183, 165, 52, "PROFILE", Action.PROFILE, false);
         button(28, 119, 165, 52, "SETTINGS", Action.SETTINGS, false);

@@ -11,7 +11,7 @@ Tôn trọng phạm vi từng lượt và các quyết định trực tiếp c�
 
 - Phần chung: đúng hai chế độ PvP và PvAI; không có Local Game hai người trên cùng máy.
 - PvP: hai client qua cùng Java TCP server; server quản lý phòng, đội hình bí mật, lượt, thời gian và kết quả. Client không tự quyết định hit/miss.
-- PvAI: điều khiển trận và bot trong ứng dụng, không cần phòng/ghép người. Chưa triển khai trong project hiện tại.
+- PvAI: điều khiển trận và bot trong ứng dụng, không cần phòng/ghép người. Đã triển khai Easy/Medium/Hard theo yêu cầu ngày 01/11/2026.
 - Giữ `frontend` / `backend` / `shared`; tách socket, nghiệp vụ, UI và renderer. Tái sử dụng luật dùng chung, không tạo class trùng chỉ để giống tên trong sơ đồ.
 - Quyết định hiện hành bổ sung: Java 25, jMonkeyEngine, PostgreSQL bằng Docker Compose; đăng nhập bắt buộc trước Main Menu; đã bỏ Play Local. Giữ nguyên visual đã chốt.
 
@@ -30,11 +30,16 @@ Người dùng xác nhận giữ **5 loại tàu thẳng**, không chuyển sang
 | Mất kết nối trong trận | Đã bổ sung: người còn lại thắng, server chốt `GAME_OVER/PLAYER_LEFT`, không lộ tàu, khóa bắn/timer, hủy rematch với người đã rời. Waiting/Placement vẫn cập nhật phòng như cũ. |
 | Hết thời gian lượt | Mục 9.1 yêu cầu tự bắn ngẫu nhiên vào ô chưa bắn rồi đổi lượt. Yêu cầu trực tiếp trước đây và code hiện tại: 60 giây không bắn hợp lệ thì thua. Đây là khác biệt cần chốt khi sửa timer, chưa tự đổi. |
 | Hạm đội | Tài liệu dùng 17 ô, 5 nhóm liên thông D4. Code dùng 5 tàu thẳng kích thước 5/4/3/3/2, kiểm tra biên/chồng lấn; chưa đếm thành phần liên thông D4 giữa các tàu. Người dùng đã chọn giữ nguyên 5 loại tàu thẳng; không áp quy tắc D4 giữa các tàu. |
-| Phòng và chế độ | Có tạo/join bằng mã và Ready. Tài liệu còn ghép ngẫu nhiên/phòng công khai, PvAI và đầu hàng; chưa triển khai. |
+| Phòng và chế độ | Có tạo/join bằng mã và Ready; có PvAI Easy/Medium/Hard trong ứng dụng. Ghép ngẫu nhiên/phòng công khai và đầu hàng chưa triển khai. |
 | Kết nối và kết quả UI | Đã bổ sung nhập IP/hostname/cổng trên form tài khoản, kiểm tra cổng, giữ trạng thái kết nối. Màn kết quả hiện lý do thắng/thua, giữ bố cục hiện tại. |
-| Database | Có `users`, `matches`, `match_players`; bổ sung `last_seen_at`, `mode`, `winner_slot`, `total_turn`, `player_type` bằng migration giữ dữ liệu. Chưa làm avatar/quản lý trạng thái tài khoản/AI level/conversations/messages vì thuộc chức năng chưa triển khai. Giữ PK UUID. |
+| Database | Có `users`, `matches`, `match_players`; bổ sung `last_seen_at`, `mode`, `winner_slot`, `total_turn`, `player_type` bằng migration giữ dữ liệu. PvAI chưa lưu lịch sử/AI level vào database; không tính Leaderboard. Chưa làm avatar/quản lý trạng thái tài khoản/conversations/messages. Giữ PK UUID. |
 
 Các lượt tiếp theo đối chiếu thiết kế chung và phạm vi được giao; kiểm tra code/protocol trước khi sửa. Những chức năng chưa triển khai chỉ bổ sung khi được yêu cầu.
+
+PvAI được người dùng yêu cầu trực tiếp ngày 01/11/2026: Easy random, Medium săn/bám hit, Hard chấm điểm các vị trí tàu
+khả dĩ và ưu tiên ô giao nhiều khả năng. Chế độ đầu tiên dùng Classic, 5 tàu thẳng, bắn luân phiên, người chơi đi trước;
+giữ countdown 3 giây và luật 60 giây hết lượt thì thua. Bắt buộc đăng nhập, không có Play Local hai người.
+Tái sử dụng GameEngine/HUD/renderer; bot chỉ nhận dữ liệu công khai, trận không tạo phòng hoặc ghi lịch sử backend.
 
 Bạn bè đã được bổ sung theo yêu cầu riêng: lời mời, quan hệ một cặp duy nhất, online/offline qua phiên TCP và migration V003. Đã tích hợp mời bạn online vào phòng PvP qua TCP, lời mời trong RAM hết hạn sau 60 giây; đã có chat trong phòng chờ và trận PvP theo yêu cầu riêng. Chat riêng giữa bạn bè chưa triển khai.
 

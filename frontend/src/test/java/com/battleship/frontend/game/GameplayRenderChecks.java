@@ -256,14 +256,16 @@ public final class GameplayRenderChecks extends SimpleApplication {
             require(game.state() == terminal && !game.attackAnimating(), "Game over rejects further attacks");
             checkCamera();
         } else if (frame == 95) {
-            require(gameOver.mainMenuAt(new Vector2f(821, 386)), "Main Menu hit target");
-            clickScreen(new Vector2f(821, 386));
+            Vector2f menuButton = gameOver.buttonCenter(false);
+            require(gameOver.mainMenuAt(menuButton), "Main Menu hit target");
+            clickScreen(menuButton);
             require(returnedToMenu && game.state().phase() == GamePhase.GAME_OVER,
                     "Game Over Main Menu forwards navigation without restarting match");
-            require(gameOver.restartAt(new Vector2f(618, 386)), "Restart hit target");
+            Vector2f restartButton = gameOver.buttonCenter(true);
+            require(gameOver.restartAt(restartButton), "Restart hit target");
             emit(() -> {
-                inputManager.onMouseButtonEvent(new MouseButtonEvent(MouseInput.BUTTON_LEFT, true, 618, 386));
-                inputManager.onMouseButtonEvent(new MouseButtonEvent(MouseInput.BUTTON_LEFT, false, 618, 386));
+                inputManager.onMouseButtonEvent(new MouseButtonEvent(MouseInput.BUTTON_LEFT, true, (int)restartButton.x, (int)restartButton.y));
+                inputManager.onMouseButtonEvent(new MouseButtonEvent(MouseInput.BUTTON_LEFT, false, (int)restartButton.x, (int)restartButton.y));
             });
             require(game.state().phase() == GamePhase.PLACEMENT && fleet().ships().isEmpty() && !gameOver.visible(),
                     "Restart button restores placement and clears overlay");

@@ -128,6 +128,11 @@ public final class GameOverOverlay {
         return visible && inside(screen, MENU_BUTTON_X, BUTTON_Y, BUTTON_WIDTH, BUTTON_HEIGHT);
     }
 
+    public Vector2f buttonCenter(boolean playAgain) {
+        return new Vector2f(left + ((playAgain ? BUTTON_X : MENU_BUTTON_X) + BUTTON_WIDTH / 2) * scale,
+                bottom + (BUTTON_Y + BUTTON_HEIGHT / 2) * scale);
+    }
+
     private boolean inside(Vector2f screen, float x, float y, float width, float height) {
         float localX = (screen.x - left) / scale;
         float localY = (screen.y - bottom) / scale;

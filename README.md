@@ -9,6 +9,7 @@ bàn cờ và mô hình tàu 3D. Backend dùng **Java TCP Socket** để quản 
 ## Chức năng hiện có
 
 - **Bắt buộc đăng nhập:** mở ứng dụng → đăng ký/đăng nhập → Main Menu. Không còn chế độ Play Local.
+- **AI BATTLE:** chọn Easy / Medium / Hard, xếp 5 tàu thẳng và đấu bot ngay trong ứng dụng; không cần tạo phòng.
 - **Chat phòng/trận:** tin nhắn trực tiếp trong Waiting Room và Battle; tự tách nội dung giữa các ván.
 - **Mời bạn vào PvP:** mời bạn online, Accept/Decline, thời hạn 60 giây; tự tạo hoặc dùng lại phòng chờ.
 - **Friends:** tìm username, gửi/nhận/chấp nhận/từ chối/hủy lời mời, xóa bạn có xác nhận; cập nhật hai phía qua TCP và hiển thị online/offline.
@@ -38,8 +39,36 @@ Tàu không được chồng lấn hoặc nằm ngoài bàn cờ. Server xác th
 
 **Settings** đã hoạt động: cửa sổ/toàn màn hình không viền, kích thước cửa sổ, độ nhạy orbit/zoom và lưu cấu hình cục bộ.
 **Profile** hiện hiển thị tài khoản và đăng xuất; chưa có màn lịch sử/thống kê cá nhân.
-PvE / VS AI chưa được triển khai; đã bỏ nút không có tác dụng khỏi menu demo.
+**AI BATTLE** dùng Classic, 5 tàu 5/4/3/3/2 và bắn luân phiên; người chơi đi trước.
 Đã có tài khoản và lưu kết quả PvP bằng PostgreSQL; có chat trong phòng/trận; chưa có chat riêng hoặc khôi phục trận sau mất kết nối.
+
+## Chơi với AI
+
+Đăng nhập → **AI BATTLE** → chọn **Easy**, **Medium** hoặc **Hard** → **START** → đặt/kéo thả tàu hoặc Random → **READY!**.
+Sau countdown 3 giây, mỗi lượt có đủ 60 giây; hết thời gian thì thua. Bắn sai/trùng không reset đồng hồ.
+Settings và xác nhận rời trận không tạm dừng timer. **PLAY AGAIN** xóa đội hình/lịch sử bắn và giữ độ khó.
+**LEAVE** hoặc Esc mở xác nhận trở về Main Menu. Khi phiên đăng nhập mất, ứng dụng vẫn quay về màn đăng nhập theo cơ chế hiện hành.
+
+- **Easy:** chọn ngẫu nhiên ô chưa bắn.
+- **Medium:** dò xen kẽ, bám ô trúng và ưu tiên hai đầu khi đã thấy hướng tàu.
+- **Hard:** đếm các vị trí tàu thẳng còn khả dĩ, loại vị trí đi qua miss/tàu chìm và ưu tiên vị trí phù hợp hit.
+  Ô giao nhiều khả năng nhận điểm cao hơn. Đây là heuristic mật độ vị trí, không phải xác suất chính xác của toàn hạm đội.
+  Chỉ random khi đồng điểm; không xem tọa độ hoặc loại tàu chưa chìm và không loại ô lân cận tàu chìm.
+
+Bot được truyền `AiKnowledge` chỉ gồm lịch sử bắn công khai và loại tàu đã chìm. `AiMatchController`
+điều phối engine, timer và trì hoãn bắn; không có callback nền tồn tại sau khi rời trận.
+PvAI chưa lưu lịch sử database và không tính vào Leaderboard PvP. Fleet Designer/tùy chọn phòng hiện chỉ áp dụng PvP.
+
+Kiểm tra thuật toán, timer và render (lệnh cuối cần OpenGL; không cần server):
+
+```powershell
+.\gradlew.bat :shared:aiChecks :frontend:checkAiMatch
+.\gradlew.bat :frontend:checkAiGameplayRendering
+```
+
+Ảnh kiểm tra nằm trong `build/ai-review/`. Benchmark trên cùng 80 đội hình với seed cố định:
+Easy 95,46; Medium 51,40; Hard 44,39 phát bắn trung bình để chìm toàn hạm đội.
+Đây là kiểm tra tìm tàu, không phải tỷ lệ thắng trước người chơi.
 
 Kết thúc trận hiển thị Victory/Defeat theo từng người. **PLAY AGAIN** trong PvP
 gửi yêu cầu đến server: một người đồng ý thì chờ trên màn kết quả, cả hai đồng ý

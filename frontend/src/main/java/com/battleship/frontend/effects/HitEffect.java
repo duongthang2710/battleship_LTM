@@ -26,7 +26,7 @@ public final class HitEffect {
                     i % 2 == 0 ? 0xFFD287 : 0xE89955, 0.032f, true);
             sparks.add(spark);
         }
-        for (int i = 0; i < 4; i++) smoke.add(EffectVisuals.sphere(node, materials, 0x444454, 0.16f, false));
+        for (int i = 0; i < 7; i++) smoke.add(EffectVisuals.sphere(node, materials, 0x74808B, 0.23f, false));
         for (int i = 0; i < 2; i++) {
             ripples.add(EffectVisuals.ring(node, materials, 0xABDCEC, 0.20f, 0.013f));
         }
@@ -57,10 +57,12 @@ public final class HitEffect {
         }
         for (int i = 0; i < smoke.size(); i++) {
             Geometry puff = smoke.get(i);
-            puff.setLocalTranslation((i - 1.5f) * elapsed * 0.12f, 0.32f + elapsed * 0.68f,
-                    (i % 2 - 0.5f) * elapsed * 0.15f);
-            puff.setLocalScale(0.45f + progress * 2.3f);
-            EffectVisuals.fade(puff, (1 - progress) * Math.min(1, elapsed * 8) * 0.38f);
+            float age = Math.max(0, elapsed - i * .045f);
+            float smokeProgress = Math.min(1, age / (AttackEffectManager.TOTAL_DURATION - AttackEffectManager.IMPACT_TIME));
+            Vector3f drift = EffectVisuals.direction(i, smoke.size()).mult(age * .14f);
+            puff.setLocalTranslation(drift.x, .32f + age * .72f + (i % 3) * .08f, drift.z);
+            puff.setLocalScale(strength * (.65f + smokeProgress * 2.1f));
+            EffectVisuals.fade(puff, (1 - smokeProgress) * Math.min(1, age * 5) * .62f);
         }
         for (int i = 0; i < ripples.size(); i++) {
             Geometry ripple = ripples.get(i);

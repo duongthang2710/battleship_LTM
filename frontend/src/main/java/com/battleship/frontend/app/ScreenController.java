@@ -43,7 +43,10 @@ import com.jme3.scene.Spatial.CullHint;
 
 /** Owns screen navigation and input lifetimes; game rules remain in GameEngine. */
 public final class ScreenController implements AutoCloseable {
-    private enum Screen { MAIN_MENU, ACCOUNT, LEADERBOARD, FRIENDS, SETTINGS, PVP, PVP_PLACEMENT }
+    private enum Screen { MAIN_MENU, ACCOUNT, LEADERBOARD, FRIENDS, SETTINGS, PVP, PVP_PLACEMENT, AI_SETUP, AI_GAME }
+    private final com.battleship.frontend.ai.AiSetupPanel aiSetup;
+    private PointerInput aiSetupInput;
+    private com.battleship.frontend.ai.AiSetupPanel.Action pendingAiAction;
     private final InputManager input;
     private final OrbitCamera orbit;
     private final Runnable exit;
@@ -108,13 +111,15 @@ public final class ScreenController implements AutoCloseable {
         this.orbit = orbit;
         this.exit = exit;
         menu = new MainMenu(assets);
+        aiSetup = new com.battleship.frontend.ai.AiSetupPanel(assets);
+        gui.attachChild(aiSetup.root());
         settingsPanel = new SettingsPanel(assets);
         audio = new com.battleship.frontend.audio.GameAudio(assets);
         leaveConfirmation=new com.battleship.frontend.ui.LeaveConfirmationPanel(assets);
         gui.attachChild(leaveConfirmation.root());
         leaveConfirmationInput=new com.battleship.frontend.input.LeaveConfirmationInput(input,leaveConfirmation);
         settings = new SettingsController(settingsPanel, orbit, display, () -> {
-            if (settingsOrigin == Screen.PVP_PLACEMENT) gameReturnRequested = true; else requestMainMenu();
+            if (settingsOrigin == Screen.PVP_PLACEMENT || settingsOrigin == Screen.AI_GAME) gameReturnRequested = true; else requestMainMenu();
         });
         settings.onAudioSettings(audio::configure);
         gui.attachChild(settingsPanel.root());
@@ -186,6 +191,7 @@ public final class ScreenController implements AutoCloseable {
     public LeaderboardController leaderboard() { return leaderboard; }
     public AccountPanel accountPanel() { return accountPanel; }
     public MainMenu mainMenu() { return menu; }
+    public com.battleship.frontend.ai.AiSetupPanel aiSetupPanel() { return aiSetup; }
     public GameController game() { return game; }
     public PvpController pvp() { return pvp; }
     public PvpRoomPanel roomPanel() { return roomPanel; }
@@ -197,6 +203,7 @@ public final class ScreenController implements AutoCloseable {
     public void resize(int width, int height) {
         connectionNotice.resize(width, height);
         menu.resize(width, height);
+        aiSetup.resize(width, height);
         settingsPanel.resize(width, height);
         leaderboardPanel.resize(width, height);
         friendsPanel.resize(width, height);
@@ -219,7 +226,7 @@ public final class ScreenController implements AutoCloseable {
         gameInvites.update();
         chat.update();
         clipboard.update();
-        if(pvp.room()==null && leaveConfirmation.visible()) leaveConfirmation.cancel();
+        if(pvp.room()==null && !game.aiMode() && leaveConfirmation.visible()) leaveConfirmation.cancel();
         accountPanel.sync(pvp.account(), pvp.status(), pvp.pending(), pvp.connected());
         accountPanel.update(delta);
         friendsPanel.updateCaret(delta);
@@ -233,6 +240,7 @@ public final class ScreenController implements AutoCloseable {
         }
         if (backRequested) { backRequested = false; navigateBack(); }
         if (pvp.account() == null) {
+            pendingAiAction = null;
             pendingAction = null;
             menuRequested = roomRequested = gameReturnRequested = false;
             placementRequested = null;
@@ -257,6 +265,7 @@ public final class ScreenController implements AutoCloseable {
             pendingAction = null;
             roomRequested = false;
             placementRequested = null;
+            pendingAiAction = null;
             showMainMenu();
         } else if (roomRequested) {
             roomRequested = false;
@@ -273,9 +282,19 @@ public final class ScreenController implements AutoCloseable {
             else if (action == MainMenu.Action.PROFILE) showAccount();
             else if (action == MainMenu.Action.FRIENDS) showFriends();
             else if (action == MainMenu.Action.LEADERBOARD) showLeaderboard();
+            else if (action == MainMenu.Action.AI) showAiSetup();
             else if (action == MainMenu.Action.PVP) {
                 showPvpRoom();
                 pvp.open();
+            }
+        } else if (pendingAiAction != null) {
+            var action = pendingAiAction; pendingAiAction = null;
+            if (screen == Screen.AI_SETUP) switch (action) {
+                case EASY -> aiSetup.select(com.battleship.shared.ai.AiDifficulty.EASY);
+                case MEDIUM -> aiSetup.select(com.battleship.shared.ai.AiDifficulty.MEDIUM);
+                case HARD -> aiSetup.select(com.battleship.shared.ai.AiDifficulty.HARD);
+                case BACK -> requestMainMenu();
+                case START -> startAiGame();
             }
         }
         boolean waitingChat = screen == Screen.PVP && pvp.room() != null && pvp.room().phase() == com.battleship.shared.room.RoomPhase.WAITING;
@@ -291,18 +310,18 @@ public final class ScreenController implements AutoCloseable {
         else if (screen == Screen.PVP) roomPanel.update(cursor);
         else if (screen == Screen.FRIENDS) friendsPanel.update(cursor);
         else if (screen == Screen.LEADERBOARD) leaderboardPanel.update(cursor);
-        else if (screen == Screen.SETTINGS && settingsOrigin == Screen.PVP_PLACEMENT) {
+        else if (screen == Screen.SETTINGS && (settingsOrigin == Screen.PVP_PLACEMENT || settingsOrigin == Screen.AI_GAME)) {
             game.update(delta, new Vector2f(-1,-1)); setGameHudVisible(false);
-        } else if (screen != Screen.ACCOUNT && screen != Screen.SETTINGS) game.update(delta, cursor);
+        } else if (screen == Screen.PVP_PLACEMENT || screen == Screen.AI_GAME) game.update(delta, cursor);
         updateAudioScene();
     }
 
     private void updateAudioScene() {
         Screen effective = screen == Screen.SETTINGS ? settingsOrigin : screen;
         var music = com.battleship.frontend.audio.GameAudio.Music.MENU;
-        boolean sea = effective == Screen.PVP || effective == Screen.PVP_PLACEMENT;
+        boolean sea = effective == Screen.PVP || effective == Screen.PVP_PLACEMENT || effective == Screen.AI_GAME;
         if (effective == Screen.PVP) music = com.battleship.frontend.audio.GameAudio.Music.PLACEMENT;
-        if (effective == Screen.PVP_PLACEMENT) music = switch (game.state().phase()) {
+        if (effective == Screen.PVP_PLACEMENT || effective == Screen.AI_GAME) music = switch (game.state().phase()) {
             case PLACEMENT -> com.battleship.frontend.audio.GameAudio.Music.PLACEMENT;
             case BATTLE -> com.battleship.frontend.audio.GameAudio.Music.BATTLE;
             case GAME_OVER -> game.attackAnimating() ? com.battleship.frontend.audio.GameAudio.Music.BATTLE
@@ -330,7 +349,10 @@ public final class ScreenController implements AutoCloseable {
         });
     }
 
-    private void confirmLeaveRoom() { if(pvp.room()!=null) leaveConfirmation.show(pvp::leaveRoom); }
+    private void confirmLeaveRoom() {
+        if (game.aiMode()) leaveConfirmation.show(this::requestMainMenu, "LEAVE AI MATCH?", "Return to Main Menu and discard this match.");
+        else if(pvp.room()!=null) leaveConfirmation.show(pvp::leaveRoom);
+    }
 
     private void navigateBack() {
         if(leaveConfirmation.visible()) { leaveConfirmation.cancel();return; }
@@ -352,6 +374,8 @@ public final class ScreenController implements AutoCloseable {
                 else pvp.handle(PvpRoomPanel.Action.BACK);
             }
             case PVP_PLACEMENT -> { if(pvp.room()!=null) leaveConfirmation.show(pvp::returnToMainMenu); else requestMainMenu(); }
+            case AI_SETUP -> requestMainMenu();
+            case AI_GAME -> { if (game.state().phase() == com.battleship.shared.game.GamePhase.GAME_OVER) requestMainMenu(); else confirmLeaveRoom(); }
             case MAIN_MENU -> { } // Root screen; Esc never signs out or exits.
         }
     }
@@ -360,7 +384,7 @@ public final class ScreenController implements AutoCloseable {
         menu.actionAt(cursor).ifPresent(action -> {
             audio.play(com.battleship.frontend.audio.GameAudio.Cue.CLICK);
             if (action == MainMenu.Action.SETTINGS || action == MainMenu.Action.FRIENDS || action == MainMenu.Action.LEADERBOARD || action == MainMenu.Action.PROFILE || action == MainMenu.Action.EXIT
-                    || action == MainMenu.Action.PVP) pendingAction = action;
+                    || action == MainMenu.Action.PVP || action == MainMenu.Action.AI) pendingAction = action;
         });
     }
 
@@ -378,7 +402,7 @@ public final class ScreenController implements AutoCloseable {
                 : com.battleship.frontend.audio.GameAudio.Cue.CLICK); settings.handle(action);
     }
     private void resumeGame() {
-        closeInputs(); screen = Screen.PVP_PLACEMENT;
+        closeInputs(); screen = settingsOrigin == Screen.AI_GAME ? Screen.AI_GAME : Screen.PVP_PLACEMENT;
         setGameHudVisible(true);
         if (game.state().phase() == com.battleship.shared.game.GamePhase.GAME_OVER && !game.attackAnimating()) gameOver.show(game.state());
         gameInput = new GameInput(input, game, orbit);
@@ -404,6 +428,7 @@ public final class ScreenController implements AutoCloseable {
     private void showMainMenu() {
         if (pvp.account() == null) { showAccount(); return; }
         closeInputs();
+        leaveConfirmation.cancel();
         pvp.hide();
         screen = Screen.MAIN_MENU;
         game.useLocalMode();
@@ -482,7 +507,26 @@ public final class ScreenController implements AutoCloseable {
         gameInput = new GameInput(input, game, orbit);
     }
 
+    private void showAiSetup() {
+        closeInputs(); menu.hide(); roomPanel.hide(); setGameHudVisible(false);
+        pvp.hide(); screen = Screen.AI_SETUP; aiSetup.show();
+        aiSetupInput = new PointerInput(input, orbit, cursor -> aiSetup.actionAt(cursor).ifPresent(action -> {
+            audio.play(com.battleship.frontend.audio.GameAudio.Cue.CLICK); pendingAiAction = action;
+        }));
+    }
+
+    private void startAiGame() {
+        if (pvp.account() == null) { showAccount(); return; }
+        closeInputs(); screen = Screen.AI_GAME;
+        game.useAiMode(aiSetup.difficulty(), pvp.account().displayName());
+        orbit.setPlayerSide(com.battleship.shared.game.Side.WHITE);
+        setGameHudVisible(true);
+        gameInput = new GameInput(input, game, orbit);
+    }
+
     private void closeInputs() {
+        aiSetup.hide();
+        if (aiSetupInput != null) { aiSetupInput.close(); aiSetupInput = null; }
         hoveredMenu = null;
         settings.hide();
         if (settingsPointer != null) { settingsPointer.close(); settingsPointer = null; }

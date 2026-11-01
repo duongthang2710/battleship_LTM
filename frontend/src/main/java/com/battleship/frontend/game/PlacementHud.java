@@ -48,6 +48,8 @@ public final class PlacementHud {
     private String signature = "";
     private boolean enemyView;
     private boolean networkPlacement;
+    private boolean aiMode;
+    public void setAiMode(boolean value) { aiMode = value; signature = ""; rebuild(); }
     private boolean networkLocked;
     private float scale = 1;
     private float logicalWidth = 1280, logicalHeight = 800;
@@ -147,7 +149,7 @@ public final class PlacementHud {
             more = false;
             draw.panel(w/2-180,22,360,54,0x082D46);
             button(w/2-167,32,214,34,enemyView?"YOUR FLEET  [Tab]":"ENEMY WATERS  [Tab]",Action.TOGGLE_BOARD,true,true);
-            if(networkPlacement) button(w/2+60,32,105,34,"LEAVE",Action.LEAVE_ROOM,true,false);
+            if(networkPlacement || aiMode) button(w/2+60,32,105,34,"LEAVE",Action.LEAVE_ROOM,true,false);
             regions.add(new Region(w/2-180,22,360,54));
             return;
         }
@@ -181,11 +183,11 @@ public final class PlacementHud {
         draw.text(hint,14,w*.26f,106,w*.48f,25,CYAN);
         if(more) {
             float mx=w/2-149,my=150;
-            card(mx,my,298,networkPlacement?154:110);
+            card(mx,my,298,networkPlacement || aiMode ?154:110);
             button(mx+14,my+62,130,34,"Rotate [T]",Action.ROTATE,!networkLocked&&!draft,false);
             button(mx+154,my+62,130,34,draft?"Clear draft":"Remove",Action.REMOVE,!networkLocked&&selected!=null&&(draft||state.player().board().ship(selected)!=null),false);
             button(mx+14,my+16,270,34,"Reset fleet [C]",Action.RESET,!networkLocked,false);
-            if(networkPlacement) button(mx+14,my+110,270,30,"Leave room",Action.LEAVE_ROOM,true,false);
+            if(networkPlacement || aiMode) button(mx+14,my+110,270,30,aiMode?"Leave match":"Leave room",Action.LEAVE_ROOM,true,false);
         }
     }
 

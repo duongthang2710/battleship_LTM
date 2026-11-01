@@ -798,7 +798,7 @@ public final class PvpRoomRenderChecks extends SimpleApplication {
         AccountPanel panel = screens.accountPanel();
         switch (stage) {
             case 1 -> {
-                require(screens.mainMenu().visible() && MainMenu.Action.values().length == 6, "Authenticated menu has no Local Game action");
+                require(screens.mainMenu().visible() && MainMenu.Action.values().length == 7, "Authenticated menu includes PvAI and has no Local Game action");
                 click(screens.mainMenu().buttonCenter(MainMenu.Action.SETTINGS));
                 require(screens.settingsPanel().visible() && !screens.mainMenu().visible(), "Settings opens a real screen");
                 stage = 89;

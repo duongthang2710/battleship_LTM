@@ -18,11 +18,14 @@ public final class LeaveConfirmationPanel {
         card.setLocalScale(scale);card.setLocalTranslation(left,bottom,0);
     }
     public void show(Runnable action) {
+        show(action, "LEAVE ROOM?", "Leaving an active battle counts as a defeat.");
+    }
+    public void show(Runnable action, String title, String detail) {
         confirmed=action;root.setCullHint(CullHint.Never);card.detachAllChildren();
         var draw=new NavalHudSkin(assets,card,400);
         draw.panel(0,0,440,210,0x081F32);
-        draw.text("LEAVE ROOM?",30,20,130,400,52,NavalHudSkin.WHITE);
-        draw.text("Leaving an active battle counts as a defeat.",16,24,94,392,28,0xC0D4DC);
+        draw.text(title,30,20,130,400,52,NavalHudSkin.WHITE);
+        draw.text(detail,16,24,94,392,28,0xC0D4DC);
         draw.panel(24,24,186,46,0x7E2531); draw.text("LEAVE",19,24,24,186,46,NavalHudSkin.WHITE);
         draw.panel(230,24,186,46,0x143B54); draw.text("CANCEL",19,230,24,186,46,NavalHudSkin.WHITE);
     }

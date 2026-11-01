@@ -83,7 +83,7 @@ public final class UiInteractionChecks extends SimpleApplication {
                 clickIndex = 0; phase = 1;
             }
             case 1 -> {
-                var action = actions.get(clickIndex); target = renderedLabelCenter(menu.root(), action.name().replace('_', ' '));
+                var action = actions.get(clickIndex); target = renderedLabelCenter(menu.root(), action == MainMenu.Action.AI ? "AI BATTLE" : action.name().replace('_', ' '));
                 require(menu.actionAt(target).orElse(null) == action, "Rendered menu label is inside its actual hit rectangle: " + action);
                 clicked = null; move(target); phase = 2;
             }

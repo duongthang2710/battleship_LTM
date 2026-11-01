@@ -24,6 +24,8 @@ import java.util.logging.Logger;
 public final class GameController {
     private static final Logger LOG = Logger.getLogger(GameController.class.getName());
     private final GameEngine engine;
+    private com.battleship.frontend.ai.AiMatchController ai;
+    public boolean aiMode() { return ai != null; }
     private final ShipDesignEditor designer;
     private boolean drawingMode;
     public ShipDesignEditor designer() { return designer; }
@@ -90,12 +92,13 @@ public final class GameController {
         refresh();
     }
 
-    public GameState state() { return networkState == null ? engine.state() : networkState; }
+    public GameState state() { return ai != null ? ai.state() : networkState == null ? engine.state() : networkState; }
     public boolean enemyView() { return enemyView; }
     public boolean attackAnimating() { return effects.isBusy(); }
     public boolean inputBusy() { return effects.isBusy() || introBlocked(); }
 
     public void useLocalMode() {
+        ai = null; controls.setAiMode(false);
         soundedTurn = warnedTurn = -1;
         effects.clear(); beforeShot = null; lastPlacementBoard = null; resultSoundPlayed = false;
         countingIntoBattle = false; startFlash = 0; hud.setStartCountdown(0, false);
@@ -116,6 +119,22 @@ public final class GameController {
         refresh();
     }
 
+    public void useAiMode(com.battleship.shared.ai.AiDifficulty difficulty, String playerName) {
+        useAiMode(difficulty, playerName, System::nanoTime);
+    }
+
+    void useAiMode(com.battleship.shared.ai.AiDifficulty difficulty, String playerName, java.util.function.LongSupplier nanoTime) {
+        useLocalMode();
+        ai = new com.battleship.frontend.ai.AiMatchController(engine, difficulty, playerName, new java.util.Random(), nanoTime);
+        restartLocalMatch();
+        controls.setAiMode(true);
+        hud.setFleetReportVisible(true);
+        hud.setPlayerName(playerName); hud.setOpponentName("AI " + difficulty.label());
+        ownSide = Side.WHITE; hud.setPlayerSide(ownSide); minimap.setSide(ownSide);
+        message = "AI " + difficulty.label() + ". Deploy your fleet.";
+        refresh();
+    }
+
     public void useNetworkPlacement(String opponent, String roomCode, Side side, PvpController network) {
         useNetworkPlacement(opponent, roomCode, side, com.battleship.shared.game.GameMode.CLASSIC, network);
     }
@@ -124,6 +143,7 @@ public final class GameController {
                 com.battleship.shared.game.TurnRule.ALTERNATING), network);
     }
     public void useNetworkPlacement(String opponent, String roomCode, Side side, com.battleship.shared.game.GameRules rules, PvpController network) {
+        ai = null; controls.setAiMode(false);
         soundedTurn = warnedTurn = -1;
         effects.clear(); beforeShot = null; lastPlacementBoard = null; resultSoundPlayed = false;
         countingIntoBattle = false; startFlash = 0; hud.setStartCountdown(0, false);
@@ -195,6 +215,7 @@ public final class GameController {
     private boolean placementLocked() { return networkPlacement && (submitted || network.pending()); }
 
     private boolean canTarget(Coordinate cell) {
+        if (ai != null) return enemyView && !introBlocked() && ai.playerCanAttack(cell);
         return networkPlacement ? state().phase() == GamePhase.BATTLE && !introBlocked() && enemyView && !network.pending()
                 && state().currentPlayerId().equals(state().player().id()) && !state().enemy().board().wasAttacked(cell)
                 : engine.canAttack(viewAttacker(), cell);
@@ -204,6 +225,16 @@ public final class GameController {
         hud.update(delta);
         updateIntro(delta);
         effects.update(delta);
+        if (ai != null) {
+            GameState before = state();
+            AttackResult botShot = ai.updateBot(!effects.isBusy() && !introBlocked());
+            if (state().phase() == GamePhase.GAME_OVER
+                    && ai.endReason() == com.battleship.shared.match.MatchEndReason.TURN_TIMEOUT && !resultSoundPlayed) {
+                effects.clear(); beforeShot = null; targeting.clear();
+                sound.accept(Cue.TIMEOUT);
+                gameOver.setEndReason(ai.endReason()); refresh(); showGameOver();
+            } else if (botShot != null) { beforeShot = before; enemyView = false; playLocalAttack(botShot); }
+        }
         if (effects.isBusy()) refreshShotStatus();
         update(cursor);
     }
@@ -369,6 +400,9 @@ public final class GameController {
         soundedTurn = warnedTurn = -1;
         cancelShipDrag();
         engine.restart();
+        if (ai != null) ai.reset();
+        countingIntoBattle = false; startFlash = 0; hud.setStartCountdown(0, false);
+        gameOver.setEndReason(null);
         lastPlacementBoard = null; resultSoundPlayed = false;
         designer.clear(); drawingMode = designerMode();
         networkState = null;
@@ -389,6 +423,7 @@ public final class GameController {
         if (action.name().startsWith("SELECT_")
                 && !engine.rules().allows(ShipType.valueOf(action.name().substring(7)))) return;
         if (networkPlacement && action == PlacementHud.Action.LEAVE_ROOM) { cancelShipDrag(); if(askLeave!=null) askLeave.run(); else leaveRoom.run(); return; }
+        if (ai != null && action == PlacementHud.Action.LEAVE_ROOM) { cancelShipDrag(); if(askLeave!=null) askLeave.run(); else returnToMenu.run(); return; }
         if (introBlocked()) return;
         if (effects.isBusy()) return;
         if (action == PlacementHud.Action.MORE) { sound.accept(Cue.CLICK); controls.toggleMore(); return; }
@@ -452,7 +487,7 @@ public final class GameController {
             case REMOVE -> result = engine.removeSelected();
             case RESET -> result = engine.resetFleet();
             case RANDOM -> result = engine.randomPlacement();
-            case READY -> result = engine.ready();
+            case READY -> result = ai == null ? engine.ready() : ai.ready();
             default -> { return; }
         }
         if (!result.success()) sound.accept(Cue.ERROR);
@@ -512,7 +547,9 @@ public final class GameController {
             return;
         }
         beforeShot = state();
-        AttackResult result = engine.attack(viewAttacker(), hover);
+        if (ai != null && !canTarget(hover)) { message = "Wait for your turn; target enemy waters."; refreshHud(); return; }
+        AttackResult result = ai == null ? engine.attack(viewAttacker(), hover) : ai.attackPlayer(hover);
+        if (result == null) return;
         if (!result.accepted()) {
             message = switch (result.type()) {
                 case ALREADY_ATTACKED -> "This cell has already been attacked.";
@@ -524,6 +561,10 @@ public final class GameController {
             refreshHud();
             return;
         }
+        playLocalAttack(result);
+    }
+
+    private void playLocalAttack(AttackResult result) {
         targeting.clear();
         feedback.clearPreview();
         hud.setGameStatus("Volley incoming", "Target " + cellName(result.coordinate()));
@@ -541,6 +582,7 @@ public final class GameController {
             else enemyView = state().currentPlayerId().equals(state().player().id());
             refresh();
         });
+        if (ai != null) refresh();
     }
 
     private String viewAttacker() { return enemyView ? state().player().id() : state().enemy().id(); }
@@ -551,6 +593,7 @@ public final class GameController {
         sound.accept(shot.sunk() ? Cue.SUNK : shot.type() == com.battleship.shared.game.AttackResultType.MISS ? Cue.MISS : Cue.HIT);
     }
     private void showGameOver() {
+        if (ai != null) gameOver.setEndReason(ai.endReason());
         gameOver.show(state());
         if (!resultSoundPlayed) {
             resultSoundPlayed = true;
@@ -583,7 +626,7 @@ public final class GameController {
     private void refreshHud() {
         updateTurnClock();
         hud.setBattleState(state(), engine.rules());
-        hud.setOpponentReady(networkPlacement && network.match() != null && network.match().opponentSubmitted());
+        hud.setOpponentReady(ai != null || networkPlacement && network.match() != null && network.match().opponentSubmitted());
         minimap.setBattleVisible(state().phase() != GamePhase.PLACEMENT);
         GameState shown = effects.isBusy() && !effects.hasImpacted() && beforeShot != null ? beforeShot : state();
         minimap.update(shown.player().board());
@@ -597,11 +640,12 @@ public final class GameController {
             hud.setGameStatus(submitted ? "Fleet confirmed" : "Ship placement", submitted ? "Waiting for opponent"
                     : state().player().board().ships().size() + " / " + engine.rules().shipCount() + " ships ready");
         } else if (state().phase() == GamePhase.GAME_OVER) {
-            hud.setGameStatus(networkPlacement && network.match() != null && network.match().timedOut() ? "Time expired" : "Game over",
+            hud.setGameStatus(ai != null && ai.endReason() == com.battleship.shared.match.MatchEndReason.TURN_TIMEOUT
+                    || networkPlacement && network.match() != null && network.match().timedOut() ? "Time expired" : "Game over",
                     state().winnerId().equals(state().player().id()) ? "Your fleet wins." : "Enemy fleet wins.");
         } else {
             boolean ourTurn = state().currentPlayerId().equals(state().player().id());
-            hud.setGameStatus(networkPlacement ? (ourTurn ? "Your turn" : "Opponent turn")
+            hud.setGameStatus(networkPlacement || ai != null ? (ourTurn ? "Your turn" : "Opponent turn")
                             : ourTurn ? "Radiant turn" : "Abyssal turn",
                     ourTurn ? "Choose a target" : "Awaiting enemy volley");
         }
@@ -621,6 +665,8 @@ public final class GameController {
     private void updateTurnClock() {
         if (networkPlacement && state().phase() == GamePhase.BATTLE) {
             hud.setTurnClock(state().currentPlayerId().equals(state().player().id()), network.remainingTurnMillis());
+        } else if (ai != null && state().phase() == GamePhase.BATTLE) {
+            hud.setTurnClock(state().currentPlayerId().equals(state().player().id()), ai.remainingTurnMillis());
         } else hud.hideTurnClock();
         if (state().phase() == GamePhase.BATTLE && !effects.isBusy() && !introBlocked()) {
             boolean own = state().currentPlayerId().equals(state().player().id());
@@ -629,21 +675,23 @@ public final class GameController {
                 soundedTurn = turn;
                 sound.accept(own ? Cue.YOUR_TURN : Cue.ENEMY_TURN);
             }
-            if (networkPlacement && own && !network.pending() && network.remainingTurnMillis() > 0
-                    && network.remainingTurnMillis() <= 10_000 && warnedTurn != turn) {
+            long remaining = ai != null ? ai.remainingTurnMillis() : networkPlacement ? network.remainingTurnMillis() : 0;
+            if ((ai != null || networkPlacement && !network.pending()) && own && remaining > 0
+                    && remaining <= 10_000 && warnedTurn != turn) {
                 warnedTurn = turn; sound.accept(Cue.TIMER_WARNING);
             }
         }
     }
     private boolean introBlocked() {
-        return networkPlacement && state().phase() == GamePhase.BATTLE
-                && (network.remainingStartMillis() > 0 || startFlash > 0);
+        return (networkPlacement || ai != null) && state().phase() == GamePhase.BATTLE
+                && (remainingStartMillis() > 0 || startFlash > 0);
     }
+    private long remainingStartMillis() { return ai != null ? ai.remainingStartMillis() : network.remainingStartMillis(); }
     private void updateIntro(float delta) {
-        if (!networkPlacement || state().phase() != GamePhase.BATTLE) {
+        if ((!networkPlacement && ai == null) || state().phase() != GamePhase.BATTLE) {
             countingIntoBattle = false; startFlash = 0; hud.setStartCountdown(0, false); return;
         }
-        long delay = network.remainingStartMillis();
+        long delay = remainingStartMillis();
         if (delay > 0) { countingIntoBattle = true; startFlash = 0; }
         else if (countingIntoBattle) { countingIntoBattle = false; startFlash = .45f; sound.accept(Cue.MATCH_START); }
         else startFlash = Math.max(0, startFlash - Math.max(0, delta));

@@ -52,13 +52,13 @@ public final class ShipWreckBuilder {
         }
         var origin = ship.custom() ? ship.shape().get(ship.shape().size() / 2) : null;
         Vector3f smokeOrigin = origin == null ? new Vector3f(0, .32f, 0) : new Vector3f(origin.row(), .32f, -origin.column());
-        for (int i = 0; i < 3; i++) {
-            Geometry puff = new Geometry("Wreck smoke", new Sphere(6, 8, .16f));
-            Material smoke = materials.flat(new ColorRGBA(.07f, .075f, .09f, .18f));
+        for (int i = 0; i < 6; i++) {
+            Geometry puff = new Geometry("Wreck smoke", new Sphere(8, 12, .24f));
+            Material smoke = materials.flat(new ColorRGBA(.18f, .19f, .21f, .42f));
             smoke.getAdditionalRenderState().setBlendMode(BlendMode.Alpha);
             smoke.getAdditionalRenderState().setDepthWrite(false);
             puff.setMaterial(smoke); puff.setQueueBucket(Bucket.Transparent); puff.setShadowMode(ShadowMode.Off);
-            puff.addControl(new Smoke(smokeOrigin, i / 3f)); damage.attachChild(puff);
+            puff.addControl(new Smoke(smokeOrigin, i / 6f)); damage.attachChild(puff);
         }
         placement.setUserData("wreck", true);
     }
@@ -82,11 +82,13 @@ public final class ShipWreckBuilder {
         private float age;
         Smoke(Vector3f origin, float age) { this.origin = origin; this.age = age; }
         @Override protected void controlUpdate(float dt) {
-            age = (age + Math.max(0, dt) * .32f) % 1;
-            spatial.setLocalTranslation(origin.add(age * .17f, age * .9f, age * .08f));
-            spatial.setLocalScale(.5f + age * 1.5f);
-            ((Geometry) spatial).getMaterial().setColor("Color", new ColorRGBA(.07f, .075f, .09f,
-                    (float) Math.sin(age * Math.PI) * .30f));
+            age = (age + Math.max(0, dt) * .28f) % 1;
+            spatial.setLocalTranslation(origin.add(age * .28f, age * 1.75f, age * .12f));
+            float spread = .65f + age * 1.65f;
+            spatial.setLocalScale(spread, spread * 1.12f, spread);
+            float lightness = age * .08f;
+            ((Geometry) spatial).getMaterial().setColor("Color", new ColorRGBA(.18f + lightness, .19f + lightness, .21f + lightness,
+                    (float) Math.sin(age * Math.PI) * .60f));
         }
         @Override protected void controlRender(RenderManager rm, ViewPort vp) { }
     }
