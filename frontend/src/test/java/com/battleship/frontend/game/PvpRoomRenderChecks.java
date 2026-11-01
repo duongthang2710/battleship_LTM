@@ -535,7 +535,7 @@ public final class PvpRoomRenderChecks extends SimpleApplication {
             }
             case 208 -> {
                 if (screens.game().state().phase() == GamePhase.BATTLE && context != null && context.canSend()) {
-                    require(panel.collapsed() && panel.messages().stream().allMatch(m -> m.contextId().equals(context.contextId()) && m.text().startsWith("FCTR")), "Battle chat starts collapsed with only live messages from this match");
+                    require(!panel.collapsed() && panel.messages().stream().allMatch(m -> m.contextId().equals(context.contextId()) && m.text().startsWith("FCTR")), "Battle chat opens with only live messages from this match");
                     chatBoardView = screens.game().enemyView(); chatRevision = screens.pvp().match().revision(); chatRemaining = screens.pvp().remainingTurnMillis(); chatFirstBattleAt = System.nanoTime();
                     var cameraBefore = cam.getRotation().clone(); chatSend("FCTR [] <tag> \\#ff0000# " + role, false);
                     require(chatBoardView == screens.game().enemyView() && cameraBefore.equals(cam.getRotation()), "F/C/T/R/Tab while typing never reach gameplay or camera");

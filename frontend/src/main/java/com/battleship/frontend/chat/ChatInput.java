@@ -62,7 +62,7 @@ public final class ChatInput extends RawInputListenerAdapter implements AutoClos
         capturedKeys.add(event.getKeyCode()); event.setConsumed();
         if (!panel.focused()) { if (!event.isRepeating()) panel.focus(); return; }
         switch (event.getKeyCode()) {
-            case KeyInput.KEY_RETURN, KeyInput.KEY_NUMPADENTER -> { if (!event.isRepeating()) action.accept(ChatPanel.Action.SEND); }
+            case KeyInput.KEY_RETURN, KeyInput.KEY_NUMPADENTER -> { if (!event.isRepeating()) { if(!panel.draft().isBlank()) action.accept(ChatPanel.Action.SEND); if(panel.mode()==ChatPanel.Mode.BATTLE) panel.blur(); } }
             case KeyInput.KEY_ESCAPE -> panel.blur();
             case KeyInput.KEY_BACK -> panel.backspace();
             case KeyInput.KEY_PGUP -> panel.scroll(-6);

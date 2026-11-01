@@ -126,7 +126,7 @@ public final class UiInteractionChecks extends SimpleApplication {
         chatInput.beginInput(); chatInput.onMouseMotionEvent(wheel); chatInput.endInput();
         require(chat.firstVisibleLine() == 3 && wheel.isConsumed(), "Wheel scrolls chat without orbit/zoom");
         chat.latest(); require(chat.atBottom(), "Latest reaches bottom");
-        chat.setMode(ChatPanel.Mode.BATTLE); chat.toggle();
+        chat.setMode(ChatPanel.Mode.BATTLE); if(chat.collapsed()) chat.toggle();
         require(chat.atBottom(), "Battle layout keeps bottom");
         thumb = chat.scrollThumbCenter(); require(chat.beginScrollDrag(thumb), "Battle scrollbar starts drag");
         chat.dragScroll(new Vector2f(thumb.x, thumb.y + height)); chat.endScrollDrag();

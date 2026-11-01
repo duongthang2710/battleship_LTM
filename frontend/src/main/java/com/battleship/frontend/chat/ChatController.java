@@ -37,6 +37,7 @@ public final class ChatController {
         } catch (IllegalArgumentException exception) { panel.error(exception.getMessage()); }
     }
     public void update() {
+        panel.setLocalAccountId(network.account()==null?null:network.account().id());
         if (network.account() == null || network.room() == null) { clear(); return; }
         if (requestId != null && System.nanoTime() - sentAt > TimeUnit.SECONDS.toNanos(20)) {
             requestId = null; panel.error("No confirmation received. Delivery is unknown; check the conversation before retrying.");

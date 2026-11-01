@@ -18,7 +18,9 @@ import java.util.*;
 public final class ChatPanel {
     public enum Mode { HIDDEN, WAITING, BATTLE }
     public enum Action { SEND, TOGGLE, LATEST }
-    private record Line(String text, int color) {}
+    private record Line(String text,int color,String sender,int senderColor) {
+        Line(String text,int color) { this(text,color,"",0); }
+    }
     private record Button(Action action, float x, float y, float width, float height) {}
     private static final int GOLD = 0xDEB663, IVORY = 0xF4EAD1, CYAN = 0x91CEFF, MUTED = 0xA3AEC2;
     private static final DateTimeFormatter TIME = DateTimeFormatter.ofPattern("HH:mm:ss").withZone(ZoneId.systemDefault());
@@ -32,6 +34,10 @@ public final class ChatPanel {
     private final List<Line> lines = new ArrayList<>();
     private final List<Button> buttons = new ArrayList<>();
     private ChatContext context;
+    private java.util.UUID localAccountId;
+    public void setLocalAccountId(java.util.UUID id) {
+        if(!java.util.Objects.equals(localAccountId,id)) { localAccountId=id; reflowLines(); rebuild(); }
+    }
     private Mode mode = Mode.HIDDEN;
     private String draft = "", status = "";
     private boolean focused, collapsed, busy, scrollDragging;
@@ -75,7 +81,7 @@ public final class ChatPanel {
         if (mode != value) {
             boolean follow = atBottom();
             scrollDragging = false;
-            mode = value; focused = false; collapsed = value == Mode.BATTLE; layout();
+            mode = value; focused = false; collapsed = false; layout();
             reflowLines(); firstLine = follow ? maxFirst() : Math.min(firstLine, maxFirst()); rebuild();
         }
         root.setCullHint(visible() ? Spatial.CullHint.Never : Spatial.CullHint.Always);
@@ -83,13 +89,14 @@ public final class ChatPanel {
     public void resize(int w, int h) { scrollDragging = false; viewportWidth = w; viewportHeight = h; layout(); rebuild(); }
     private void layout() {
         scale = UiTypography.scale(viewportWidth, viewportHeight);
-        width = mode == Mode.BATTLE ? BattleSidebarLayout.CHAT_WIDTH : 550; height = mode == Mode.BATTLE ? 280 : 390;
-        left = mode == Mode.BATTLE ? BattleSidebarLayout.LEFT * scale : viewportWidth - (width + 56) * scale;
-        bottom = (mode == Mode.BATTLE ? BattleSidebarLayout.chatTop(viewportHeight / scale) - (collapsed ? 34 : height) : 170) * scale;
+        width = mode == Mode.BATTLE ? 350 : 550; height = mode == Mode.BATTLE ? 232 : 390;
+        left = mode == Mode.BATTLE ? 16 * scale : viewportWidth - (width + 56) * scale;
+        bottom = (mode == Mode.BATTLE ? 16 : 170) * scale;
         card.setLocalScale(scale); card.setLocalTranslation(left, bottom, 0);
     }
     public void append(ChatMessage message) {
         boolean follow = atBottom(); int oldStart = firstLine;
+        if(mode==Mode.BATTLE && collapsed) { collapsed=false; layout(); }
         messages.add(message);
         int removedLines = 0;
         if (messages.size() > 100) removedLines = messageLines(messages.removeFirst()).size();
@@ -122,8 +129,8 @@ public final class ChatPanel {
     public void updateCaret(float delta) { entry.setContent(safe(draft), visible() && !collapsed && focused && !busy && writable()); entry.update(delta); }
     public boolean caretVisible() { return entry.caretVisible(); }
     public void scroll(int amount) { firstLine = Math.max(0, Math.min(maxFirst(), firstLine + amount)); if (atBottom()) unread = 0; rebuild(); }
-    private float trackBottom() { return 132; }
-    private float trackHeight() { return height - 174; }
+    private float trackBottom() { return mode==Mode.BATTLE?66:132; }
+    private float trackHeight() { return height - (mode==Mode.BATTLE?88:174); }
     private float thumbHeight() { return Math.min(trackHeight(), Math.max(26, trackHeight() * capacity() / Math.max(capacity(), lines.size()))); }
     private float thumbBottom() {
         return trackBottom() + (trackHeight() - thumbHeight()) * (maxFirst() == 0 ? 0 : 1 - (float) firstLine / maxFirst());
@@ -152,12 +159,12 @@ public final class ChatPanel {
     public void latest() { firstLine = maxFirst(); unread = 0; rebuild(); }
     public boolean contains(Vector2f point) {
         return visible() && point.x >= left && point.x <= left + width * scale && point.y >= bottom
-                && point.y <= bottom + (collapsed ? 34 : height) * scale;
+                && point.y <= bottom + (collapsed ? mode==Mode.BATTLE?58:34 : height) * scale;
     }
     public Optional<Action> click(Vector2f point) {
         if (!contains(point)) return Optional.empty();
         float x = (point.x - left) / scale, y = (point.y - bottom) / scale;
-        if (!collapsed && x >= 12 && x <= width - 84 && y >= 14 && y <= 48) { focus(); return Optional.empty(); }
+        if ((!collapsed||mode==Mode.BATTLE) && x >= 12 && x <= width - (mode==Mode.BATTLE?12:84) && y >= (mode==Mode.BATTLE?8:14) && y <= (mode==Mode.BATTLE?42:48)) { focus(); return Optional.empty(); }
         return buttons.stream().filter(b -> x >= b.x && x <= b.x + b.width && y >= b.y && y <= b.y + b.height).map(Button::action).findFirst();
     }
     public Vector2f inputCenter() { return new Vector2f(left + 80 * scale, bottom + 30 * scale); }
@@ -166,11 +173,25 @@ public final class ChatPanel {
         var b = buttons.stream().filter(v -> v.action == action).findFirst().orElseThrow();
         return new Vector2f(left + (b.x + b.width / 2) * scale, bottom + (b.y + b.height / 2) * scale);
     }
-    private int capacity() { return (int) (height - 170) / 24; }
+    private int capacity() { return (int)(height-(mode==Mode.BATTLE?88:170))/24; }
     private int maxFirst() { return Math.max(0, lines.size() - capacity()); }
     private void reflowLines() { lines.clear(); for (ChatMessage message : messages) lines.addAll(messageLines(message)); }
     private List<Line> messageLines(ChatMessage message) {
         List<Line> result = new ArrayList<>();
+        if(mode==Mode.BATTLE) {
+            boolean own=message.sender().id().equals(localAccountId);
+            String name=safe(message.sender().displayName());
+            measure.setText(name);
+            while(measure.getLineWidth()>115 && name.length()>1) { name=name.substring(0,name.offsetByCodePoints(name.length(),-1)); measure.setText(name); }
+            String prefix=(own?"(You) ":"(Rival) ")+name+": ";
+            measure.setText(prefix); float prefixWidth=measure.getLineWidth();
+            String content=safe(message.text());
+            String first=wrap(content,Math.max(65,width-46-prefixWidth)).getFirst();
+            result.add(new Line(first,IVORY,prefix,own?0x8DDFEC:0xF6B58E));
+            String rest=content.substring(first.length()).stripLeading();
+            for(String line:wrap(rest,width-46)) result.add(new Line(line,IVORY));
+            return result;
+        }
         for (String header : wrap(TIME.format(Instant.parse(message.sentAt())) + "  " + safe(message.sender().displayName()), width - 46)) result.add(new Line(header, GOLD));
         for (String line : wrap(safe(message.text()), width - 46)) result.add(new Line(line, IVORY));
         return result;
@@ -201,10 +222,10 @@ public final class ChatPanel {
     private void rebuild() {
         root.setCullHint(visible() ? Spatial.CullHint.Never : Spatial.CullHint.Always);
         card.detachAllChildren(); buttons.clear();
+        if(mode==Mode.BATTLE) { rebuildBattle(); return; }
         float h = collapsed ? 34 : height;
         rect(0, 0, width, h, new ColorRGBA(.003f, .009f, .025f, .96f)); frame(0, 0, width, h, GOLD);
         text(display, "CHAT" + (unread > 0 ? "  (" + unread + ")" : ""), 21, 12, h - 9, IVORY);
-        if (mode == Mode.BATTLE) button(Action.TOGGLE, width - 42, h - 27, 30, 22, collapsed ? "+" : "-");
         if (collapsed) return;
         rect(width - 22, trackBottom(), 10, trackHeight(), new ColorRGBA(.025f, .055f, .095f, 1));
         rect(width - 22, thumbBottom(), 10, thumbHeight(), Materials.rgb(maxFirst() == 0 ? 0x334050 : scrollDragging ? GOLD : 0x739BB6));
@@ -222,6 +243,33 @@ public final class ChatPanel {
         entry.setLocalTranslation(18, 14, 115); card.attachChild(entry);
         text(body, draft.codePointCount(0, draft.length()) + "/300", 9, 12, 67, MUTED);
         button(Action.SEND, width - 76, 14, 64, 34, "SEND");
+    }
+    private void rebuildBattle() {
+        float h=collapsed?58:height;
+        rect(0,0,width,h,new ColorRGBA(.012f,.025f,.035f,focused?.73f:.46f));
+        if(!collapsed) {
+            rect(width-22,trackBottom(),8,trackHeight(),new ColorRGBA(.15f,.22f,.25f,.5f));
+            rect(width-22,thumbBottom(),8,thumbHeight(),Materials.rgb(maxFirst()==0?0x657A82:0xD7E7DF));
+            for(int i=firstLine;i<Math.min(lines.size(),firstLine+capacity());i++) {
+                Line line=lines.get(i); float y=h-26-(i-firstLine)*24, x=12;
+                if(!line.sender.isEmpty()) {
+                    BitmapText sender=text(body,line.sender,12,x,y,line.senderColor);
+                    sender.setUserData("chatRole",line.senderColor==0x8DDFEC?"self":"opponent"); x+=sender.getLineWidth();
+                }
+                text(body,line.text,12,x,y,line.color).setUserData("chatRole","content");
+            }
+            if(lines.isEmpty()) text(body,"Fleet channel / messages appear here",11,12,h-28,MUTED);
+        }
+
+        rect(6,6,width-12,38,new ColorRGBA(.01f,.025f,.04f,focused?.86f:.6f));
+        rect(6,6,width-12,1,Materials.rgb(focused?CYAN:0x5F777E));
+        entry.layout(width-28,36); entry.setContent(safe(draft),focused&&!busy&&writable());
+        entry.setLocalTranslation(14,7,115); card.attachChild(entry);
+        if(!status.isBlank() || !writable()) {
+            BitmapText hint=text(body,!status.isBlank()?status:"Match ended / chat is read-only",10,12,60,CYAN);
+            UiTypography.fit(hint,width-42);
+        }
+        if(unread>0&&!atBottom()) button(Action.LATEST,width-90,45,76,20,"NEW "+unread);
     }
     private void button(Action action, float x, float y, float w, float h, String value) {
         buttons.add(new Button(action, x, y, w, h)); rect(x, y, w, h, new ColorRGBA(.025f, .055f, .095f, 1)); frame(x, y, w, h, 0x516275);
