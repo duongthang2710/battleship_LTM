@@ -126,6 +126,9 @@ public final class GameController {
         effects.clear(); beforeShot = null; lastPlacementBoard = null; resultSoundPlayed = false;
         countingIntoBattle = false; startFlash = 0; hud.setStartCountdown(0, false);
         engine.setRules(rules); designer.clear(); drawingMode = designerMode();
+        var options=network.room()==null?com.battleship.shared.room.RoomOptions.DEFAULT:network.room().options();
+        if(options.shuffleFleet()) engine.randomPlacement();
+        hud.setFleetReportVisible(!options.hideFleetReport());
         networkPlacement = true;
         this.network = network;
         this.leaveRoom = network::leaveRoom;

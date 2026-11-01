@@ -26,13 +26,14 @@ import java.util.Optional;
 
 public final class PvpRoomPanel {
     public enum Action {
-        SHOW_CREATE, CREATE_ROOM, SHOW_JOIN, JOIN_ROOM, BACK, INVITE_FRIENDS, TOGGLE_READY, LEAVE_ROOM, COPY_CODE, TOGGLE_MODE, FEWER_SHIPS, MORE_SHIPS, TOGGLE_TURN_RULE
+        SHOW_CREATE, CREATE_ROOM, SHOW_JOIN, JOIN_ROOM, BACK, INVITE_FRIENDS, TOGGLE_READY, LEAVE_ROOM, COPY_CODE, TOGGLE_MODE, FEWER_SHIPS, MORE_SHIPS, TOGGLE_TURN_RULE, MODE_BASIC, MODE_DESIGNER, FLEET_THREE, FLEET_FOUR, FLEET_FIVE, RULE_ALTERNATING, RULE_HIT_CONTINUES, PRESET_DUEL, PRESET_TACTICAL, PRESET_CREATIVE, DEPLOY_EMPTY, DEPLOY_SHUFFLED, REPORT_SHOW, REPORT_HIDE
     }
 
     private enum View { CHOICE, CREATE, JOIN, WAITING }
 
     private static final float WIDTH = 440;
     private static final float HEIGHT = 580;
+    private static final float WAITING_HEIGHT = 620;
     private static final int GOLD = 0xDEB663;
     private static final int IVORY = 0xF4EAD1;
     private static final int CYAN = 0x91CEFF;
@@ -45,6 +46,8 @@ public final class PvpRoomPanel {
     private View view = View.CHOICE;
     private com.battleship.shared.game.GameMode selectedMode = com.battleship.shared.game.GameMode.CLASSIC;
     private int selectedShipCount = 5;
+    private boolean shuffleFleet,hideFleetReport;
+    public com.battleship.shared.room.RoomOptions selectedOptions() { return new com.battleship.shared.room.RoomOptions(shuffleFleet,hideFleetReport); }
     private com.battleship.shared.game.TurnRule selectedTurnRule = com.battleship.shared.game.TurnRule.ALTERNATING;
     public com.battleship.shared.game.GameRules selectedRules() {
         return new com.battleship.shared.game.GameRules(selectedMode, selectedShipCount, selectedTurnRule);
@@ -74,6 +77,7 @@ public final class PvpRoomPanel {
     private boolean connecting;
     private boolean busy;
     private boolean visible;
+    private int viewportWidth=1440, viewportHeight=900;
     private float scale = 1;
     private float left;
     private float bottom;
@@ -98,9 +102,10 @@ public final class PvpRoomPanel {
     public boolean acceptsRoomCode() { return visible && view == View.JOIN && !busy; }
 
     public void resize(int width, int height) {
+        viewportWidth=width; viewportHeight=height;
         scale = UiTypography.scale(width, height);
-        left = 56 * scale;
-        bottom = (height - HEIGHT * scale) / 2;
+        left = view==View.CREATE ? (width-1040*scale)/2 : 56 * scale;
+        bottom = (height - (view==View.WAITING?WAITING_HEIGHT:HEIGHT) * scale) / 2;
         layout.setLocalScale(scale);
         layout.setLocalTranslation(left, bottom, 0);
     }
@@ -130,7 +135,7 @@ public final class PvpRoomPanel {
     }
 
     private void show() {
-        visible = true;
+        visible = true; resize(viewportWidth,viewportHeight);
         root.setCullHint(CullHint.Never);
         rebuild();
     }
@@ -170,6 +175,74 @@ public final class PvpRoomPanel {
         }
     }
 
+    public void selectOption(Action action) {
+        if(!enabled(action)) return;
+        switch(action) {
+            case DEPLOY_EMPTY -> shuffleFleet=false;
+            case DEPLOY_SHUFFLED -> shuffleFleet=true;
+            case REPORT_SHOW -> hideFleetReport=false;
+            case REPORT_HIDE -> hideFleetReport=true;
+            case MODE_BASIC -> selectedMode=com.battleship.shared.game.GameMode.CLASSIC;
+            case MODE_DESIGNER -> selectedMode=com.battleship.shared.game.GameMode.DESIGNER;
+            case FLEET_THREE -> selectedShipCount=3;
+            case FLEET_FOUR -> selectedShipCount=4;
+            case FLEET_FIVE -> selectedShipCount=5;
+            case RULE_ALTERNATING -> selectedTurnRule=com.battleship.shared.game.TurnRule.ALTERNATING;
+            case RULE_HIT_CONTINUES -> selectedTurnRule=com.battleship.shared.game.TurnRule.HIT_CONTINUES;
+            case PRESET_DUEL, PRESET_TACTICAL, PRESET_CREATIVE -> {
+                selectedMode=action==Action.PRESET_CREATIVE?com.battleship.shared.game.GameMode.DESIGNER:com.battleship.shared.game.GameMode.CLASSIC;
+                selectedShipCount=action==Action.PRESET_DUEL?3:5;
+                selectedTurnRule=action==Action.PRESET_DUEL?com.battleship.shared.game.TurnRule.ALTERNATING:com.battleship.shared.game.TurnRule.HIT_CONTINUES;
+            }
+            default -> { return; }
+        }
+        rebuild();
+    }
+    private void setupFrame(float x,float width) {
+        panel(x,0,width,HEIGHT,new ColorRGBA(.003f,.009f,.025f,.95f),70);
+        frame(x,0,width,HEIGHT,materials.flat(Materials.rgb(GOLD)),71);
+        frame(x+7,7,width-14,HEIGHT-14,materials.flat(Materials.rgb(0x39495A)),71);
+    }
+    private void setupText(String value,float size,float x,float y,int color,float width) {
+        UiTypography.fit(text(body,value,size,x,y,color),width);
+    }
+    private void rebuildSetup() {
+        setupFrame(0,318); setupFrame(340,700);
+        centered(display,"YOUR FLEET",31,159,530,IVORY);
+        centered(body,selectedMode==com.battleship.shared.game.GameMode.CLASSIC?"BASIC":"DESIGNER",13,159,488,CYAN);
+        for(int i=0;i<selectedShipCount;i++) {
+            var type=selectedRules().shipTypes().get(i); float y=428-i*61;
+            setupText(type.displayName(),14,26,y,IVORY,266);
+            float length=28*type.length();
+            Geometry hull=panel(28,y-35,length,12,materials.flat(Materials.rgb(0x81B9CA)),73);
+            hull.setMesh(UiShapes.chamfered(length,12,6));
+            for(int cell=0;cell<type.length();cell++) panel(28+cell*12,y-46,9,3,Materials.rgb(GOLD),73);
+        }
+        centered(body,selectedShipCount+" SHIPS",13,159,132,GOLD);
+        button(24,62,270,44,"CREATE ROOM",Action.CREATE_ROOM,true);
+        button(24,18,270,34,"BACK",Action.BACK,false);
+        centered(display,"CREATE ROOM",36,690,534,IVORY);
+        setupText("GAME MODE",12,366,489,GOLD,640);
+        boolean basic=selectedMode==com.battleship.shared.game.GameMode.CLASSIC;
+        button(366,420,308,44,"BASIC",Action.MODE_BASIC,basic);
+        button(694,420,320,44,"FLEET DESIGNER",Action.MODE_DESIGNER,!basic);
+        setupText("FLEET SIZE",12,366,401,GOLD,640);
+        button(366,332,202,44,"3 SHIPS",Action.FLEET_THREE,selectedShipCount==3);
+        button(589,332,202,44,"4 SHIPS",Action.FLEET_FOUR,selectedShipCount==4);
+        button(812,332,202,44,"5 SHIPS",Action.FLEET_FIVE,selectedShipCount==5);
+        setupText("FIRING RULE",12,366,313,GOLD,640);
+        boolean alternate=selectedTurnRule==com.battleship.shared.game.TurnRule.ALTERNATING;
+        button(366,244,308,44,"ALTERNATE SHOTS",Action.RULE_ALTERNATING,alternate);
+        button(694,244,320,44,"HIT / FIRE AGAIN",Action.RULE_HIT_CONTINUES,!alternate);
+        setupText("STARTING FLEET",12,366,225,GOLD,640);
+        button(366,156,308,44,"EMPTY BOARD",Action.DEPLOY_EMPTY,!shuffleFleet);
+        button(694,156,320,44,"SHUFFLED FLEET",Action.DEPLOY_SHUFFLED,shuffleFleet);
+        setupText("ENEMY FLEET REPORT",12,366,137,GOLD,640);
+        button(366,68,308,44,"SHOW LOSSES",Action.REPORT_SHOW,!hideFleetReport);
+        button(694,68,320,44,"HIDE REPORT",Action.REPORT_HIDE,hideFleetReport);
+        statusLabel=text(body,wrapStatus(status),10,366,30,CYAN); positionStatus(); refreshButtons();
+    }
+
     public void backspace() {
         if (!acceptsRoomCode() || code.isEmpty()) return;
         code = code.substring(0, code.length() - 1);
@@ -180,7 +253,7 @@ public final class PvpRoomPanel {
         return switch (action) {
             case INVITE_FRIENDS -> connected && !busy && room != null && room.phase() == RoomPhase.WAITING && room.players().size() < 2;
             case BACK -> !busy;
-            case TOGGLE_MODE, TOGGLE_TURN_RULE -> view == View.CREATE && connected && !busy;
+            case DEPLOY_EMPTY, DEPLOY_SHUFFLED, REPORT_SHOW, REPORT_HIDE, MODE_BASIC, MODE_DESIGNER, FLEET_THREE, FLEET_FOUR, FLEET_FIVE, RULE_ALTERNATING, RULE_HIT_CONTINUES, PRESET_DUEL, PRESET_TACTICAL, PRESET_CREATIVE, TOGGLE_MODE, TOGGLE_TURN_RULE -> view == View.CREATE && connected && !busy;
             case FEWER_SHIPS -> view == View.CREATE && selectedShipCount > 3 && connected && !busy;
             case MORE_SHIPS -> view == View.CREATE && selectedShipCount < 5 && connected && !busy;
             case COPY_CODE -> room != null && view == View.WAITING;
@@ -222,35 +295,22 @@ public final class PvpRoomPanel {
     private void rebuild() {
         layout.detachAllChildren();
         buttons.clear();
-        panel(0, 0, WIDTH, HEIGHT, new ColorRGBA(0.003f, 0.007f, 0.021f, 0.94f), 70);
-        frame(0, 0, WIDTH, HEIGHT, materials.flat(Materials.rgb(GOLD)), 71);
-        frame(8, 8, WIDTH - 16, HEIGHT - 16,
+        if(view==View.CREATE) { rebuildSetup(); return; }
+        float cardHeight=view==View.WAITING?WAITING_HEIGHT:HEIGHT, headerLift=cardHeight-HEIGHT;
+        panel(0, 0, WIDTH, cardHeight, new ColorRGBA(0.003f, 0.007f, 0.021f, 0.94f), 70);
+        frame(0, 0, WIDTH, cardHeight, materials.flat(Materials.rgb(GOLD)), 71);
+        frame(8, 8, WIDTH - 16, cardHeight - 16,
                 materials.flat(new ColorRGBA(0.38f, 0.32f, 0.22f, 0.55f)), 71);
-        diamond(WIDTH / 2, 548, GOLD);
-        centered(display, view == View.WAITING ? "WAITING ROOM" : view == View.CREATE ? "ROOM SETTINGS" : "PVP", 39, WIDTH / 2, 516, IVORY);
+        diamond(WIDTH / 2, 548+headerLift, GOLD);
+        centered(display, view == View.WAITING ? "WAITING ROOM" : view == View.CREATE ? "ROOM SETTINGS" : "PVP", 39, WIDTH / 2, 524+headerLift, IVORY);
         centered(body, connecting ? "CONNECTING TO SERVER" : connected ? "SERVER CONNECTED" : "SERVER DISCONNECTED",
-                10, WIDTH / 2, 468, connected ? CYAN : 0xB4B7C7);
-        divider(445);
+                10, WIDTH / 2, 468+headerLift, connected ? CYAN : 0xB4B7C7);
+        divider(445+headerLift);
         if (view == View.CHOICE) {
             centered(display, "Two admirals. One ocean.", 23, WIDTH / 2, 404, IVORY);
             button(34, 304, 372, 56, "CREATE ROOM", Action.SHOW_CREATE, true);
             button(34, 232, 372, 56, "JOIN ROOM", Action.SHOW_JOIN, false);
             button(34, 28, 372, 42, "MAIN MENU", Action.BACK, false);
-        } else if (view == View.CREATE) {
-            centered(body, "GAME MODE", 11, WIDTH / 2, 422, GOLD);
-            button(34, 358, 372, 44, (selectedMode == com.battleship.shared.game.GameMode.CLASSIC ? "BASIC" : "FLEET DESIGNER") + " / CHANGE", Action.TOGGLE_MODE, false);
-            centered(body, "FLEET SIZE", 11, WIDTH / 2, 338, GOLD);
-            button(34, 280, 72, 38, "-", Action.FEWER_SHIPS, false);
-            centered(body, selectedShipCount + " SHIPS", 17, WIDTH / 2, 308, CYAN);
-            button(334, 280, 72, 38, "+", Action.MORE_SHIPS, false);
-            centered(body, "Carrier / Battleship / Cruiser", 10, WIDTH / 2, 269, IVORY);
-            centered(body, selectedShipCount == 3 ? "" : selectedShipCount == 4 ? "+ Submarine" : "+ Submarine / Destroyer", 10, WIDTH / 2, 249, IVORY);
-            centered(body, "TURN RULE", 11, WIDTH / 2, 219, GOLD);
-            button(34, 160, 372, 40, selectedTurnRule.label().toUpperCase(java.util.Locale.ROOT), Action.TOGGLE_TURN_RULE, false);
-            centered(body, selectedTurnRule == com.battleship.shared.game.TurnRule.ALTERNATING
-                    ? "Every valid shot passes the turn." : "Hit or sunk: shoot again. Miss: pass turn.", 10, WIDTH / 2, 148, CYAN);
-            button(34, 87, 372, 42, "CREATE ROOM", Action.CREATE_ROOM, true);
-            button(34, 43, 372, 34, "BACK", Action.BACK, false);
         } else if (view == View.JOIN) {
             centered(body, "ENTER ROOM CODE", 11, WIDTH / 2, 393, GOLD);
             panel(34, 290, 372, 72, new ColorRGBA(0.014f, 0.038f, 0.072f, 1), 72).setMesh(UiShapes.chamfered(372, 72, 9));
@@ -260,13 +320,13 @@ public final class PvpRoomPanel {
             button(34, 182, 372, 56, "JOIN ROOM", Action.JOIN_ROOM, true);
             button(34, 28, 372, 42, "BACK", Action.BACK, false);
         } else {
-            centered(body, (room.mode() == com.battleship.shared.game.GameMode.CLASSIC ? "BASIC" : "FLEET DESIGNER") + " / " + room.shipCount() + " SHIPS", 10, WIDTH / 2, 433, GOLD);
-            centered(body, "ROOM CODE", 10, WIDTH / 2, 414, GOLD);
-            BitmapText roomCode = centered(body, room.roomCode(), 32, WIDTH / 2, 396, CYAN);
-            copyIcon(Math.min(WIDTH-52, roomCode.getLocalTranslation().x + roomCode.getLineWidth() + 6), 383);
-            player(0, 286);
-            player(1, 208);
-            centered(body, room.turnRule().label(), 10, WIDTH / 2, 196, CYAN);
+            centered(body, (room.mode() == com.battleship.shared.game.GameMode.CLASSIC ? "BASIC" : "FLEET DESIGNER") + " / " + room.shipCount() + " SHIPS / ROOM CODE", 10, WIDTH / 2, 433+headerLift, GOLD);
+            BitmapText roomCode = centered(body, room.roomCode(), 32, WIDTH / 2, 396+headerLift, CYAN);
+            copyIcon(Math.min(WIDTH-52, roomCode.getLocalTranslation().x + roomCode.getLineWidth() + 6), 383+headerLift);
+            player(0, 286+headerLift);
+            player(1, 208+headerLift);
+            centered(body, room.turnRule().label(), 10, WIDTH / 2, 196+headerLift, CYAN);
+            centered(body,(room.options().shuffleFleet()?"Shuffled fleet":"Empty board")+" / "+(room.options().hideFleetReport()?"Hidden report":"Fleet report"),9,WIDTH/2,176+headerLift,IVORY);
             boolean ready = room.players().stream().anyMatch(player -> player.clientId().equals(localClientId) && player.ready());
             button(34, 120, 372, 48, ready ? "NOT READY" : "READY", Action.TOGGLE_READY, true);
             button(34, 28, 180, 42, "INVITE FRIENDS", Action.INVITE_FRIENDS, false);
@@ -280,7 +340,8 @@ public final class PvpRoomPanel {
     private void positionStatus() {
         if (statusLabel == null) return;
         if (view == View.WAITING) UiTypography.centerIn(statusLabel, 34, 76, 372, 38);
-        else center(statusLabel, view == View.CREATE ? 37 : 107);
+        else if(view==View.CREATE) UiTypography.centerIn(statusLabel,368,16,648,30);
+        else center(statusLabel,107);
     }
 
     private void player(int index, float y) {

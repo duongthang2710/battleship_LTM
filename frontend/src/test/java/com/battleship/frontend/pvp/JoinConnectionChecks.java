@@ -92,9 +92,9 @@ public final class JoinConnectionChecks {
                                 new AccountProfile(UUID.randomUUID(), "creator", "Admiral")));
                         case CREATE_ROOM -> {
                             creates.incrementAndGet();
-                            var rules = request.payloadAs(CreateRoomRequest.class).rules();
+                            var settings = request.payloadAs(CreateRoomRequest.class); var rules=settings.rules();
                             MessageCodec.write(output, Message.reply(MessageType.ROOM_CREATED, request.requestId(),
-                                    new RoomSnapshot("ABC234", List.of(new RoomPlayer("creator", "Admiral", false)), RoomPhase.WAITING, rules)));
+                                    new RoomSnapshot("ABC234", List.of(new RoomPlayer("creator", "Admiral", false)), RoomPhase.WAITING, rules, settings.options())));
                         }
                         case PING -> MessageCodec.write(output, Message.reply(MessageType.PONG, request.requestId(), null));
                         case DISCONNECT -> { return; }
@@ -110,12 +110,14 @@ public final class JoinConnectionChecks {
                 client.handle(PvpRoomPanel.Action.TOGGLE_MODE);
                 client.handle(PvpRoomPanel.Action.FEWER_SHIPS); client.handle(PvpRoomPanel.Action.FEWER_SHIPS);
                 client.handle(PvpRoomPanel.Action.TOGGLE_TURN_RULE);
+                client.handle(PvpRoomPanel.Action.DEPLOY_SHUFFLED);client.handle(PvpRoomPanel.Action.REPORT_HIDE);
                 var rules = panel.selectedRules();
                 require(panel.configuring() && !client.pending() && creates.get() == 0, "Editing settings never sends CREATE_ROOM");
                 client.handle(PvpRoomPanel.Action.BACK);
                 require(!panel.configuring() && panel.enabled(PvpRoomPanel.Action.SHOW_CREATE) && client.room() == null, "Back returns to PvP without creating a room");
                 client.handle(PvpRoomPanel.Action.SHOW_CREATE); client.handle(PvpRoomPanel.Action.CREATE_ROOM);
                 await(client, () -> client.room() != null);
+                require(client.room().options().shuffleFleet()&&client.room().options().hideFleetReport(),"TCP round-trip preserves both new room options");
                 require(creates.get() == 1 && client.room().rules().equals(rules) && rules.shipCount() == 3
                         && rules.mode() == com.battleship.shared.game.GameMode.DESIGNER
                         && rules.turnRule() == com.battleship.shared.game.TurnRule.HIT_CONTINUES, "Confirmation sends selected rules once and consumes authoritative snapshot");

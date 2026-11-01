@@ -29,6 +29,8 @@ public final class BattleHud {
     private String shotResult="";
     private boolean playerFired;
     private boolean opponentReady;
+    private boolean fleetReportVisible=true;
+    public void setFleetReportVisible(boolean visible) { fleetReportVisible=visible; rebuildFleet(); }
     public void setOpponentReady(boolean ready) { if(opponentReady!=ready) { opponentReady=ready; rebuild(); } }
     public BattleHud(AssetManager assets,String playerName) {
         this.assets=assets; this.playerName=playerName; root.attachChild(layout);
@@ -92,7 +94,7 @@ public final class BattleHud {
         if(own) ownArc=arc; else rivalArc=arc;
     }
     private void rebuildFleet() {
-        fleetList.detachAllChildren(); if(phase==GamePhase.PLACEMENT) return;
+        fleetList.detachAllChildren(); if(phase==GamePhase.PLACEMENT || !fleetReportVisible) return;
         var draw=new NavalHudSkin(assets,fleetList,13);
         float top=h-185, bottom=rivalY+45, halfWidth=36, pitch=9;
         float spacing=Math.min(80,(top-230)/rules.shipCount());
@@ -170,7 +172,7 @@ public final class BattleHud {
         float x=point.x/scale,y=point.y/scale;
         return x>=left&&x<=left+flagWidth&&y>=(phase==GamePhase.PLACEMENT?70:h-BattleSidebarLayout.BANNER_HEIGHT)
                 || x>=rivalX-92&&x<=rivalX+92&&y<=rivalY+72&&y>=25
-                || phase!=GamePhase.PLACEMENT&&x>=rivalX-39&&x<=rivalX+39&&y>=rivalY+45&&y<=h-105
+                || phase!=GamePhase.PLACEMENT&&fleetReportVisible&&x>=rivalX-39&&x<=rivalX+39&&y>=rivalY+45&&y<=h-105
                 || phase==GamePhase.PLACEMENT&&!statusTitle.equals("Fleet confirmed")
                     &&y>=h-62&&y<=h-25&&x>=w*.30f&&x<=w*.70f;
     }

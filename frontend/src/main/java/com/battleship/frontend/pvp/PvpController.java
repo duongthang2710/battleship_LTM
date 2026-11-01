@@ -223,6 +223,7 @@ public final class PvpController implements AutoCloseable {
         switch (action) {
             case INVITE_FRIENDS -> inviteFriendsAction.run();
             case SHOW_CREATE -> { joining = false; panel.showCreate(); setStatus(""); }
+            case DEPLOY_EMPTY, DEPLOY_SHUFFLED, REPORT_SHOW, REPORT_HIDE, MODE_BASIC, MODE_DESIGNER, FLEET_THREE, FLEET_FOUR, FLEET_FIVE, RULE_ALTERNATING, RULE_HIT_CONTINUES, PRESET_DUEL, PRESET_TACTICAL, PRESET_CREATIVE -> panel.selectOption(action);
             case TOGGLE_MODE -> panel.toggleMode();
             case FEWER_SHIPS -> panel.changeShipCount(-1);
             case MORE_SHIPS -> panel.changeShipCount(1);
@@ -233,7 +234,7 @@ public final class PvpController implements AutoCloseable {
                 if (joining || panel.configuring()) { joining = false; panel.showChoice(); setStatus(connected() ? "Connected" : "Disconnected"); }
                 else { hide(); mainMenu.run(); }
             }
-            case CREATE_ROOM -> { if (account != null) send(MessageType.CREATE_ROOM, new com.battleship.shared.room.CreateRoomRequest(panel.selectedRules())); }
+            case CREATE_ROOM -> { if (account != null) send(MessageType.CREATE_ROOM, new com.battleship.shared.room.CreateRoomRequest(panel.selectedRules(),panel.selectedOptions())); }
             case JOIN_ROOM -> { if (account != null) send(MessageType.JOIN_ROOM, new JoinRoomRequest(panel.roomCode())); }
             case LEAVE_ROOM -> { leaving = true; send(MessageType.LEAVE_ROOM, null); }
             case TOGGLE_READY -> {
