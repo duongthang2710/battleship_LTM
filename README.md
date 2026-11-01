@@ -576,7 +576,7 @@ Bài kiểm tra dùng file riêng trong `build/pvp-verification`, không ghi c�
 
 ## Hạm đội tự thiết kế
 
-Trong **PVP → CREATE ROOM**, bấm **BASIC / CHANGE** để chọn **FLEET DESIGNER**, chọn số tàu và luật lượt, rồi xác nhận **CREATE ROOM**.
+Trong **PVP → CREATE ROOM**, chọn trực tiếp **BASIC** hoặc **FLEET DESIGNER** ở cột phải, chọn 3–5 tàu và luật lượt, rồi xác nhận **CREATE ROOM**. Cột trái hiển thị đội tàu theo số lượng đã chọn; các lựa chọn nằm ở cột phải.
 Người tham gia bằng mã phòng hoặc lời mời nhận chế độ từ server. Muốn mời bạn chơi chế độ này,
 hãy tạo phòng Fleet designer trước rồi dùng INVITE FRIENDS trong phòng.
 
@@ -642,8 +642,9 @@ OFL (`fonts/NavalHud-OFL.txt`). Kiểm tra audio riêng: `:frontend:checkGameAud
 Khi cả hai đội hình được server chấp nhận, hai client hiển thị **3 → 2 → 1 → START**.
 Server chặn bắn trong 3 giây chuẩn bị; lượt đầu có đủ 60 giây tính từ START. Countdown
 được làm mới cho mỗi ván/rematch và không tạo timer riêng trên render thread.
-Minimap có viền vàng sát mép, nằm trên chat ở cột trái; chat giữ nguyên cạnh trên và
-mở xuống dưới. Các thanh Waiting for opponent / Your fleet / Your turn phía trên đã
+Minimap có khung kim loại, bracket góc và điểm trang trí sát mép. Chat trong trận ở góc
+trái dưới: Enter mở nhập, Enter gửi; tên mình cyan, đối thủ cam, nội dung màu sáng.
+Có cuộn chuột và scrollbar; không kéo danh sách khi đang đọc tin cũ. Các thanh Waiting for opponent / Your fleet / Your turn phía trên đã
 được bỏ; lượt vẫn thể hiện bằng cung thời gian avatar. Biểu tượng hai tờ giấy nhỏ
 cạnh mã phòng dùng để copy.
 
@@ -653,7 +654,21 @@ vì dữ liệu timer chung có thêm `startsInMillis`. Lệnh chạy vẫn là 
 kiểm tra hai kết nối TCP thật với PostgreSQL: `:backend:checkDesignerTcp -PdatabaseChecks`.
 
 
-HUD bên trái dùng một trục giữa chung cho avatar, minimap và Chat. Dải trạng thái tàu
+Avatar và minimap bên trái dùng chung một trục giữa; chat nằm riêng ở góc màn hình. Dải trạng thái tàu
 bên phải thuộc đối thủ, nối phía sau avatar đối thủ; từng ô tàu có viền trắng.
 Hộp lời mời PvP được thu gọn và tự đóng ở cả bên gửi/nhận sau Accept hoặc Decline;
 các lỗi hoặc thông báo hết hạn vẫn có nút Close để người chơi đọc được lý do.
+
+
+Room Setup có thêm **Starting Fleet** (Empty Board / Shuffled Fleet) và
+**Enemy Fleet Report** (Show Losses / Hide Report). Shuffled Fleet xếp đội hình
+ban đầu để chỉnh tiếp, không tự Ready. Hide Report ẩn dải trạng thái tàu địch.
+Server lưu các tùy chọn cho cả hai client và giữ nguyên khi rematch.
+Join hỗ trợ **Ctrl+V / Cmd+V** hoặc Shift+Insert để dán mã. Thông báo lượt ở trên
+màn hình tự tắt sau khoảng 3 giây; countdown dùng chữ lớn và nét trắng thon hai đầu.
+[Review Room Setup, HUD và chat](docs/room-hud-chat-review.md).
+
+Nút **Leave** có nền đỏ và luôn hỏi xác nhận; **Cancel / Esc** giữ nguyên phòng.
+Countdown gọn hơn, avatar địch lớn hơn, minimap Designer nối các ô cùng tàu.
+Sau cập nhật RoomOptions, khởi động lại backend và cả hai client cùng phiên bản.
+[Review Room Options và sửa viền UI](docs/room-options-frames-review.md).
