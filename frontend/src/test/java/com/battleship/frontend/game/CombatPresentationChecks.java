@@ -70,6 +70,15 @@ public final class CombatPresentationChecks extends SimpleApplication {
         guiNode.attachChild(hud.root()); guiNode.attachChild(controls.root());
         minimap = new OwnBoardMinimap(assetManager); minimap.resize(WIDTH, HEIGHT); minimap.setSide(Side.WHITE);
         minimap.update(fleet); minimap.setBattleVisible(false); guiNode.attachChild(minimap.root());
+        var bridges=new int[1];minimap.root().depthFirstTraversal(n->{if("Connected hull bridge".equals(n.getName()))bridges[0]++;});
+        require(bridges[0]>0,"Designer minimap cells join through same-ship bridges");
+        minimap.root().updateGeometricState();
+        var gridBounds=(BoundingBox)minimap.root().getChild("Crystalline minimap grid").getWorldBound();
+        var gems=new int[1];minimap.root().depthFirstTraversal(n->{if("Minimap corner gem".equals(n.getName())) {
+            var center=((BoundingBox)n.getWorldBound()).getCenter();
+            require(Math.abs(Math.abs(center.x-gridBounds.getCenter().x)-gridBounds.getXExtent())<.02f
+                &&Math.abs(Math.abs(center.y-gridBounds.getCenter().y)-gridBounds.getYExtent())<.02f,"Every minimap gem is centered exactly on a corner");gems[0]++;
+        }});require(gems[0]==4,"Minimap has exactly four corner gems");
         checkTimerArcs();
         for(long millis:new long[]{3000,2000,1000}) {
             hud.setStartCountdown(millis,false);

@@ -145,9 +145,10 @@ public final class PlacementHud {
         buttons.add(new Button(w - 78, h - 74, 60, 60, Action.SETTINGS, true));
         if (state.phase() != GamePhase.PLACEMENT) {
             more = false;
-            button(w / 2 - 110, 24, 180, 31, enemyView ? "Your fleet  [Tab]" : "Enemy waters  [Tab]", Action.TOGGLE_BOARD, true, false);
-            if (networkPlacement) button(w / 2 + 80, 24, 72, 31, "Leave", Action.LEAVE_ROOM, true, false);
-            regions.add(new Region(w / 2 - 110,24,262,31));
+            draw.panel(w/2-180,22,360,54,0x082D46);
+            button(w/2-167,32,214,34,enemyView?"YOUR FLEET  [Tab]":"ENEMY WATERS  [Tab]",Action.TOGGLE_BOARD,true,true);
+            if(networkPlacement) button(w/2+60,32,105,34,"LEAVE",Action.LEAVE_ROOM,true,false);
+            regions.add(new Region(w/2-180,22,360,54));
             return;
         }
         float left = com.battleship.frontend.ui.BattleSidebarLayout.flagLeft(w);
@@ -161,7 +162,7 @@ public final class PlacementHud {
         button(w/2-148,44,296,48,networkLocked?"WAITING...":"READY!",Action.READY,ready,ready);
         button(w/2+160,49,49,37,"...",Action.MORE,true,more);
         regions.add(new Region(w/2-148,44,357,48));
-        float tipsX=w*.76f, tipsY=h-438;
+        float tipsX=w-214, tipsY=h-438;
         draw.panel(tipsX,tipsY,112,326,0x123C58); regions.add(new Region(tipsX,tipsY,112,326));
         draw.text(designer&&drawing?"Drag to\ndraw":"Drag to\nmove",19,tipsX+8,tipsY+242,96,62,IVORY);
         draw.text(designer&&drawing?"Right drag\nto erase":"T to rotate",14,tipsX+8,tipsY+198,96,45,CYAN);

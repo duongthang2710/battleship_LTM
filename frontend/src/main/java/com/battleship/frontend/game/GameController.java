@@ -199,6 +199,7 @@ public final class GameController {
     }
 
     public void update(float delta, Vector2f cursor) {
+        hud.update(delta);
         updateIntro(delta);
         effects.update(delta);
         if (effects.isBusy()) refreshShotStatus();

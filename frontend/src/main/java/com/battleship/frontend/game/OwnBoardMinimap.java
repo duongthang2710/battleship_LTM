@@ -96,10 +96,26 @@ public final class OwnBoardMinimap {
             }
         }
         Material border = materials.flat(Materials.linear(0xCEB97D));
-        quad(layout, "Minimap bottom rim", -1.2f, -1.2f, SIZE+2.4f, 1.2f, 27, border);
-        quad(layout, "Minimap top rim", -1.2f, SIZE, SIZE+2.4f, 1.2f, 27, border);
-        quad(layout, "Minimap left rim", -1.2f, 0, 1.2f, SIZE, 27, border);
-        quad(layout, "Minimap right rim", SIZE, 0, 1.2f, SIZE, 27, border);
+        com.battleship.frontend.ui.UiShapes.frame(layout,-1.2f,-1.2f,SIZE+2.4f,SIZE+2.4f,2,1.2f,border,27);
+        Material recess=materials.flat(Materials.linear(0x092D43));
+        Material silver=materials.flat(Materials.linear(0x8CAFAE));
+        for(int edge=0;edge<2;edge++) {
+            float p=edge==0?-6:SIZE+4;
+            quad(layout,"Minimap carved horizontal rail",-6,p,SIZE+12,2,26,recess);
+            quad(layout,"Minimap carved vertical rail",p,-6,2,SIZE+12,26,recess);
+        }
+        for(int sx:new int[]{0,1}) for(int sy:new int[]{0,1}) {
+            float x=sx*SIZE,y=sy*SIZE,dx=sx==0?1:-1,dy=sy==0?1:-1;
+            line(layout,x-3*dx,y-3*dy,x+23*dx,y-3*dy,GOLD,28);
+            line(layout,x-3*dx,y-3*dy,x-3*dx,y+23*dy,GOLD,28);
+            Geometry gem=quad(layout,"Minimap corner gem",x,y-2.828f,4,4,29,silver);
+            gem.rotate(0,0,FastMath.QUARTER_PI);
+        }
+        for(int edge:new int[]{0,1}) {
+            float y=edge*SIZE;
+            line(layout,SIZE/2-14,y,SIZE/2,y+(edge==0?-7:7),GOLD,28);
+            line(layout,SIZE/2,y+(edge==0?-7:7),SIZE/2+14,y,GOLD,28);
+        }
         layout.attachChild(fleet);
         if (displayedBoard != null) renderBoard();
     }
@@ -147,13 +163,9 @@ public final class OwnBoardMinimap {
 
     private void drawShip(Ship ship) {
         if (ship.custom()) {
-            for (var cell : ship.occupiedCells()) {
-                Vector2f p = center(cell);
-                quad(fleet, "Designed hull cell", p.x - CELL * .44f, p.y - CELL * .44f, CELL * .88f, CELL * .88f, 21,
-                        ship.isSunk() ? sunkHull : hullGold);
-                quad(fleet, "Designed deck cell", p.x - CELL * .36f, p.y - CELL * .36f, CELL * .72f, CELL * .72f, 21.1f,
-                        ship.isSunk() ? sunkHull : hullBlue);
-            }
+            Node hull=new Node("Connected minimap hull "+ship.type());fleet.attachChild(hull);
+            drawConnectedLayer(hull,ship,.44f,21,ship.isSunk()?sunkHull:hullGold);
+            drawConnectedLayer(hull,ship,.36f,21.1f,ship.isSunk()?sunkHull:hullBlue);
             return;
         }
         Vector2f start = center(ship.occupiedCells().getFirst());
@@ -173,6 +185,20 @@ public final class OwnBoardMinimap {
         fleet.attachChild(silhouette);
     }
 
+    private void drawConnectedLayer(Node parent,Ship ship,float radius,float z,Material material) {
+        var cells=new java.util.HashSet<>(ship.occupiedCells());float half=CELL*radius;
+        for(var cell:cells) {
+            Vector2f p=center(cell);
+            quad(parent,"Connected hull tile",p.x-half,p.y-half,half*2,half*2,z,material);
+            for(int axis=0;axis<2;axis++) {
+                if(axis==0&&cell.row()==9 || axis==1&&cell.column()==9) continue;
+                var adjacent=new Coordinate(cell.row()+(axis==0?1:0),cell.column()+(axis==1?1:0));
+                if(!cells.contains(adjacent)) continue;
+                quad(parent,"Connected hull bridge",p.x-(axis==0?0:half),p.y-(axis==1?0:half),
+                        axis==0?CELL:half*2,axis==1?CELL:half*2,z,material);
+            }
+        }
+    }
     private Vector2f center(Coordinate cell) {
         return new Vector2f((cell.row() + 0.5f) * CELL, (cell.column() + 0.5f) * CELL);
     }

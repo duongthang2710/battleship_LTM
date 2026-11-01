@@ -31,6 +31,9 @@ public final class BattleHud {
     private boolean opponentReady;
     private boolean fleetReportVisible=true;
     public void setFleetReportVisible(boolean visible) { fleetReportVisible=visible; rebuildFleet(); }
+    private final Node notice=new Node("Battle turn notice");
+    private float noticeSeconds;
+    private String noticeText="";
     public void setOpponentReady(boolean ready) { if(opponentReady!=ready) { opponentReady=ready; rebuild(); } }
     public BattleHud(AssetManager assets,String playerName) {
         this.assets=assets; this.playerName=playerName; root.attachChild(layout);
@@ -51,29 +54,30 @@ public final class BattleHud {
         layout.detachAllChildren(); layout.setLocalScale(scale); header=null; caption=null;
         skin=new NavalHudSkin(assets,layout,10);
         left=BattleSidebarLayout.flagLeft(w); flagWidth=BattleSidebarLayout.flagWidth(w);
-        ownX=left+flagWidth/2; ownY=h-142; rivalX=w-116; rivalY=132;
+        ownX=left+flagWidth/2; ownY=h-142; rivalX=w-116; rivalY=144;
         skin.banner(left,phase==GamePhase.PLACEMENT?70:h-BattleSidebarLayout.BANNER_HEIGHT,flagWidth,h);
         skin.text(playerName,22,left+6,h-50,flagWidth-12,35,WHITE);
         skin.line(left+6,h-65,left+flagWidth-6,h-65,WHITE,1);
-        avatar(ownX,ownY,74,side!=Side.BLACK,true);
-        avatar(rivalX,rivalY,62,side==Side.BLACK,false);
+        avatar(ownX,ownY+3,80,side!=Side.BLACK,true);
+        avatar(rivalX,rivalY+4,74,side==Side.BLACK,false);
         skin.panel(rivalX-88,30,176,33,ORANGE);
         skin.text(opponentName,16,rivalX-84,31,168,31,WHITE);
         if(phase==GamePhase.PLACEMENT) {
-            skin.panel(rivalX-88,67,176,24,0x092B43);
-            skin.text(opponentReady?"READY!":"DEPLOYING",18,rivalX-84,67,168,24,WHITE);
+            var readySkin=new NavalHudSkin(assets,layout,24);
+            readySkin.panel(rivalX-88,67,176,27,0x092B43);
+            readySkin.text(opponentReady?"READY!":"DEPLOYING",18,rivalX-84,67,168,27,WHITE);
             if(opponentReady) {
-                skin.line(rivalX+24,rivalY-8,rivalX+40,rivalY-22,0x6EE448,7);
-                skin.line(rivalX+40,rivalY-22,rivalX+74,rivalY+17,0x6EE448,7);
+                readySkin.line(rivalX+38,rivalY+5,rivalX+48,rivalY-7,0x6EE448,6);
+                readySkin.line(rivalX+48,rivalY-7,rivalX+70,rivalY+22,0x6EE448,6);
             }
             if (!statusTitle.equals("Fleet confirmed")) {
                 skin.panel(w*.30f,h-60,w*.40f,32,BLUE);
                 header=skin.text("DEPLOY FLEET",22,w*.30f,h-60,w*.40f,32,WHITE);
             }
         } else {
-            caption=skin.text(detail,15,w*.29f,76,w*.45f,24,WHITE);
+            redrawNotice();
         }
-        layout.attachChild(fleetList); layout.attachChild(feedback); layout.attachChild(intro);
+        layout.attachChild(fleetList); layout.attachChild(feedback); layout.attachChild(intro); layout.attachChild(notice);
         rebuildFleet(); redrawFeedback(); redrawIntro(); drawnRemaining=-1; drawClock();
     }
     private void avatar(float x,float y,float radius,boolean radiant,boolean own) {
@@ -101,10 +105,6 @@ public final class BattleHud {
         // The backing joins behind the opponent portrait; it must not wash over the face.
         var backing=new NavalHudSkin(assets,fleetList,8);
         backing.hazePennant(rivalX-halfWidth,bottom,halfWidth*2,top+55,25,.09f);
-        backing.line(rivalX-halfWidth,bottom,rivalX-halfWidth,top+55,0xE1EBEF,1.8f);
-        backing.line(rivalX+halfWidth,bottom,rivalX+halfWidth,top+55,0xE1EBEF,1.8f);
-        backing.line(rivalX-halfWidth,top+55,rivalX,top+80,0xE1EBEF,1.8f);
-        backing.line(rivalX,top+80,rivalX+halfWidth,top+55,0xE1EBEF,1.8f);
         fleetList.setUserData("fleetOwner","opponent");
         for(int i=0;i<rules.shipCount();i++) {
             ShipType type=rules.shipTypes().get(i); boolean sunk=(sunkMask&(1<<type.ordinal()))!=0;
@@ -134,10 +134,23 @@ public final class BattleHud {
     }
     private void redrawIntro() {
         intro.detachAllChildren(); intro.setUserData("countdownValue",introText);
+        notice.setCullHint(introText.isEmpty()?Spatial.CullHint.Inherit:Spatial.CullHint.Always);
         if(introText.isEmpty()) return;
         var draw=new NavalHudSkin(assets,intro,80);
-        draw.panel(w/2-100,h/2-88,200,176,0x092D47);
-        draw.text(introText,introText.equals("START")?55:110,w/2-94,h/2-80,188,160,WHITE);
+        draw.taperedRule("Countdown upper tapered stroke",w/2-270,h/2+45,540,4,0xFFFFFF,.58f);
+        draw.taperedRule("Countdown lower tapered stroke",w/2-270,h/2-45,540,4,0xFFFFFF,.58f);
+        draw.text(introText,introText.equals("START")?46:76,w/2-240,h/2-39,480,78,WHITE);
+    }
+    public void update(float delta) {
+        if(noticeSeconds<=0) return;
+        noticeSeconds=Math.max(0,noticeSeconds-Math.max(0,delta));
+        if(noticeSeconds==0) notice.detachAllChildren();
+    }
+    private void redrawNotice() {
+        notice.detachAllChildren(); if(phase!=GamePhase.BATTLE || noticeSeconds<=0 || !introText.isEmpty()) return;
+        var draw=new NavalHudSkin(assets,notice,40);
+        draw.taperedRule("Turn notice underline",w*.30f,h-91,w*.40f,3,0xFFFFFF,.35f);
+        draw.text(noticeText,30,w*.24f,h-83,w*.52f,45,WHITE);
     }
     private void redrawFeedback() {
         feedback.detachAllChildren(); if(shotResult.isBlank()) return;
@@ -161,7 +174,7 @@ public final class BattleHud {
         if(ownArc==null||drawnRemaining>=0&&Math.abs(remaining-drawnRemaining)<50) return;
         drawnRemaining=remaining;
         for(boolean own:new boolean[]{true,false}) {
-            Geometry arc=own?ownArc:rivalArc; float radius=own?77:65;
+            Geometry arc=own?ownArc:rivalArc; float radius=own?83:77;
             float fraction=!clockVisible?(phase==GamePhase.PLACEMENT?1:0):own==ownTurn?remaining/60_000f:0;
             arc.setMesh(NavalHudSkin.arcMesh(radius,7,FastMath.PI,FastMath.PI*fraction,true));
             arc.setUserData("remainingMillis",own==ownTurn&&clockVisible?remaining:0L);
@@ -171,7 +184,7 @@ public final class BattleHud {
     public boolean contains(Vector2f point) {
         float x=point.x/scale,y=point.y/scale;
         return x>=left&&x<=left+flagWidth&&y>=(phase==GamePhase.PLACEMENT?70:h-BattleSidebarLayout.BANNER_HEIGHT)
-                || x>=rivalX-92&&x<=rivalX+92&&y<=rivalY+72&&y>=25
+                || x>=rivalX-92&&x<=rivalX+92&&y<=rivalY+84&&y>=25
                 || phase!=GamePhase.PLACEMENT&&fleetReportVisible&&x>=rivalX-39&&x<=rivalX+39&&y>=rivalY+45&&y<=h-105
                 || phase==GamePhase.PLACEMENT&&!statusTitle.equals("Fleet confirmed")
                     &&y>=h-62&&y<=h-25&&x>=w*.30f&&x<=w*.70f;
@@ -181,8 +194,14 @@ public final class BattleHud {
     public void setOpponentName(String name) { if(!name.equals(opponentName)){opponentName=name;rebuild();} }
     public void setGameStatus(String title,String detail) {
         if(title.equals(statusTitle)&&detail.equals(this.detail)) return;
+        if(!title.equals(statusTitle)) {
+            noticeText=(title.startsWith("Your turn")||title.startsWith("Radiant turn")?"YOUR TURN / CHOOSE A TARGET"
+                    :title.startsWith("Opponent turn")||title.startsWith("Abyssal turn")?"OPPONENT'S TURN":title.toUpperCase(java.util.Locale.ROOT));
+            noticeSeconds=3.2f;
+        }
         boolean waitingChanged=statusTitle.equals("Fleet confirmed")!=title.equals("Fleet confirmed");
         statusTitle=title; this.detail=detail;
+        redrawNotice();
         if(phase==GamePhase.PLACEMENT && waitingChanged) { rebuild(); return; }
         if(title.startsWith("Your turn")||title.startsWith("Radiant turn")) turnTitle="YOUR TURN";
         else if(title.startsWith("Opponent turn")||title.startsWith("Abyssal turn")) turnTitle="ENEMY TURN";
