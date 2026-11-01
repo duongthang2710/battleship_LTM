@@ -182,7 +182,6 @@ public final class AccountPanel {
         outline(8, 8, 424, 604, 0x655638);
         text(display, "BATTLESHIP", 20, 30, 582, GOLD);
         text(display, account != null ? "YOUR ACCOUNT" : editingServer ? "SERVER CONNECTION" : register ? "CREATE ACCOUNT" : "SIGN IN", 36, 30, 549, IVORY);
-        text(body, account == null && !editingServer ? "Command your fleet. Rule the ocean." : "ADMIRAL'S REGISTRY", 10, 32, 507, CYAN);
         caret = null;
         if (account == null) {
             String[] captions = editingServer ? new String[] {"SERVER IP / HOSTNAME", "TCP PORT"} : new String[] {"USERNAME", "PASSWORD", "CONFIRM PASSWORD"};
@@ -202,7 +201,7 @@ public final class AccountPanel {
                     editingServer ? Action.SERVER : Action.SWITCH);
         } else {
             UiTypography.fit(text(display, account.displayName(), 31, 30, 426, IVORY), 380);
-            text(body, "@" + account.username(), 14, 32, 388, CYAN);
+            text(body, "@" + account.username(), 14, 32, 378, CYAN);
             text(body, "Signed in. Your PvP results are saved.", 12, 32, 332, IVORY);
             button(166, "SIGN OUT", Action.LOGOUT);
         }

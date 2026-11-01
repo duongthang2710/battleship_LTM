@@ -93,7 +93,6 @@ public final class LeaderboardPanel {
         frame(0, 0, WIDTH, HEIGHT, GOLD); frame(8, 8, WIDTH - 16, HEIGHT - 16, 0x655638);
         text(body, "THE ADMIRALS' ROLL OF HONOR", 10, 32, 655, GOLD);
         text(display, "LEADERBOARD", 43, 30, 630, IVORY);
-        text(body, "Completed PvP battles across the server", 12, 32, 579, MUTED);
         button(650, 601, 130, "WINS", Action.WINS);
         button(790, 601, 130, "WIN RATE", Action.WIN_RATE);
         button(930, 601, 138, "MATCHES", Action.MATCHES);
@@ -109,7 +108,6 @@ public final class LeaderboardPanel {
         int minimum = data == null ? 10 : data.minWinRateMatches();
         text(body, sort == LeaderboardSort.WIN_RATE ? "WIN RATE RANKING: minimum " + minimum + " completed PvP matches."
                 : "Only fully recorded, completed PvP matches count.", 11, 32, 105, CYAN);
-        text(body, "Streak: consecutive wins. A dash means history cannot establish their order.", 10, 32, 84, MUTED);
         button(32, 25, 180, "MAIN MENU", Action.BACK);
         button(228, 25, 120, "REFRESH", Action.REFRESH);
         button(730, 25, 100, "PREVIOUS", Action.PREVIOUS);
@@ -130,8 +128,8 @@ public final class LeaderboardPanel {
         }
         BitmapText rank = text(body, Long.toString(entry.rank()), 17, 0, y + 29, accent);
         rank.setLocalTranslation(73 - rank.getLineWidth() / 2, y + 29, 94);
-        UiTypography.fit(text(body, entry.displayName(), 13, 132, y + 36, IVORY), 338);
-        UiTypography.fit(text(body, "@" + entry.username(), 9, 132, y + 16, MUTED), 338);
+        UiTypography.fit(text(body, entry.displayName(), 13, 132, y + 27, IVORY), 190);
+        UiTypography.fit(text(body, "@" + entry.username(), 9, 334, y + 27, MUTED), 136);
         number(entry.matches(), 526, y); number(entry.wins(), 634, y); number(entry.losses(), 738, y);
         text(body, String.format(Locale.ROOT, "%.1f%%", entry.winRate()), 14, 825, y + 25, CYAN);
         text(body, entry.currentWinStreak() == null ? "-" : Long.toString(entry.currentWinStreak()), 14, 997, y + 25, accent);

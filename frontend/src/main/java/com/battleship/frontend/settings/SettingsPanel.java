@@ -89,8 +89,7 @@ public final class SettingsPanel {
         card.detachAllChildren(); buttons.clear();
         rect(0, 0, WIDTH, HEIGHT, new ColorRGBA(.003f, .009f, .025f, .97f)); frame(0, 0, WIDTH, HEIGHT, GOLD); frame(8, 8, WIDTH - 16, HEIGHT - 16, 0x655638);
         text(body, "THE CAPTAIN'S PREFERENCES", 11, 30, 655, GOLD); text(display, "SETTINGS", 43, 28, 630, IVORY);
-        text(body, "Apply and save changes. Back discards unsaved edits.", 13, 30, 580, MUTED);
-        text(display, "Display", 27, 30, 535, IVORY);
+        text(display, "Display", 27, 30, 545, IVORY);
         text(body, "WINDOW MODE", 12, 32, 502, GOLD);
         button(Action.MODE, 235, 477, 275, draft.fullscreen() ? "FULLSCREEN / BORDERLESS" : "WINDOWED");
         text(body, "WINDOWED SIZE", 12, 32, 443, GOLD);
@@ -106,9 +105,9 @@ public final class SettingsPanel {
         button(Action.VOLUME_DOWN, 235, 145, 40, "-");
         text(body, Math.round(draft.volume()*100) + "%", 14, 331, 169, CYAN);
         button(Action.VOLUME_UP, 470, 145, 40, "+");
-        text(display, "Controls", 27, 565, 535, IVORY);
-        String[] controls = {"Left drag: orbit / Wheel: zoom", "R: restore default view", "PLACEMENT", "1-5: select / Click: place", "Drag a placed ship to move it", "T: rotate / Delete: remove", "C: reset / F: random fleet", "Enter: confirm complete fleet", "BATTLE", "Click enemy cell: fire", "Tab: switch board / 60s per turn", "CHAT", "Enter: focus / send", "Esc: leave input", "Wheel / PgUp / PgDn: history", "Click + / -: expand / collapse"};
-        for (int i = 0; i < controls.length; i++) text(body, controls[i], 13, 567, 499 - i * 22.5f,
+        text(display, "Controls", 27, 565, 545, IVORY);
+        String[] controls = {"Left drag: orbit / Wheel: zoom", "R: restore default view", "PLACEMENT", "1-5: select / Click: place", "Drag a placed ship to move it", "T: rotate / Delete: remove", "C: reset / F: random fleet", "Enter: confirm complete fleet", "BATTLE", "Click enemy cell: fire", "Tab: switch board / 60s per turn", "CHAT", "Enter: focus / send", "Esc: leave input", "Wheel / PgUp / PgDn: history"};
+        for (int i = 0; i < controls.length; i++) text(body, controls[i], 13, 567, 499 - i * 28,
                 controls[i].equals("PLACEMENT") || controls[i].equals("BATTLE") || controls[i].equals("CHAT") ? GOLD : IVORY);
         text(body, status.length() > 132 ? status.substring(0, 129) + "..." : status, 12, 32, 100, CYAN);
         button(Action.SAVE, 32, 28, 240, "APPLY & SAVE"); button(Action.RESET, 290, 28, 200, "RESET TO SAVED"); button(Action.BACK, 840, 28, 208, "BACK");

@@ -137,7 +137,6 @@ public final class FriendsPanel {
         frame(0, 0, WIDTH, HEIGHT, GOLD); frame(8, 8, WIDTH - 16, HEIGHT - 16, 0x655638);
         text(body, "THE ADMIRALS' ALLIANCE REGISTER", 10, 32, 655, GOLD);
         text(display, "FRIENDS", 43, 30, 630, IVORY);
-        text(body, "Find allies across the ocean", 12, 32, 579, MUTED);
         button(560, 601, 156, "FRIENDS", Action.FRIENDS, null);
         button(726, 601, 166, "RECEIVED", Action.RECEIVED, null);
         button(902, 601, 166, "SENT", Action.SENT, null);
@@ -174,17 +173,17 @@ public final class FriendsPanel {
     private void row(FriendEntry entry, int index) {
         float y = 418 - index * 42;
         rect(30, y, 1040, 40, new ColorRGBA(.03f, .075f, .13f, index % 2 == 0 ? .85f : .4f), 91);
-        UiTypography.fit(text(body, entry.displayName(), 13, 45, y + 37, IVORY), 395);
-        UiTypography.fit(text(body, "@" + entry.username(), 9, 45, y + 17, MUTED), 395);
+        UiTypography.fit(text(body, entry.displayName(), 13, 45, y + 28, IVORY), 205);
+        UiTypography.fit(text(body, "@" + entry.username(), 9, 260, y + 28, MUTED), 180);
         String state = entry.relationship();
         String caption = state.equals("FRIEND") ? (entry.online() ? "ONLINE" : "OFFLINE") : switch (state) {
-            case "OUTGOING" -> "PENDING - SENT";
-            case "INCOMING" -> "PENDING - RECEIVED";
+            case "OUTGOING" -> "SENT";
+            case "INCOMING" -> "RECEIVED";
             case "NONE" -> "NOT CONNECTED";
             default -> state;
         };
-        text(body, caption, 11, 460, y + 37, state.equals("FRIEND") && entry.online() ? CYAN : GOLD);
-        if (entry.requestedAt() != null) text(body, DATE.format(Instant.parse(entry.requestedAt())), 9, 460, y + 17, MUTED);
+        text(body, caption, 11, 460, y + 28, state.equals("FRIEND") && entry.online() ? CYAN : GOLD);
+        if (entry.requestedAt() != null && !state.equals("FRIEND")) text(body, DATE.format(Instant.parse(entry.requestedAt())), 9, 565, y + 28, MUTED);
         switch (state) {
             case "FRIEND" -> {
                 if (entry.online()) button(734, y, 174, "INVITE TO BATTLE", Action.INVITE, entry.userId());

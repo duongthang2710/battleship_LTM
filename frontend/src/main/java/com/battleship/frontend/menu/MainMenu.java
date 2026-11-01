@@ -128,7 +128,6 @@ public final class MainMenu {
                 materials.flat(new ColorRGBA(0.38f, 0.32f, 0.22f, 0.55f)), 61);
         compass(WIDTH / 2, 525);
         centered(display, "BATTLESHIP", 48, WIDTH / 2, 481, IVORY);
-        centered(body, "FANTASY NAVAL STRATEGY", 10, WIDTH / 2, 428, GOLD);
         divider(405);
         button(28, 316, 344, 66, "PVP", Action.PVP, true);
         UiTypography.centerIn(centered(body, "ONLINE MATCH", 10, WIDTH / 2, 334, CYAN), 28, 318, 344, 25);
