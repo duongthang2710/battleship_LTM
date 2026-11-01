@@ -212,6 +212,7 @@ public final class PlacementHud {
                         Action action, boolean enabled, boolean selected) {
         ColorRGBA fill = selected ? Materials.linear(0x175D85)
                 : new ColorRGBA(0.009f, 0.022f, 0.044f, enabled ? 0.9f : 0.55f);
+        if(action==Action.LEAVE_ROOM) fill=new ColorRGBA(.28f,.025f,.04f,.98f);
         panel(x, y, width, height, fill).setMesh(UiShapes.chamfered(width, height, 7));
         frame(x, y, width, height, enabled ? (selected ? GOLD : 0x617D94) : 0x394659);
         UiTypography.centerIn(text(action == Action.READY ? hudFont : body, label, action == Action.READY ? 25 : 12, x, y, enabled ? IVORY : 0x6E7989),

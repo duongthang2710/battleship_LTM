@@ -91,6 +91,8 @@ public final class ScreenController implements AutoCloseable {
     private final ConnectionNoticePanel connectionNotice;
     private final ConnectionNoticeInput connectionNoticeInput;
     private final NavigationInput navigationInput;
+    private final com.battleship.frontend.ui.LeaveConfirmationPanel leaveConfirmation;
+    private final com.battleship.frontend.input.LeaveConfirmationInput leaveConfirmationInput;
     private final ClipboardService clipboard = new ClipboardService();
     private boolean backRequested, connectionSettingsRequested;
     private MainMenu.Action hoveredMenu;
@@ -108,6 +110,9 @@ public final class ScreenController implements AutoCloseable {
         menu = new MainMenu(assets);
         settingsPanel = new SettingsPanel(assets);
         audio = new com.battleship.frontend.audio.GameAudio(assets);
+        leaveConfirmation=new com.battleship.frontend.ui.LeaveConfirmationPanel(assets);
+        gui.attachChild(leaveConfirmation.root());
+        leaveConfirmationInput=new com.battleship.frontend.input.LeaveConfirmationInput(input,leaveConfirmation);
         settings = new SettingsController(settingsPanel, orbit, display, () -> {
             if (settingsOrigin == Screen.PVP_PLACEMENT) gameReturnRequested = true; else requestMainMenu();
         });
@@ -131,6 +136,7 @@ public final class ScreenController implements AutoCloseable {
                 new FleetRenderer(board, materials), new PlacementFeedback(board, materials), placementHud, hud, minimap,
                 new TargetingRenderer(board, materials), new AttackEffectManager(board, materials), gameOver,
                 this::requestMainMenu);
+        game.onLeave(this::confirmLeaveRoom);
         game.onSettings(() -> pendingAction = MainMenu.Action.SETTINGS);
         game.onSound(audio::play);
         pvp = new PvpController(roomPanel, player, room -> {
@@ -197,6 +203,7 @@ public final class ScreenController implements AutoCloseable {
         gameInvitePanel.resize(width, height);
         chatPanel.resize(width, height);
         accountPanel.resize(width, height);
+        leaveConfirmation.resize(width,height);
         hud.resize(width, height);
         placementHud.resize(width, height);
         minimap.resize(width, height);
@@ -212,6 +219,7 @@ public final class ScreenController implements AutoCloseable {
         gameInvites.update();
         chat.update();
         clipboard.update();
+        if(pvp.room()==null && leaveConfirmation.visible()) leaveConfirmation.cancel();
         accountPanel.sync(pvp.account(), pvp.status(), pvp.pending(), pvp.connected());
         accountPanel.update(delta);
         friendsPanel.updateCaret(delta);
@@ -313,6 +321,7 @@ public final class ScreenController implements AutoCloseable {
 
     private void roomAction(PvpRoomPanel.Action action) {
         audio.play(com.battleship.frontend.audio.GameAudio.Cue.CLICK);
+        if(action==PvpRoomPanel.Action.LEAVE_ROOM) { confirmLeaveRoom(); return; }
         if (action != PvpRoomPanel.Action.COPY_CODE) { pvp.handle(action); return; }
         if (pvp.room() == null) return;
         String code = pvp.room().roomCode();
@@ -321,7 +330,10 @@ public final class ScreenController implements AutoCloseable {
         });
     }
 
+    private void confirmLeaveRoom() { if(pvp.room()!=null) leaveConfirmation.show(pvp::leaveRoom); }
+
     private void navigateBack() {
+        if(leaveConfirmation.visible()) { leaveConfirmation.cancel();return; }
         if (screen == null) return;
         audio.play(com.battleship.frontend.audio.GameAudio.Cue.BACK);
         if (gameInvitePanel.visible()) { gameInvitePanel.hide(); return; }
@@ -336,10 +348,10 @@ public final class ScreenController implements AutoCloseable {
                     ? FriendsPanel.Action.CANCEL_REMOVE : FriendsPanel.Action.BACK, null));
             case LEADERBOARD -> leaderboard.handle(LeaderboardPanel.Action.BACK);
             case PVP -> {
-                if (pvp.room() != null) pvp.handle(PvpRoomPanel.Action.LEAVE_ROOM);
+                if (pvp.room() != null) confirmLeaveRoom();
                 else pvp.handle(PvpRoomPanel.Action.BACK);
             }
-            case PVP_PLACEMENT -> pvp.returnToMainMenu();
+            case PVP_PLACEMENT -> { if(pvp.room()!=null) leaveConfirmation.show(pvp::returnToMainMenu); else requestMainMenu(); }
             case MAIN_MENU -> { } // Root screen; Esc never signs out or exits.
         }
     }
@@ -505,6 +517,7 @@ public final class ScreenController implements AutoCloseable {
         gameInviteInput.close();
         chatInput.close();
         settings.close();
+        leaveConfirmationInput.close();
         audio.close();
         pvp.close();
     }

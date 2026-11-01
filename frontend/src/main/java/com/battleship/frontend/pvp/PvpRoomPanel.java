@@ -377,7 +377,7 @@ public final class PvpRoomPanel {
                 continue;
             }
             boolean highlight = active && (button.primary || button.action == hovered);
-            button.fill.setColor("Color", highlight ? new ColorRGBA(0.035f, 0.075f, 0.117f, 0.98f)
+            button.fill.setColor("Color", button.action==Action.LEAVE_ROOM&&active?new ColorRGBA(.25f,.025f,.035f,.98f): highlight ? new ColorRGBA(0.035f, 0.075f, 0.117f, 0.98f)
                     : new ColorRGBA(0.009f, 0.022f, 0.044f, 0.94f));
             button.border.setColor("Color", Materials.rgb(!active ? 0x334050 : highlight ? GOLD : 0x516275));
             button.label.setColor(Materials.rgb(!active ? 0x69788D : highlight ? IVORY : 0xCFD5E1));

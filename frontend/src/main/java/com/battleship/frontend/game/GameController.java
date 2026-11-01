@@ -50,6 +50,8 @@ public final class GameController {
     private Side ownSide = Side.WHITE;
     private boolean submitted;
     private Runnable leaveRoom = () -> { };
+    private Runnable askLeave;
+    public void onLeave(Runnable askLeave) { this.askLeave=askLeave; }
     private java.util.function.Consumer<Cue> sound = cue -> { };
     public void onSound(java.util.function.Consumer<Cue> sound) { this.sound = sound; }
     private Board lastPlacementBoard;
@@ -386,7 +388,7 @@ public final class GameController {
         if (action == PlacementHud.Action.SETTINGS) { sound.accept(Cue.CLICK); cancelShipDrag(); openSettings.run(); return; }
         if (action.name().startsWith("SELECT_")
                 && !engine.rules().allows(ShipType.valueOf(action.name().substring(7)))) return;
-        if (networkPlacement && action == PlacementHud.Action.LEAVE_ROOM) { cancelShipDrag(); leaveRoom.run(); return; }
+        if (networkPlacement && action == PlacementHud.Action.LEAVE_ROOM) { cancelShipDrag(); if(askLeave!=null) askLeave.run(); else leaveRoom.run(); return; }
         if (introBlocked()) return;
         if (effects.isBusy()) return;
         if (action == PlacementHud.Action.MORE) { sound.accept(Cue.CLICK); controls.toggleMore(); return; }
