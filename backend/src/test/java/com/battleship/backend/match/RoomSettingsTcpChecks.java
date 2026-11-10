@@ -21,13 +21,13 @@ public final class RoomSettingsTcpChecks {
                 try (var a = new TcpMatchChecks.Peer(server.port(), "Room rules A"); var b = new TcpMatchChecks.Peer(server.port(), "Room rules B")) {
                     accounts.add(a.accountId); accounts.add(b.accountId);
                     for (String invalid : List.of("{\"shipCount\":2}", "{\"shipCount\":6}", "{\"shipCount\":3.5}",
-                            "{\"shipCount\":\"3\"}", "{\"mode\":\"UNKNOWN\"}", "{\"turnRule\":\"UNKNOWN\"}", "{\"options\":{\"shuffleFleet\":\"yes\"}}", "{\"options\":{\"hideFleetReport\":1}}")) {
+                            "{\"shipCount\":\"3\"}", "{\"mode\":\"UNKNOWN\"}", "{\"turnRule\":\"UNKNOWN\"}", "{\"options\":{\"hideSunkInfo\":\"yes\"}}", "{\"options\":{\"hideFleetReport\":1}}")) {
                         a.send(MessageType.CREATE_ROOM, JsonParser.parseString(invalid));
                         require(a.read(MessageType.ERROR).payloadAs(RoomError.class).code().equals("INVALID_ROOM_SETTINGS"), "Server rejects malformed rules before room creation");
                     }
                     for (GameMode mode : GameMode.values()) for (int count = 3; count <= 5; count++) for (TurnRule turn : TurnRule.values()) {
                         var rules = new GameRules(mode, count, turn);
-                        var options=new com.battleship.shared.room.RoomOptions(count%2==1,turn==TurnRule.HIT_CONTINUES);
+                        var options=new com.battleship.shared.room.RoomOptions(count%2==1);
                         a.send(MessageType.CREATE_ROOM, new CreateRoomRequest(rules,options));
                         var created = a.read(MessageType.ROOM_CREATED).payloadAs(RoomSnapshot.class);
                         require(created.rules().equals(rules)&&created.options().equals(options), "Creator receives authoritative rules");
@@ -39,13 +39,13 @@ public final class RoomSettingsTcpChecks {
                         b.send(MessageType.READY, null); a.read(MessageType.ROOM_UPDATED); b.read(MessageType.ROOM_UPDATED);
                         require(a.read(MessageType.START_PLACEMENT).payloadAs(RoomSnapshot.class).rules().equals(rules), "Placement retains room rules");
                         b.read(MessageType.START_PLACEMENT);
-                        play(a, b, rules);
+                        play(a, b, rules, options);
                         if (count == 3 && turn == TurnRule.HIT_CONTINUES) {
                             a.send(MessageType.REMATCH_REQUEST, null); a.read(MessageType.REMATCH_UPDATED); b.read(MessageType.REMATCH_UPDATED);
                             b.send(MessageType.REMATCH_REQUEST, null); a.read(MessageType.REMATCH_UPDATED); b.read(MessageType.REMATCH_UPDATED);
                             var next = a.read(MessageType.START_PLACEMENT).payloadAs(RoomSnapshot.class); b.read(MessageType.START_PLACEMENT);
                             require(next.rules().equals(rules) && next.options().equals(options) && next.roomCode().equals(created.roomCode()), "Rematch preserves settings and room");
-                            play(a, b, rules);
+                            play(a, b, rules, options);
                         }
                         a.send(MessageType.LEAVE_ROOM, null); a.read(MessageType.ROOM_LEFT); b.read(MessageType.REMATCH_UPDATED); b.read(MessageType.PLAYER_LEFT);
                         b.send(MessageType.LEAVE_ROOM, null); b.read(MessageType.ROOM_LEFT);
@@ -65,7 +65,7 @@ public final class RoomSettingsTcpChecks {
         }
     }
 
-    private static void play(TcpMatchChecks.Peer a, TcpMatchChecks.Peer b, GameRules rules) throws Exception {
+    private static void play(TcpMatchChecks.Peer a, TcpMatchChecks.Peer b, GameRules rules, RoomOptions options) throws Exception {
         var fleet = fleet(rules);
         a.send(MessageType.SUBMIT_FLEET, new FleetSubmission(fleet.ships().subList(0, rules.shipCount() - 1))); a.read(MessageType.ERROR);
         a.send(MessageType.SUBMIT_FLEET, fleet);
@@ -88,11 +88,16 @@ public final class RoomSettingsTcpChecks {
             var other = b.read(MessageType.MATCH_UPDATED).payloadAs(MatchSnapshot.class);
             require(state.revision() == other.revision() && state.currentPlayerId().equals(other.currentPlayerId()), "Both TCP peers agree on revision and current shooter");
             if (state.phase() == GamePhase.BATTLE) {
+                if (options.hideSunkInfo()) {
+                    RoomRulesChecks.checkHiddenSnapshot(state);
+                    RoomRulesChecks.checkHiddenSnapshot(other);
+                }
                 String expected = rules.turnRule() == TurnRule.HIT_CONTINUES ? actor.id : actor == a ? b.id : a.id;
                 require(state.currentPlayerId().equals(expected), "Authoritative hit/sunk rule");
             }
             current = state.currentPlayerId();
         }
+        if (options.hideSunkInfo()) require(state.enemyBoard().ships().size() == rules.shipCount(), "Finished TCP match reveals the full enemy fleet");
         require(state.winnerId().equals(a.id) && state.endReason() == MatchEndReason.FLEET_DESTROYED, "Configured fleet victory");
         a.send(MessageType.ATTACK, new AttackRequest(new Coordinate(9, 8))); a.read(MessageType.ERROR);
     }

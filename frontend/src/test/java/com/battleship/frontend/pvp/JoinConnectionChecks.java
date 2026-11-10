@@ -110,14 +110,14 @@ public final class JoinConnectionChecks {
                 client.handle(PvpRoomPanel.Action.TOGGLE_MODE);
                 client.handle(PvpRoomPanel.Action.FEWER_SHIPS); client.handle(PvpRoomPanel.Action.FEWER_SHIPS);
                 client.handle(PvpRoomPanel.Action.TOGGLE_TURN_RULE);
-                client.handle(PvpRoomPanel.Action.DEPLOY_SHUFFLED);client.handle(PvpRoomPanel.Action.REPORT_HIDE);
+                client.handle(PvpRoomPanel.Action.REPORT_HIDE);
                 var rules = panel.selectedRules();
                 require(panel.configuring() && !client.pending() && creates.get() == 0, "Editing settings never sends CREATE_ROOM");
                 client.handle(PvpRoomPanel.Action.BACK);
                 require(!panel.configuring() && panel.enabled(PvpRoomPanel.Action.SHOW_CREATE) && client.room() == null, "Back returns to PvP without creating a room");
                 client.handle(PvpRoomPanel.Action.SHOW_CREATE); client.handle(PvpRoomPanel.Action.CREATE_ROOM);
                 await(client, () -> client.room() != null);
-                require(client.room().options().shuffleFleet()&&client.room().options().hideFleetReport(),"TCP round-trip preserves both new room options");
+                require(client.room().options().hideSunkInfo(),"TCP round-trip preserves hidden sinking information");
                 require(creates.get() == 1 && client.room().rules().equals(rules) && rules.shipCount() == 3
                         && rules.mode() == com.battleship.shared.game.GameMode.DESIGNER
                         && rules.turnRule() == com.battleship.shared.game.TurnRule.HIT_CONTINUES, "Confirmation sends selected rules once and consumes authoritative snapshot");

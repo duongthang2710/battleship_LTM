@@ -87,8 +87,10 @@ public final class UiFeedbackChecks {
         require(room.selectedMode() == com.battleship.shared.game.GameMode.CLASSIC, "Classic remains the default");
         require(room.actionAt(room.buttonCenter(PvpRoomPanel.Action.MODE_DESIGNER)).orElseThrow() == PvpRoomPanel.Action.MODE_DESIGNER, "Mode selection hit target");
         room.toggleMode(); require(room.selectedMode() == com.battleship.shared.game.GameMode.DESIGNER, "Room creator can choose designer");
-        room.selectOption(PvpRoomPanel.Action.DEPLOY_SHUFFLED);room.selectOption(PvpRoomPanel.Action.REPORT_HIDE);
-        require(room.selectedOptions().shuffleFleet()&&room.selectedOptions().hideFleetReport(),"New options are selectable independently of existing room rules");
+        require(Arrays.stream(PvpRoomPanel.Action.values()).noneMatch(action -> action.name().startsWith("DEPLOY_")),
+                "Room setup has no initial-fleet setting");
+        room.selectOption(PvpRoomPanel.Action.REPORT_HIDE);
+        require(room.selectedOptions().hideSunkInfo(),"Hidden sinking information is selectable independently of room rules");
         room.showJoin();
         room.pasteRoomCode(" abc234 "); require(room.roomCode().equals("ABC234"),"Pasted room code is normalized and replaces old entry");
         room.pasteRoomCode("invalid clipboard"); require(room.roomCode().equals("ABC234"),"Invalid paste cannot corrupt a valid code");

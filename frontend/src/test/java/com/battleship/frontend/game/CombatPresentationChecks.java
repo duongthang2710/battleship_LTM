@@ -251,6 +251,13 @@ public final class CombatPresentationChecks extends SimpleApplication {
         Ship sunk = intact;
         for (Coordinate cell : intact.occupiedCells()) sunk = sunk.withHit(cell);
         Board wreck = new Board().withShip(sunk).withShip(fleet.ship(ShipType.DESTROYER));
+        Board attacked = new Board().withShip(intact).withShip(fleet.ship(ShipType.DESTROYER));
+        for (Coordinate cell : intact.occupiedCells()) attacked = attacked.withAttack(cell);
+        renderer.display(com.battleship.shared.match.BoardView.from(attacked, true, true).board(), false, faction);
+        require(renderer.root().getQuantity() == 0, "Hidden sinking mode draws no enemy ship or wreck");
+        renderer.display(com.battleship.shared.match.BoardView.from(attacked, false).board(), true, faction);
+        require(renderer.root().getQuantity() == 2 && renderer.root().getChild("Sunk ship damage") != null,
+                "Final reveal draws the wreck and the surviving enemy ship");
         renderer.display(wreck, false, faction);
         require(renderer.root().getQuantity() == 1 && Boolean.TRUE.equals(renderer.root().getChild(0).getUserData("wreck")), "Only confirmed sunk ship is revealed as wreck");
         require(renderer.root().getChild("Sunk ship damage") != null && renderer.root().getChild("Wreck smoke") != null, "Wreck includes broken armor/scorch/smoke");

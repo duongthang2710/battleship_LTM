@@ -2,6 +2,7 @@ package com.battleship.backend.match;
 
 import com.battleship.shared.game.*;
 import com.battleship.shared.match.*;
+import com.battleship.shared.room.RoomOptions;
 import java.util.*;
 import java.util.concurrent.atomic.AtomicLong;
 import static com.battleship.backend.match.DesignerMatchChecks.PLAYERS;
@@ -9,7 +10,8 @@ import static com.battleship.backend.match.DesignerMatchChecks.PLAYERS;
 /** Checks all 12 room configurations against the real authoritative match service. */
 public final class RoomRulesChecks {
     public static void main(String[] args) {
-        for (GameMode mode : GameMode.values()) for (int count = 3; count <= 5; count++) for (TurnRule turn : TurnRule.values()) {
+        for (GameMode mode : GameMode.values()) for (int count = 3; count <= 5; count++) for (TurnRule turn : TurnRule.values())
+                for (boolean hideSunkInfo : new boolean[] {false, true}) {
             GameRules rules = new GameRules(mode, count, turn);
             GameEngine placement = new GameEngine("Placement", new Random(17)); placement.setRules(rules);
             placement.randomPlacement();
@@ -17,7 +19,8 @@ public final class RoomRulesChecks {
             if (count < 5) require(!placement.selectShip(ShipType.DESTROYER).success()
                     && !placement.placeShip(ShipType.DESTROYER, new Coordinate(9, 0), ShipOrientation.HORIZONTAL).success(), "Disabled types cannot be selected/placed");
             placement.restart(); require(placement.rules().equals(rules) && !placement.canReady(), "Restart preserves rules and clears fleet");
-            var now = new AtomicLong(); var match = new MatchService(PLAYERS, rules, now::get);
+            var options = new RoomOptions(hideSunkInfo);
+            var now = new AtomicLong(); var match = new MatchService(PLAYERS, rules, options, now::get);
             FleetSubmission fleet = fleet(rules);
             expectRejected(() -> match.submit("a", new FleetSubmission(fleet.ships().subList(0, rules.shipCount() - 1))));
             if (count < 5) {
@@ -47,21 +50,48 @@ public final class RoomRulesChecks {
                 AttackResult result = match.attack(actor, cell);
                 require(result.accepted(), "Valid shot"); sawSunk |= result.sunk();
                 if (match.phase() == GamePhase.BATTLE) {
+                    if (hideSunkInfo) {
+                        checkHiddenSnapshot(match.snapshot("a"));
+                        checkHiddenSnapshot(match.snapshot("b"));
+                    } else if (result.sunk()) {
+                        require(match.snapshot(actor).lastAttack().sunk()
+                                && !match.snapshot(actor).enemyBoard().ships().isEmpty(), "Normal mode still reports and reveals sunk ships");
+                    }
                     require(match.snapshot("a").currentPlayerId().equals(turn == TurnRule.HIT_CONTINUES ? actor : actor.equals("a") ? "b" : "a"), "Hit/sunk applies configured turn rule");
                     require(match.timer().remainingMillis() == 60_000, "Every accepted shot starts a 60s shot window");
                 }
             }
             require(sawSunk && match.snapshot("a").winnerId().equals("a") && match.endReason() == MatchEndReason.FLEET_DESTROYED, "Configured fleet can be entirely sunk");
+            if (hideSunkInfo) {
+                require(match.snapshot("a").enemyBoard().ships().size() == count
+                        && match.snapshot("b").enemyBoard().ships().size() == count, "Game over reveals both enemy fleets");
+            }
             require(!match.attack("a", new Coordinate(9, 8)).accepted(), "Finished match locked");
-            var timed = new MatchService(PLAYERS, rules, now::get); timed.submit("a", fleet); timed.submit("b", fleet);
+            var timed = new MatchService(PLAYERS, rules, options, now::get); timed.submit("a", fleet); timed.submit("b", fleet);
             now.addAndGet(59_000_000_000L); timed.attack("a", cells.getFirst());
             now.addAndGet(59_999_999_999L); require(!timed.expireTurn(), "Previous deadline cannot expire new shot window");
             now.incrementAndGet();
             require(!timed.attack(timed.snapshot("a").currentPlayerId(), cells.get(1)).accepted()
                     && timed.endReason() == MatchEndReason.TURN_TIMEOUT, "Deadline wins the exact-boundary race");
+            if (hideSunkInfo) require(timed.snapshot("a").enemyBoard().ships().size() == count
+                    && timed.snapshot("b").enemyBoard().ships().size() == count, "Timeout reveals fleets including unhit ships");
         }
+        var gson = new com.google.gson.Gson();
+        require(gson.fromJson("{\"shuffleFleet\":true,\"hideFleetReport\":true}", RoomOptions.class).hideSunkInfo(),
+                "Legacy room preferences map to hidden sinking information");
+        require(!gson.toJson(new RoomOptions(true)).contains("shuffleFleet"), "Removed setting is absent from outgoing options");
         for (int invalid : new int[] {0, 2, 6}) expectRejected(() -> new GameRules(GameMode.CLASSIC, invalid, TurnRule.ALTERNATING));
-        System.out.println("PASS: 12 room rule combinations; counts/types/Ready, privacy, hit/miss/sunk turns, full wins, deadline resets/rejections/timeout races and restart.");
+        System.out.println("PASS: 24 room configurations with normal/hidden sinking, private attack and board snapshots, final fleet reveal, timers and legacy options.");
+    }
+
+    static void checkHiddenSnapshot(MatchSnapshot snapshot) {
+        require(snapshot.enemyBoard().ships().isEmpty(), "Hidden mode never sends enemy ship models during battle");
+        require(snapshot.enemyBoard().shots().stream().allMatch(cell -> cell.shipType() == null
+                && (cell.state() == CellState.HIT || cell.state() == CellState.MISS)), "Enemy cells expose only hit/miss and no ship type");
+        var attack = snapshot.lastAttack();
+        require(attack != null && (attack.type() == AttackResultType.HIT || attack.type() == AttackResultType.MISS)
+                && !attack.sunk() && attack.shipType() == null && !attack.gameOver()
+                && attack.affectedCells().equals(List.of(attack.coordinate())), "Attack does not expose sinking, ship type or the ship footprint");
     }
 
     static FleetSubmission fleet(GameRules rules) {

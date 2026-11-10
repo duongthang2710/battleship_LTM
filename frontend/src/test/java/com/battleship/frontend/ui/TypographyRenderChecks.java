@@ -95,7 +95,7 @@ public final class TypographyRenderChecks extends SimpleApplication {
         room.showChoice(); add("pvp-choice", room.root());
         room.showCreate(); add("room-settings-basic", room.root());
         room.toggleMode(); room.changeShipCount(-1); room.changeShipCount(-1); room.toggleTurnRule();
-        room.selectOption(PvpRoomPanel.Action.DEPLOY_SHUFFLED);room.selectOption(PvpRoomPanel.Action.REPORT_HIDE);
+        room.selectOption(PvpRoomPanel.Action.REPORT_HIDE);
         add("room-settings-designer-3", room.root());
         room.showJoin(); for (char c : "ABC2".toCharArray()) room.inputCharacter(c); add("join-input", room.root());
         room.showRoom(new RoomSnapshot("ABC234", List.of(new RoomPlayer("a", "Nguyễn Trường Thắng", true), new RoomPlayer("b", "Đô đốc đại dương", false)), RoomPhase.WAITING), "a");
@@ -104,7 +104,7 @@ public final class TypographyRenderChecks extends SimpleApplication {
         room.showRoom(new RoomSnapshot("7UA8TZ",List.of(new RoomPlayer("a","duongthang2710",false)),RoomPhase.WAITING),"a");
         room.setStatus("Waiting for another admiral.");checkWaitingSpacing(room);add("waiting-one-player",room.root());
         room.showRoom(new RoomSnapshot("ABC234",List.of(new RoomPlayer("a","Nguyễn Trường Thắng",true),new RoomPlayer("b","Đô đốc đại dương",true)),RoomPhase.WAITING,
-            new com.battleship.shared.game.GameRules(com.battleship.shared.game.GameMode.DESIGNER,3,com.battleship.shared.game.TurnRule.HIT_CONTINUES),new RoomOptions(true,true)),"a");
+            new com.battleship.shared.game.GameRules(com.battleship.shared.game.GameMode.DESIGNER,3,com.battleship.shared.game.TurnRule.HIT_CONTINUES),new RoomOptions(true)),"a");
         room.setStatus("The room is full. Both players must confirm before placement begins.");checkWaitingSpacing(room);add("waiting-ready-long-status",room.root());
         var friends = new FriendsPanel(assetManager); friends.resize(width, height); friends.show(); friends.setLoading(FriendsAction.FRIENDS, 0);add("friends-loading",friends.root());
         var entries = new ArrayList<FriendEntry>();
@@ -187,7 +187,7 @@ public final class TypographyRenderChecks extends SimpleApplication {
     private void checkWaitingSpacing(PvpRoomPanel room) {
         room.root().updateLogicalState(0);room.root().updateGeometricState();
         float scale=UiTypography.scale(width,height),buttonTop=room.buttonCenter(PvpRoomPanel.Action.TOGGLE_READY).y+24*scale;
-        room.root().depthFirstTraversal(n->{if(n instanceof com.jme3.font.BitmapText t && (t.getText().contains("Empty board /")||t.getText().contains("Shuffled fleet /"))) {
+        room.root().depthFirstTraversal(n->{if(n instanceof com.jme3.font.BitmapText t && t.getText().startsWith("Sunk info ")) {
             var b=(com.jme3.bounding.BoundingBox)t.getWorldBound();
             require(b.getCenter().y-b.getYExtent()>buttonTop+6*scale,"Waiting details must clear the Ready button");
         }});
