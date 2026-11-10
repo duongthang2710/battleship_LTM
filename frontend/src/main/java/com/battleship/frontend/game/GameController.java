@@ -149,8 +149,7 @@ public final class GameController {
         countingIntoBattle = false; startFlash = 0; hud.setStartCountdown(0, false);
         engine.setRules(rules); designer.clear(); drawingMode = designerMode();
         var options=network.room()==null?com.battleship.shared.room.RoomOptions.DEFAULT:network.room().options();
-        if(options.shuffleFleet()) engine.randomPlacement();
-        hud.setFleetReportVisible(!options.hideFleetReport());
+        hud.setFleetReportVisible(!options.hideSunkInfo());
         networkPlacement = true;
         this.network = network;
         this.leaveRoom = network::leaveRoom;
@@ -611,7 +610,10 @@ public final class GameController {
         Board visible = enemyView ? shown.enemy().board() : shown.player().board();
         Side visibleSide = enemyView ? ownSide.opponent() : ownSide;
         fleet.setEditing(designer.hasDraft() ? designer.type() : null);
-        fleet.display(visible, !enemyView, visibleSide == Side.WHITE ? ShipFactory.Fleet.RADIANT : ShipFactory.Fleet.ABYSSAL);
+        boolean revealEnemyFleet = networkPlacement && network.room() != null
+                && network.room().options().hideSunkInfo() && shown.phase() == GamePhase.GAME_OVER;
+        fleet.display(visible, !enemyView || revealEnemyFleet,
+                visibleSide == Side.WHITE ? ShipFactory.Fleet.RADIANT : ShipFactory.Fleet.ABYSSAL);
         feedback.displayAttacks(visible);
         var selected = state().player().board().ship(state().placement().selectedType());
         if (state().phase() == GamePhase.PLACEMENT && selected != null)
@@ -625,6 +627,9 @@ public final class GameController {
 
     private void refreshHud() {
         updateTurnClock();
+        if (networkPlacement && network.room() != null) {
+            hud.setFleetReportVisible(!network.room().options().hideSunkInfo() || state().phase() == GamePhase.GAME_OVER);
+        }
         hud.setBattleState(state(), engine.rules());
         hud.setOpponentReady(ai != null || networkPlacement && network.match() != null && network.match().opponentSubmitted());
         minimap.setBattleVisible(state().phase() != GamePhase.PLACEMENT);

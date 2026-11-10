@@ -26,7 +26,7 @@ import java.util.Optional;
 
 public final class PvpRoomPanel {
     public enum Action {
-        SHOW_CREATE, CREATE_ROOM, SHOW_JOIN, JOIN_ROOM, BACK, INVITE_FRIENDS, TOGGLE_READY, LEAVE_ROOM, COPY_CODE, TOGGLE_MODE, FEWER_SHIPS, MORE_SHIPS, TOGGLE_TURN_RULE, MODE_BASIC, MODE_DESIGNER, FLEET_THREE, FLEET_FOUR, FLEET_FIVE, RULE_ALTERNATING, RULE_HIT_CONTINUES, PRESET_DUEL, PRESET_TACTICAL, PRESET_CREATIVE, DEPLOY_EMPTY, DEPLOY_SHUFFLED, REPORT_SHOW, REPORT_HIDE
+        SHOW_CREATE, CREATE_ROOM, SHOW_JOIN, JOIN_ROOM, BACK, INVITE_FRIENDS, TOGGLE_READY, LEAVE_ROOM, COPY_CODE, TOGGLE_MODE, FEWER_SHIPS, MORE_SHIPS, TOGGLE_TURN_RULE, MODE_BASIC, MODE_DESIGNER, FLEET_THREE, FLEET_FOUR, FLEET_FIVE, RULE_ALTERNATING, RULE_HIT_CONTINUES, PRESET_DUEL, PRESET_TACTICAL, PRESET_CREATIVE, REPORT_SHOW, REPORT_HIDE
     }
 
     private enum View { CHOICE, CREATE, JOIN, WAITING }
@@ -46,8 +46,8 @@ public final class PvpRoomPanel {
     private View view = View.CHOICE;
     private com.battleship.shared.game.GameMode selectedMode = com.battleship.shared.game.GameMode.CLASSIC;
     private int selectedShipCount = 5;
-    private boolean shuffleFleet,hideFleetReport;
-    public com.battleship.shared.room.RoomOptions selectedOptions() { return new com.battleship.shared.room.RoomOptions(shuffleFleet,hideFleetReport); }
+    private boolean hideSunkInfo;
+    public com.battleship.shared.room.RoomOptions selectedOptions() { return new com.battleship.shared.room.RoomOptions(hideSunkInfo); }
     private com.battleship.shared.game.TurnRule selectedTurnRule = com.battleship.shared.game.TurnRule.ALTERNATING;
     public com.battleship.shared.game.GameRules selectedRules() {
         return new com.battleship.shared.game.GameRules(selectedMode, selectedShipCount, selectedTurnRule);
@@ -184,10 +184,8 @@ public final class PvpRoomPanel {
     public void selectOption(Action action) {
         if(!enabled(action)) return;
         switch(action) {
-            case DEPLOY_EMPTY -> shuffleFleet=false;
-            case DEPLOY_SHUFFLED -> shuffleFleet=true;
-            case REPORT_SHOW -> hideFleetReport=false;
-            case REPORT_HIDE -> hideFleetReport=true;
+            case REPORT_SHOW -> hideSunkInfo=false;
+            case REPORT_HIDE -> hideSunkInfo=true;
             case MODE_BASIC -> selectedMode=com.battleship.shared.game.GameMode.CLASSIC;
             case MODE_DESIGNER -> selectedMode=com.battleship.shared.game.GameMode.DESIGNER;
             case FLEET_THREE -> selectedShipCount=3;
@@ -240,12 +238,11 @@ public final class PvpRoomPanel {
         boolean alternate=selectedTurnRule==com.battleship.shared.game.TurnRule.ALTERNATING;
         button(366,244,308,44,"ALTERNATE SHOTS",Action.RULE_ALTERNATING,alternate);
         button(694,244,320,44,"HIT / FIRE AGAIN",Action.RULE_HIT_CONTINUES,!alternate);
-        setupText("STARTING FLEET",12,366,225,GOLD,640);
-        button(366,156,308,44,"EMPTY BOARD",Action.DEPLOY_EMPTY,!shuffleFleet);
-        button(694,156,320,44,"SHUFFLED FLEET",Action.DEPLOY_SHUFFLED,shuffleFleet);
-        setupText("ENEMY FLEET REPORT",12,366,137,GOLD,640);
-        button(366,68,308,44,"SHOW LOSSES",Action.REPORT_SHOW,!hideFleetReport);
-        button(694,68,320,44,"HIDE REPORT",Action.REPORT_HIDE,hideFleetReport);
+        setupText("SINKING INFORMATION",12,366,225,GOLD,640);
+        button(366,156,308,44,"SHOW SUNK INFO",Action.REPORT_SHOW,!hideSunkInfo);
+        button(694,156,320,44,"HIDE SUNK INFO",Action.REPORT_HIDE,hideSunkInfo);
+        setupText(hideSunkInfo ? "Hits and misses only. Reveal enemy ships after the match."
+                : "Reveal enemy ships when they are sunk.",12,366,126,CYAN,648);
         statusLabel=text(body,wrapStatus(status),10,366,30,CYAN); positionStatus(); refreshButtons();
     }
 
@@ -259,7 +256,7 @@ public final class PvpRoomPanel {
         return switch (action) {
             case INVITE_FRIENDS -> connected && !busy && room != null && room.phase() == RoomPhase.WAITING && room.players().size() < 2;
             case BACK -> !busy;
-            case DEPLOY_EMPTY, DEPLOY_SHUFFLED, REPORT_SHOW, REPORT_HIDE, MODE_BASIC, MODE_DESIGNER, FLEET_THREE, FLEET_FOUR, FLEET_FIVE, RULE_ALTERNATING, RULE_HIT_CONTINUES, PRESET_DUEL, PRESET_TACTICAL, PRESET_CREATIVE, TOGGLE_MODE, TOGGLE_TURN_RULE -> view == View.CREATE && connected && !busy;
+            case REPORT_SHOW, REPORT_HIDE, MODE_BASIC, MODE_DESIGNER, FLEET_THREE, FLEET_FOUR, FLEET_FIVE, RULE_ALTERNATING, RULE_HIT_CONTINUES, PRESET_DUEL, PRESET_TACTICAL, PRESET_CREATIVE, TOGGLE_MODE, TOGGLE_TURN_RULE -> view == View.CREATE && connected && !busy;
             case FEWER_SHIPS -> view == View.CREATE && selectedShipCount > 3 && connected && !busy;
             case MORE_SHIPS -> view == View.CREATE && selectedShipCount < 5 && connected && !busy;
             case COPY_CODE -> room != null && view == View.WAITING;
@@ -332,7 +329,7 @@ public final class PvpRoomPanel {
             player(0, 286+headerLift);
             player(1, 208+headerLift);
             centered(body, room.turnRule().label(), 10, WIDTH / 2, 196+headerLift, CYAN);
-            centered(body,(room.options().shuffleFleet()?"Shuffled fleet":"Empty board")+" / "+(room.options().hideFleetReport()?"Hidden report":"Fleet report"),9,WIDTH/2,176+headerLift,IVORY);
+            centered(body,room.options().hideSunkInfo()?"Sunk info hidden":"Sunk info visible",9,WIDTH/2,176+headerLift,IVORY);
             boolean ready = room.players().stream().anyMatch(player -> player.clientId().equals(localClientId) && player.ready());
             button(34, 120, 372, 48, ready ? "NOT READY" : "READY", Action.TOGGLE_READY, true);
             button(34, 28, 180, 42, "INVITE FRIENDS", Action.INVITE_FRIENDS, false);

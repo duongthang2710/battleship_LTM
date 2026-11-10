@@ -7,6 +7,7 @@ import com.battleship.shared.match.MatchSnapshot;
 import com.battleship.shared.match.TurnTimer;
 import com.battleship.shared.match.MatchEndReason;
 import com.battleship.shared.room.RoomPlayer;
+import com.battleship.shared.room.RoomOptions;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
 import java.util.function.LongSupplier;
@@ -16,6 +17,7 @@ public final class MatchService {
     private final GameEngine engine;
     private final Side firstSide;
     private final LongSupplier nanoTime;
+    private final RoomOptions options;
     private static final long TURN_NANOS = TimeUnit.SECONDS.toNanos(60);
     private long revision = 1;
     private long turnDeadline;
@@ -34,7 +36,14 @@ public final class MatchService {
     }
     public MatchService(List<RoomPlayer> players, GameRules rules) { this(players, rules, System::nanoTime); }
     MatchService(List<RoomPlayer> players, GameRules rules, LongSupplier nanoTime) {
+        this(players, rules, RoomOptions.DEFAULT, nanoTime);
+    }
+    public MatchService(List<RoomPlayer> players, GameRules rules, RoomOptions options) {
+        this(players, rules, options, System::nanoTime);
+    }
+    MatchService(List<RoomPlayer> players, GameRules rules, RoomOptions options, LongSupplier nanoTime) {
         this.nanoTime = nanoTime;
+        this.options = options;
         RoomPlayer first = players.get(0);
         RoomPlayer second = players.get(1);
         firstSide = first.side();
@@ -143,11 +152,18 @@ public final class MatchService {
         boolean first = state.player().id().equals(clientId);
         Player own = first ? state.player() : state.enemy();
         Player enemy = first ? state.enemy() : state.player();
+        boolean concealSinking = options.hideSunkInfo() && state.phase() != GamePhase.GAME_OVER;
+        boolean revealEnemyFleet = options.hideSunkInfo() && state.phase() == GamePhase.GAME_OVER;
         AttackResult attack = state.lastAttack();
-        if (attack != null && !attack.sunk()) attack = new AttackResult(attack.type(), attack.coordinate(), null,
+        if (attack != null && concealSinking) {
+            attack = new AttackResult(attack.type() == AttackResultType.MISS ? AttackResultType.MISS : AttackResultType.HIT,
+                    attack.coordinate(), null, false, false, attack.attackerId(), attack.defenderId(), null,
+                    List.of(attack.coordinate()));
+        } else if (attack != null && !attack.sunk()) attack = new AttackResult(attack.type(), attack.coordinate(), null,
                 false, false, attack.attackerId(), attack.defenderId(), null, attack.affectedCells());
         return new MatchSnapshot(revision, state.phase(), own.id(), enemy.id(), enemy.name(),
-                first ? firstSide : firstSide.opponent(), BoardView.from(own.board(), false), BoardView.from(enemy.board(), true),
+                first ? firstSide : firstSide.opponent(), BoardView.from(own.board(), false),
+                BoardView.from(enemy.board(), !revealEnemyFleet, concealSinking),
                 own.fleet().isComplete(engine.rules()), enemy.fleet().isComplete(engine.rules()), state.currentPlayerId(), state.turnNumber(),
                 state.winnerId(), attack, timer(), endReason == MatchEndReason.TURN_TIMEOUT, endReason);
     }

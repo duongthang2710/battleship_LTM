@@ -165,12 +165,12 @@ public final class RoomManager implements AutoCloseable {
             rules = new com.battleship.shared.game.GameRules(mode, count, turnRule);
             if(payload.has("options")) {
                 var data=payload.getAsJsonObject("options");
-                for(String key:new String[]{"shuffleFleet","hideFleetReport"}) {
+                for(String key:new String[]{"hideSunkInfo","hideFleetReport"}) {
                     if(data.has(key) && (!data.get(key).isJsonPrimitive() || !data.getAsJsonPrimitive(key).isBoolean()))
                         throw new IllegalArgumentException("Invalid room preference.");
                 }
-                options=new com.battleship.shared.room.RoomOptions(data.has("shuffleFleet")&&data.get("shuffleFleet").getAsBoolean(),
-                        data.has("hideFleetReport")&&data.get("hideFleetReport").getAsBoolean());
+                String key = data.has("hideSunkInfo") ? "hideSunkInfo" : "hideFleetReport";
+                options = new com.battleship.shared.room.RoomOptions(data.has(key) && data.get(key).getAsBoolean());
             }
         } catch (RuntimeException invalid) {
             error(player, message, "INVALID_ROOM_SETTINGS", "Choose Basic or Fleet designer, 3-5 ships and a valid turn rule.");
@@ -260,7 +260,7 @@ public final class RoomManager implements AutoCloseable {
         room.rematchRequests.clear();
         room.rematchDeclined = false;
         // A fresh match also discards the old deadline, shot history and winner.
-        room.match = new MatchService(room.snapshot().players(), room.rules);
+        room.match = new MatchService(room.snapshot().players(), room.rules, room.options);
         room.historyId = null;
         room.historyFinished = false;
         room.accountIds = Map.of();

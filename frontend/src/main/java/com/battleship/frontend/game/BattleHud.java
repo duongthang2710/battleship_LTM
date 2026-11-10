@@ -30,7 +30,11 @@ public final class BattleHud {
     private boolean playerFired;
     private boolean opponentReady;
     private boolean fleetReportVisible=true;
-    public void setFleetReportVisible(boolean visible) { fleetReportVisible=visible; rebuildFleet(); }
+    public void setFleetReportVisible(boolean visible) {
+        if (fleetReportVisible == visible) return;
+        fleetReportVisible = visible;
+        rebuildFleet();
+    }
     private final Node notice=new Node("Battle turn notice");
     private float noticeSeconds;
     private String noticeText="";
