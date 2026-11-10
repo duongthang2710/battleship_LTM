@@ -97,6 +97,11 @@ public final class TypographyRenderChecks extends SimpleApplication {
         room.toggleMode(); room.changeShipCount(-1); room.changeShipCount(-1); room.toggleTurnRule();
         room.selectOption(PvpRoomPanel.Action.REPORT_HIDE);
         add("room-settings-designer-3", room.root());
+        room.selectOption(PvpRoomPanel.Action.COMBAT_SKILLS);
+        require(room.selectedRules().skills(), "Skill battle option selects skill combat");
+        for (var action : new PvpRoomPanel.Action[] {PvpRoomPanel.Action.COMBAT_CLASSIC, PvpRoomPanel.Action.COMBAT_SKILLS, PvpRoomPanel.Action.CREATE_ROOM})
+            require(room.actionAt(room.buttonCenter(action)).orElseThrow() == action, "Combat row hit targets scale with the panel");
+        add("room-settings-skills", room.root());
         room.showJoin(); for (char c : "ABC2".toCharArray()) room.inputCharacter(c); add("join-input", room.root());
         room.showRoom(new RoomSnapshot("ABC234", List.of(new RoomPlayer("a", "Nguyễn Trường Thắng", true), new RoomPlayer("b", "Đô đốc đại dương", false)), RoomPhase.WAITING), "a");
         require(countText(room.root(), "COPY")==0, "Copy uses a compact icon instead of a large text button");
@@ -164,6 +169,16 @@ public final class TypographyRenderChecks extends SimpleApplication {
         float mapCenter=((com.jme3.bounding.BoundingBox)ownMap.root().getChild("Crystalline minimap grid").getWorldBound()).getCenter().x;
         require(Math.abs(avatarCenter-mapCenter)<.01f,"Avatar and minimap remain centered above corner chat");
         var battle = (Node) gameplay.clone(); battle.attachChild(chat.root().clone()); add("battle", battle);
+        placement.setSkills(true, 5, com.battleship.shared.game.SkillType.MAX_ENERGY, com.battleship.shared.game.SkillType.TORPEDO,
+                true, "Torpedo EAST [T]: pick a cell");
+        for (var skill : com.battleship.shared.game.SkillType.values()) {
+            var action = PlacementHud.skillAction(skill);
+            require(placement.actionAt(placement.buttonCenter(action)).orElseThrow() == action, "Skill tray hit target " + skill);
+        }
+        for (var skill : com.battleship.shared.game.SkillType.values())
+            require(countText(placement.root(), skill.name() + " " + skill.cost()) == 1, "Skill tray shows full name and cost: " + skill);
+        var skillBattle = (Node) gameplay.clone(); skillBattle.attachChild(chat.root().clone()); add("battle-skills", skillBattle);
+        placement.setSkills(false, 0, 0, null, false, "");
         hud.setFleetReportVisible(false);add("battle-hidden-report",gameplay);hud.setFleetReportVisible(true);
         for(int seconds=3;seconds>=1;seconds--) {
             hud.setStartCountdown(seconds*1000L,false); add("countdown-"+seconds,gameplay);

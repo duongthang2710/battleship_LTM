@@ -26,7 +26,7 @@ import java.util.Optional;
 
 public final class PvpRoomPanel {
     public enum Action {
-        SHOW_CREATE, CREATE_ROOM, SHOW_JOIN, JOIN_ROOM, BACK, INVITE_FRIENDS, TOGGLE_READY, LEAVE_ROOM, COPY_CODE, TOGGLE_MODE, FEWER_SHIPS, MORE_SHIPS, TOGGLE_TURN_RULE, MODE_BASIC, MODE_DESIGNER, FLEET_THREE, FLEET_FOUR, FLEET_FIVE, RULE_ALTERNATING, RULE_HIT_CONTINUES, PRESET_DUEL, PRESET_TACTICAL, PRESET_CREATIVE, REPORT_SHOW, REPORT_HIDE
+        SHOW_CREATE, CREATE_ROOM, SHOW_JOIN, JOIN_ROOM, BACK, INVITE_FRIENDS, TOGGLE_READY, LEAVE_ROOM, COPY_CODE, TOGGLE_MODE, FEWER_SHIPS, MORE_SHIPS, TOGGLE_TURN_RULE, MODE_BASIC, MODE_DESIGNER, FLEET_THREE, FLEET_FOUR, FLEET_FIVE, RULE_ALTERNATING, RULE_HIT_CONTINUES, PRESET_DUEL, PRESET_TACTICAL, PRESET_CREATIVE, REPORT_SHOW, REPORT_HIDE, COMBAT_CLASSIC, COMBAT_SKILLS
     }
 
     private enum View { CHOICE, CREATE, JOIN, WAITING }
@@ -34,6 +34,8 @@ public final class PvpRoomPanel {
     private static final float WIDTH = 440;
     private static final float HEIGHT = 580;
     private static final float WAITING_HEIGHT = 620;
+    /** Room settings: one extra 88-unit row (combat) above the shared card height. */
+    private static final float SETUP_ROW = 88, SETUP_HEIGHT = HEIGHT + SETUP_ROW;
     private static final int GOLD = 0xDEB663;
     private static final int IVORY = 0xF4EAD1;
     private static final int CYAN = 0x91CEFF;
@@ -49,8 +51,9 @@ public final class PvpRoomPanel {
     private boolean hideSunkInfo;
     public com.battleship.shared.room.RoomOptions selectedOptions() { return new com.battleship.shared.room.RoomOptions(hideSunkInfo); }
     private com.battleship.shared.game.TurnRule selectedTurnRule = com.battleship.shared.game.TurnRule.ALTERNATING;
+    private com.battleship.shared.game.CombatMode selectedCombat = com.battleship.shared.game.CombatMode.CLASSIC;
     public com.battleship.shared.game.GameRules selectedRules() {
-        return new com.battleship.shared.game.GameRules(selectedMode, selectedShipCount, selectedTurnRule);
+        return new com.battleship.shared.game.GameRules(selectedMode, selectedShipCount, selectedTurnRule, selectedCombat);
     }
     public boolean configuring() { return view == View.CREATE; }
     public void changeShipCount(int delta) {
@@ -105,7 +108,7 @@ public final class PvpRoomPanel {
         viewportWidth=width; viewportHeight=height;
         scale = UiTypography.scale(width, height);
         left = view==View.CREATE ? (width-1040*scale)/2 : 56 * scale;
-        bottom = (height - (view==View.WAITING?WAITING_HEIGHT:HEIGHT) * scale) / 2;
+        bottom = (height - (view==View.WAITING?WAITING_HEIGHT:view==View.CREATE?SETUP_HEIGHT:HEIGHT) * scale) / 2;
         layout.setLocalScale(scale);
         layout.setLocalTranslation(left, bottom, 0);
     }
@@ -193,6 +196,8 @@ public final class PvpRoomPanel {
             case FLEET_FIVE -> selectedShipCount=5;
             case RULE_ALTERNATING -> selectedTurnRule=com.battleship.shared.game.TurnRule.ALTERNATING;
             case RULE_HIT_CONTINUES -> selectedTurnRule=com.battleship.shared.game.TurnRule.HIT_CONTINUES;
+            case COMBAT_CLASSIC -> selectedCombat=com.battleship.shared.game.CombatMode.CLASSIC;
+            case COMBAT_SKILLS -> selectedCombat=com.battleship.shared.game.CombatMode.SKILLS;
             case PRESET_DUEL, PRESET_TACTICAL, PRESET_CREATIVE -> {
                 selectedMode=action==Action.PRESET_CREATIVE?com.battleship.shared.game.GameMode.DESIGNER:com.battleship.shared.game.GameMode.CLASSIC;
                 selectedShipCount=action==Action.PRESET_DUEL?3:5;
@@ -203,46 +208,54 @@ public final class PvpRoomPanel {
         rebuild();
     }
     private void setupFrame(float x,float width) {
-        panel(x,0,width,HEIGHT,new ColorRGBA(.003f,.009f,.025f,.95f),70);
-        frame(x,0,width,HEIGHT,materials.flat(Materials.rgb(GOLD)),71);
-        frame(x+7,7,width-14,HEIGHT-14,materials.flat(Materials.rgb(0x39495A)),71);
+        panel(x,0,width,SETUP_HEIGHT,new ColorRGBA(.003f,.009f,.025f,.95f),70);
+        frame(x,0,width,SETUP_HEIGHT,materials.flat(Materials.rgb(GOLD)),71);
+        frame(x+7,7,width-14,SETUP_HEIGHT-14,materials.flat(Materials.rgb(0x39495A)),71);
     }
     private void setupText(String value,float size,float x,float y,int color,float width) {
         UiTypography.fit(text(body,value,size,x,y,color),width);
     }
     private void rebuildSetup() {
+        float lift=SETUP_ROW; // Existing rows keep their spacing; the combat row takes the freed bottom slot.
         setupFrame(0,318); setupFrame(340,700);
-        centered(display,"YOUR FLEET",31,159,530,IVORY);
-        centered(body,selectedMode==com.battleship.shared.game.GameMode.CLASSIC?"BASIC":"DESIGNER",13,159,488,CYAN);
+        centered(display,"YOUR FLEET",31,159,530+lift,IVORY);
+        centered(body,selectedMode==com.battleship.shared.game.GameMode.CLASSIC?"BASIC":"DESIGNER",13,159,488+lift,CYAN);
         for(int i=0;i<selectedShipCount;i++) {
-            var type=selectedRules().shipTypes().get(i); float y=428-i*61;
+            var type=selectedRules().shipTypes().get(i); float y=428+lift-i*61;
             setupText(type.displayName(),14,26,y,IVORY,266);
             float length=28*type.length();
             Geometry hull=panel(28,y-35,length,12,materials.flat(Materials.rgb(0x81B9CA)),73);
             hull.setMesh(UiShapes.chamfered(length,12,6));
             for(int cell=0;cell<type.length();cell++) panel(28+cell*12,y-46,9,3,Materials.rgb(GOLD),73);
         }
-        centered(body,selectedShipCount+" SHIPS",13,159,132,GOLD);
+        centered(body,selectedShipCount+" SHIPS",13,159,132+lift,GOLD);
+        if(selectedCombat==com.battleship.shared.game.CombatMode.SKILLS) centered(body,"SKILL BATTLE",13,159,132+lift-26,CYAN);
         button(24,62,270,44,"CREATE ROOM",Action.CREATE_ROOM,true);
         button(24,18,270,34,"BACK",Action.BACK,false);
-        centered(display,"CREATE ROOM",36,690,534,IVORY);
-        setupText("GAME MODE",12,366,489,GOLD,640);
+        centered(display,"CREATE ROOM",36,690,534+lift,IVORY);
+        setupText("GAME MODE",12,366,489+lift,GOLD,640);
         boolean basic=selectedMode==com.battleship.shared.game.GameMode.CLASSIC;
-        button(366,420,308,44,"BASIC",Action.MODE_BASIC,basic);
-        button(694,420,320,44,"FLEET DESIGNER",Action.MODE_DESIGNER,!basic);
-        setupText("FLEET SIZE",12,366,401,GOLD,640);
-        button(366,332,202,44,"3 SHIPS",Action.FLEET_THREE,selectedShipCount==3);
-        button(589,332,202,44,"4 SHIPS",Action.FLEET_FOUR,selectedShipCount==4);
-        button(812,332,202,44,"5 SHIPS",Action.FLEET_FIVE,selectedShipCount==5);
-        setupText("FIRING RULE",12,366,313,GOLD,640);
+        button(366,420+lift,308,44,"BASIC",Action.MODE_BASIC,basic);
+        button(694,420+lift,320,44,"FLEET DESIGNER",Action.MODE_DESIGNER,!basic);
+        setupText("FLEET SIZE",12,366,401+lift,GOLD,640);
+        button(366,332+lift,202,44,"3 SHIPS",Action.FLEET_THREE,selectedShipCount==3);
+        button(589,332+lift,202,44,"4 SHIPS",Action.FLEET_FOUR,selectedShipCount==4);
+        button(812,332+lift,202,44,"5 SHIPS",Action.FLEET_FIVE,selectedShipCount==5);
+        setupText("FIRING RULE",12,366,313+lift,GOLD,640);
         boolean alternate=selectedTurnRule==com.battleship.shared.game.TurnRule.ALTERNATING;
-        button(366,244,308,44,"ALTERNATE SHOTS",Action.RULE_ALTERNATING,alternate);
-        button(694,244,320,44,"HIT / FIRE AGAIN",Action.RULE_HIT_CONTINUES,!alternate);
-        setupText("SINKING INFORMATION",12,366,225,GOLD,640);
-        button(366,156,308,44,"SHOW SUNK INFO",Action.REPORT_SHOW,!hideSunkInfo);
-        button(694,156,320,44,"HIDE SUNK INFO",Action.REPORT_HIDE,hideSunkInfo);
+        button(366,244+lift,308,44,"ALTERNATE SHOTS",Action.RULE_ALTERNATING,alternate);
+        button(694,244+lift,320,44,"HIT / FIRE AGAIN",Action.RULE_HIT_CONTINUES,!alternate);
+        setupText("SINKING INFORMATION",12,366,225+lift,GOLD,640);
+        button(366,156+lift,308,44,"SHOW SUNK INFO",Action.REPORT_SHOW,!hideSunkInfo);
+        button(694,156+lift,320,44,"HIDE SUNK INFO",Action.REPORT_HIDE,hideSunkInfo);
         setupText(hideSunkInfo ? "Hits and misses only. Reveal enemy ships after the match."
-                : "Reveal enemy ships when they are sunk.",12,366,126,CYAN,648);
+                : "Reveal enemy ships when they are sunk.",12,366,126+lift,CYAN,648);
+        setupText("COMBAT",12,366,178,GOLD,640);
+        boolean skills=selectedCombat==com.battleship.shared.game.CombatMode.SKILLS;
+        button(366,109,308,44,"CLASSIC",Action.COMBAT_CLASSIC,!skills);
+        button(694,109,320,44,"SKILL BATTLE",Action.COMBAT_SKILLS,skills);
+        setupText(skills ? "Normal shots charge energy (max 8). Spend it on skills; a skill ends your turn."
+                : "Normal shots only.",12,366,79,CYAN,648);
         statusLabel=text(body,wrapStatus(status),10,366,30,CYAN); positionStatus(); refreshButtons();
     }
 
@@ -256,7 +269,7 @@ public final class PvpRoomPanel {
         return switch (action) {
             case INVITE_FRIENDS -> connected && !busy && room != null && room.phase() == RoomPhase.WAITING && room.players().size() < 2;
             case BACK -> !busy;
-            case REPORT_SHOW, REPORT_HIDE, MODE_BASIC, MODE_DESIGNER, FLEET_THREE, FLEET_FOUR, FLEET_FIVE, RULE_ALTERNATING, RULE_HIT_CONTINUES, PRESET_DUEL, PRESET_TACTICAL, PRESET_CREATIVE, TOGGLE_MODE, TOGGLE_TURN_RULE -> view == View.CREATE && connected && !busy;
+            case REPORT_SHOW, REPORT_HIDE, COMBAT_CLASSIC, COMBAT_SKILLS, MODE_BASIC, MODE_DESIGNER, FLEET_THREE, FLEET_FOUR, FLEET_FIVE, RULE_ALTERNATING, RULE_HIT_CONTINUES, PRESET_DUEL, PRESET_TACTICAL, PRESET_CREATIVE, TOGGLE_MODE, TOGGLE_TURN_RULE -> view == View.CREATE && connected && !busy;
             case FEWER_SHIPS -> view == View.CREATE && selectedShipCount > 3 && connected && !busy;
             case MORE_SHIPS -> view == View.CREATE && selectedShipCount < 5 && connected && !busy;
             case COPY_CODE -> room != null && view == View.WAITING;
@@ -328,7 +341,7 @@ public final class PvpRoomPanel {
             copyIcon(Math.min(WIDTH-52, roomCode.getLocalTranslation().x + roomCode.getLineWidth() + 6), 383+headerLift);
             player(0, 286+headerLift);
             player(1, 208+headerLift);
-            centered(body, room.turnRule().label(), 10, WIDTH / 2, 196+headerLift, CYAN);
+            centered(body, room.turnRule().label() + (room.rules().skills() ? " / Skill battle" : ""), 10, WIDTH / 2, 196+headerLift, CYAN);
             centered(body,room.options().hideSunkInfo()?"Sunk info hidden":"Sunk info visible",9,WIDTH/2,176+headerLift,IVORY);
             boolean ready = room.players().stream().anyMatch(player -> player.clientId().equals(localClientId) && player.ready());
             button(34, 120, 372, 48, ready ? "NOT READY" : "READY", Action.TOGGLE_READY, true);

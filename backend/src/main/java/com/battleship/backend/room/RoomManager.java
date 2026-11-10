@@ -79,7 +79,7 @@ public final class RoomManager implements AutoCloseable {
                 leave(player.clientId(), message.requestId());
             }
             case READY, NOT_READY -> ready(player, message);
-            case SUBMIT_FLEET, ATTACK -> matchCommand(player, message);
+            case SUBMIT_FLEET, ATTACK, USE_SKILL -> matchCommand(player, message);
             case REMATCH_REQUEST, REMATCH_DECLINE -> rematch(player, message);
             default -> error(player, message, "INVALID_REQUEST", "Unsupported room command.");
         }
@@ -162,7 +162,9 @@ public final class RoomManager implements AutoCloseable {
                 if (!value.isJsonPrimitive() || !value.getAsJsonPrimitive().isNumber()) throw new IllegalArgumentException();
                 count = value.getAsBigDecimal().intValueExact();
             }
-            rules = new com.battleship.shared.game.GameRules(mode, count, turnRule);
+            var combatMode = payload.has("combatMode") ? com.battleship.shared.game.CombatMode.valueOf(payload.get("combatMode").getAsString())
+                    : com.battleship.shared.game.CombatMode.CLASSIC;
+            rules = new com.battleship.shared.game.GameRules(mode, count, turnRule, combatMode);
             if(payload.has("options")) {
                 var data=payload.getAsJsonObject("options");
                 for(String key:new String[]{"hideSunkInfo","hideFleetReport"}) {
@@ -173,7 +175,7 @@ public final class RoomManager implements AutoCloseable {
                 options = new com.battleship.shared.room.RoomOptions(data.has(key) && data.get(key).getAsBoolean());
             }
         } catch (RuntimeException invalid) {
-            error(player, message, "INVALID_ROOM_SETTINGS", "Choose Basic or Fleet designer, 3-5 ships and a valid turn rule.");
+            error(player, message, "INVALID_ROOM_SETTINGS", "Choose Basic or Fleet designer, 3-5 ships, a valid turn rule and Classic or Skill battle.");
             return;
         }
         Room room = new Room(code, rules, options);
@@ -303,6 +305,23 @@ public final class RoomManager implements AutoCloseable {
             if (message.type() == MessageType.SUBMIT_FLEET) {
                 room.match.submit(player.clientId(), message.payloadAs(FleetSubmission.class));
                 event = room.match.phase() == GamePhase.BATTLE ? MessageType.START_BATTLE : MessageType.FLEET_ACCEPTED;
+            } else if (message.type() == MessageType.USE_SKILL) {
+                GamePhase before = room.match.phase();
+                var result = room.match.useSkill(player.clientId(), message.payloadAs(com.battleship.shared.match.SkillRequest.class));
+                if (!result.accepted()) {
+                    if (before == GamePhase.BATTLE && room.match.phase() == GamePhase.GAME_OVER)
+                        publishMatch(room, MessageType.MATCH_UPDATED, null, null);
+                    error(player, message, result.type().name(), switch (result.type()) {
+                        case NOT_ENOUGH_ENERGY -> "Not enough energy for this skill.";
+                        case ALREADY_ATTACKED -> "Every target cell has already been attacked.";
+                        case INVALID_SKILL -> "Skills are not available in this room.";
+                        case NOT_YOUR_TURN -> "Wait for your turn.";
+                        case INVALID_COORDINATE -> "Choose a cell inside the board.";
+                        default -> "Skill rejected: " + result.type();
+                    });
+                    return;
+                }
+                event = MessageType.MATCH_UPDATED;
             } else {
                 AttackRequest request = message.payloadAs(AttackRequest.class);
                 GamePhase before = room.match.phase();

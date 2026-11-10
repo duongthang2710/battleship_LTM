@@ -31,6 +31,7 @@ người tham gia nhận cùng cấu hình từ server. Cấu hình giữ nguyê
 - 5 tàu: thêm Destroyer (2 ô).
 - **Alternate shots:** mọi phát bắn hợp lệ đều chuyển lượt.
 - **Hit grants another shot:** bắn trúng hoặc đánh chìm được bắn tiếp; trượt thì chuyển lượt.
+- **Combat: Classic / Skill battle:** chọn độc lập với Basic/Fleet Designer, số tàu và luật bắn (xem [Skill battle](#skill-battle)).
 
 Player 1 mở trận. Mỗi phát bắn hợp lệ bắt đầu cửa sổ 60 giây tiếp theo (kể cả
 khi giữ lượt); bắn sai/bắn trùng không đặt lại đồng hồ. Hết giờ vẫn thua ngay.
@@ -185,7 +186,7 @@ một message thành nhiều đoạn hoặc gộp nhiều message trong một l�
 | Tài khoản | `REGISTER`, `REGISTER_OK`, `LOGIN`, `LOGOUT`, `LOGOUT_OK`, `AUTH_SUCCESS`, `AUTH_FAILED` |
 | Phòng | `CREATE_ROOM`, `JOIN_ROOM`, `ROOM_CREATED`, `ROOM_JOINED`, `PLAYER_JOINED`, `ROOM_UPDATED` |
 | Sẵn sàng/rời phòng | `READY`, `NOT_READY`, `START_PLACEMENT`, `LEAVE_ROOM`, `ROOM_LEFT`, `PLAYER_LEFT` |
-| Trận đấu | `SUBMIT_FLEET`, `FLEET_ACCEPTED`, `START_BATTLE`, `ATTACK`, `MATCH_UPDATED`, `TURN_TIMER` |
+| Trận đấu | `SUBMIT_FLEET`, `FLEET_ACCEPTED`, `START_BATTLE`, `ATTACK`, `USE_SKILL`, `MATCH_UPDATED`, `TURN_TIMER` |
 | Xếp hạng | `LEADERBOARD_REQUEST`, `LEADERBOARD_RESULT`, `LEADERBOARD_ERROR` |
 | Chơi lại | `REMATCH_REQUEST`, `REMATCH_DECLINE`, `REMATCH_UPDATED` |
 | Lệnh bị từ chối | `ERROR` |
@@ -603,6 +604,27 @@ mở hai client desktop kiểm tra đổi cửa sổ/toàn màn hình, lưu, b�
 Bài kiểm tra dùng file riêng trong `build/pvp-verification`, không ghi cấu hình cá nhân.
 
 
+## Skill battle
+
+**PvP → Create Room → Room Settings → COMBAT → SKILL BATTLE.** Chế độ PvP; AI Battle vẫn là Classic.
+
+- Mỗi phát bắn thường hợp lệ +1 năng lượng (tối đa 8, bắt đầu 0). Phát bắn bằng skill không cộng năng lượng.
+- Dùng skill thay cho phát bắn của lượt: trừ năng lượng, **luôn chuyển lượt** (kể cả luật Hit grants another shot) và mở cửa sổ 60 giây mới.
+  Skill bị từ chối (thiếu năng lượng, ô đã bắn hết, chưa tới lượt) không đổi lượt và không reset đồng hồ. Hết 60 giây vẫn thua.
+- Server tính toàn bộ kết quả, kể cả vị trí ngẫu nhiên của Rải tên lửa; client chỉ gửi `USE_SKILL {skill, target, direction}`.
+
+| Skill | Năng lượng | Hiệu ứng |
+| --- | --- | --- |
+| Cluster (đạn chùm) | 3 | Ô tâm và 4 ô kề cạnh (hình +); bỏ qua ô ngoài bàn/đã bắn. |
+| Barrage (rải tên lửa) | 4 | 4 tên lửa rơi ngẫu nhiên vào ô chưa bắn trong vùng 4×4. |
+| Torpedo (ngư lôi) | 5 | Chạy dọc hàng/cột theo hướng chọn (T xoay N/E/S/W), đánh dấu MISS ô nước đi qua, dừng ở ô tàu chưa bị bắn đầu tiên. |
+| Sonar | 3 | Quét 3×3, chỉ người quét thấy số ô tàu chưa bị bắn; không bắn ô nào. Vùng đã quét được viền trên bàn địch. |
+
+Trong trận: phím **1–4** hoặc nút trên khay skill để chọn/hủy, di chuột xem vùng ảnh hưởng, click ô để dùng.
+Khi bật ẩn thông tin chìm, kết quả skill cũng chỉ hiện HIT/MISS. Lịch sử trận đếm một skill là một lượt; chưa lưu combat mode vào database.
+
+Kiểm tra: `./gradlew :shared:skillChecks :backend:checkSkillMatch` (cũng chạy trong `build`).
+
 ## Hạm đội tự thiết kế
 
 Trong **PVP → CREATE ROOM**, chọn trực tiếp **BASIC** hoặc **FLEET DESIGNER** ở cột phải, chọn 3–5 tàu và luật lượt, rồi xác nhận **CREATE ROOM**. Cột trái hiển thị đội tàu theo số lượng đã chọn; các lựa chọn nằm ở cột phải.
@@ -639,7 +661,7 @@ client TCP test, chạy hai ván/rematch rồi dọn đúng tài khoản và l�
 Atlas hai phe và danh mục footprint được xuất vào `build/designer-review/` khi chạy rendering check.
 
 
-Kiểm tra cấu hình phòng: `./gradlew build` chạy 12 tổ hợp Basic/Designer × 3–5 tàu × 2 luật lượt
+Kiểm tra cấu hình phòng: `./gradlew build` chạy 48 tổ hợp Basic/Designer × 3–5 tàu × 2 luật lượt × Classic/Skill × ẩn/hiện thông tin chìm
 bằng MatchService với đồng hồ kiểm soát. `./gradlew :backend:checkRoomSettingsTcp -PdatabaseChecks`
 chạy hai kết nối TCP thật qua PostgreSQL, tạo/join phòng, đấu đủ ván và chơi lại;
 chỉ các tài khoản và trận QA do bài kiểm tra này vừa tạo được dọn sau khi chạy.

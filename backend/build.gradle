@@ -106,3 +106,10 @@ tasks.register('checkMatchTimer', JavaExec) {
     mainClass = 'com.battleship.backend.match.MatchTimerChecks'
 }
 tasks.named('check') { dependsOn 'checkMatchTimer' }
+
+tasks.register('checkSkillMatch', JavaExec) {
+    dependsOn testClasses
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'com.battleship.backend.match.SkillMatchChecks'
+}
+tasks.named('check') { dependsOn 'checkSkillMatch' }

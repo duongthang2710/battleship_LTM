@@ -27,7 +27,8 @@ import java.util.Optional;
 public final class PlacementHud {
     public enum Action {
         SELECT_CARRIER, SELECT_BATTLESHIP, SELECT_CRUISER, SELECT_SUBMARINE,
-        SELECT_DESTROYER, ROTATE, REMOVE, RESET, RANDOM, READY, TOGGLE_BOARD, RESTART, LEAVE_ROOM, TOGGLE_DRAW, MORE, SETTINGS
+        SELECT_DESTROYER, ROTATE, REMOVE, RESET, RANDOM, READY, TOGGLE_BOARD, RESTART, LEAVE_ROOM, TOGGLE_DRAW, MORE, SETTINGS,
+        SKILL_CLUSTER, SKILL_BARRAGE, SKILL_TORPEDO, SKILL_SONAR
     }
 
     private static final int GOLD = 0xDEB663;
@@ -59,6 +60,21 @@ public final class PlacementHud {
     private com.battleship.shared.game.GameRules rules = com.battleship.shared.game.GameRules.DEFAULT;
     public void setRules(com.battleship.shared.game.GameRules rules) { this.rules = rules; }
     private int draftCount;
+    private boolean skillTray, skillsUsable;
+    private int energy, maxEnergy;
+    private com.battleship.shared.game.SkillType armedSkill;
+    private String skillHint = "";
+    /** Skill battle tray above the battle bar; hidden in Classic combat. */
+    public void setSkills(boolean shown, int energy, int maxEnergy, com.battleship.shared.game.SkillType armed,
+                          boolean usable, String hint) {
+        String hintText = hint == null ? "" : hint;
+        if (skillTray == shown && this.energy == energy && this.maxEnergy == maxEnergy && armedSkill == armed
+                && skillsUsable == usable && skillHint.equals(hintText)) return;
+        skillTray = shown; this.energy = energy; this.maxEnergy = maxEnergy; armedSkill = armed;
+        skillsUsable = usable; skillHint = hintText;
+        if (state != null && state.phase() != GamePhase.PLACEMENT) rebuild();
+    }
+    public static Action skillAction(com.battleship.shared.game.SkillType skill) { return Action.valueOf("SKILL_" + skill.name()); }
     public void setDesigner(boolean designer, boolean drawing, int count, boolean draft) {
         this.designer = designer; this.drawing = drawing; this.draftCount = count; this.draft = draft;
     }
@@ -151,6 +167,7 @@ public final class PlacementHud {
             button(w/2-167,32,214,34,enemyView?"YOUR FLEET  [Tab]":"ENEMY WATERS  [Tab]",Action.TOGGLE_BOARD,true,true);
             if(networkPlacement || aiMode) button(w/2+60,32,105,34,"LEAVE",Action.LEAVE_ROOM,true,false);
             regions.add(new Region(w/2-180,22,360,54));
+            if (skillTray) skillTray(draw, w);
             return;
         }
         float left = com.battleship.frontend.ui.BattleSidebarLayout.flagLeft(w);
@@ -188,6 +205,24 @@ public final class PlacementHud {
             button(mx+154,my+62,130,34,draft?"Clear draft":"Remove",Action.REMOVE,!networkLocked&&selected!=null&&(draft||state.player().board().ship(selected)!=null),false);
             button(mx+14,my+16,270,34,"Reset fleet [C]",Action.RESET,!networkLocked,false);
             if(networkPlacement || aiMode) button(mx+14,my+110,270,30,aiMode?"Leave match":"Leave room",Action.LEAVE_ROOM,true,false);
+        }
+    }
+
+    private void skillTray(NavalHudSkin draw, float w) {
+        float x = w/2-250, y = 82, width = 500, height = 62;
+        draw.panel(x, y, width, height, 0x082D46);
+        regions.add(new Region(x, y, width, height));
+        text(body, "ENERGY", 10, x + 14, y + 57, GOLD);
+        for (int i = 0; i < maxEnergy; i++)
+            panel(x + 88 + i * 14, y + 46, 10, 6, Materials.rgb(i < energy ? CYAN : 0x2B3F52)).setUserData("uiRole", "energy-pip");
+        BitmapText hint = text(body, skillHint, 10, x + 214, y + 57, CYAN);
+        hint.setUserData("uiRole", "skill-hint");
+        UiTypography.fit(hint, width - 226);
+        var skills = com.battleship.shared.game.SkillType.values();
+        for (int i = 0; i < skills.length; i++) {
+            var skill = skills[i];
+            button(x + 13 + i * 120, y + 6, 114, 32, skill.name() + " " + skill.cost(),
+                    skillAction(skill), skillsUsable && energy >= skill.cost(), skill == armedSkill);
         }
     }
 
