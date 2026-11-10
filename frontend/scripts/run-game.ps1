@@ -4,6 +4,7 @@ param(
     [ValidateSet('Auto', 'Integrated')][string]$GpuPreference = 'Auto',
     [string]$ServerHost = 'localhost',
     [int]$ServerPort = 2209,
+    [ValidateSet('true', 'false')][string]$ServerTls = 'false',
     [string]$PlayerName = 'Captain'
 )
 
@@ -30,7 +31,8 @@ function Set-GameGpuPreference([int]$value) {
 
 function Start-Game {
     & $gameJava '--enable-native-access=ALL-UNNAMED' "-Dbattleship.host=$ServerHost" `
-        "-Dbattleship.port=$ServerPort" "-Dbattleship.player=$PlayerName" '-cp' (Join-Path $gameLibraries '*') `
+        "-Dbattleship.port=$ServerPort" "-Dbattleship.tls=$ServerTls" "-Dbattleship.player=$PlayerName" `
+        '-cp' (Join-Path $gameLibraries '*') `
         'com.battleship.frontend.app.BattleshipApplication' | Out-Host
     return $LASTEXITCODE
 }

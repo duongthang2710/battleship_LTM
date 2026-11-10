@@ -10,6 +10,8 @@ import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.net.Socket;
 import java.util.logging.Logger;
+import javax.net.ssl.SSLSocket;
+import javax.net.ssl.SSLSocketFactory;
 
 public final class NetworkClient implements AutoCloseable {
     private static final Logger LOG = Logger.getLogger(NetworkClient.class.getName());
@@ -23,13 +25,18 @@ public final class NetworkClient implements AutoCloseable {
     public void connectAndRead(String host, int port, Message connectMessage) {
         String reason = "Server closed the connection";
         com.battleship.shared.protocol.MessageType lastReceived = null;
-        try {
-            socket.connect(new InetSocketAddress(host, port), 3_000);
-            socket.setTcpNoDelay(true);
-            socket.setSoTimeout(30_000);
-            var input = new DataInputStream(new BufferedInputStream(socket.getInputStream()));
+        try (Socket transport = connect(host, port)) {
+            if (transport instanceof SSLSocket tls) {
+                var parameters = tls.getSSLParameters();
+                parameters.setEndpointIdentificationAlgorithm("HTTPS");
+                tls.setSSLParameters(parameters);
+                tls.setSoTimeout(5_000);
+                tls.startHandshake();
+            }
+            transport.setSoTimeout(30_000);
+            var input = new DataInputStream(new BufferedInputStream(transport.getInputStream()));
             synchronized (this) {
-                output = new DataOutputStream(new BufferedOutputStream(socket.getOutputStream()));
+                output = new DataOutputStream(new BufferedOutputStream(transport.getOutputStream()));
                 send(connectMessage);
             }
             Message message;
@@ -46,6 +53,15 @@ public final class NetworkClient implements AutoCloseable {
             close();
             handler.onDisconnected(reason);
         }
+    }
+
+    private Socket connect(String host, int port) throws IOException {
+        socket.connect(new InetSocketAddress(host, port), 3_000);
+        socket.setTcpNoDelay(true);
+        if (!Boolean.getBoolean("battleship.tls")) return socket;
+
+        var factory = (SSLSocketFactory) SSLSocketFactory.getDefault();
+        return factory.createSocket(socket, host, port, true);
     }
 
     public synchronized void send(Message message) throws IOException {
