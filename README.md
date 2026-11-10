@@ -689,10 +689,11 @@ Hộp lời mời PvP được thu gọn và tự đóng ở cả bên gửi/nh�
 các lỗi hoặc thông báo hết hạn vẫn có nút Close để người chơi đọc được lý do.
 
 
-Room Setup có thêm **Starting Fleet** (Empty Board / Shuffled Fleet) và
-**Enemy Fleet Report** (Show Losses / Hide Report). Shuffled Fleet xếp đội hình
-ban đầu để chỉnh tiếp, không tự Ready. Hide Report ẩn dải trạng thái tàu địch.
-Server lưu các tùy chọn cho cả hai client và giữ nguyên khi rematch.
+Room Setup có **Sinking Information** với **Show Sunk Info / Hide Sunk Info**.
+Hide Sunk Info chỉ báo trúng/trượt trong trận. Server giữ kín loại tàu, trạng thái
+chìm và model tàu địch cho đến khi trận kết thúc, kể cả kết thúc bằng timeout.
+Đội hình bắt đầu trên bàn trống. Người chơi vẫn có thể dùng Random khi đặt tàu.
+Server lưu tùy chọn cho cả hai client và giữ nguyên khi rematch.
 Join hỗ trợ **Ctrl+V / Cmd+V** hoặc Shift+Insert để dán mã. Thông báo lượt ở trên
 màn hình tự tắt sau khoảng 3 giây; countdown dùng chữ lớn và nét trắng thon hai đầu.
 [Review Room Setup, HUD và chat](docs/room-hud-chat-review.md).
