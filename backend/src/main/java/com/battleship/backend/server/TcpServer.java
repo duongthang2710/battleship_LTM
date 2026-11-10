@@ -5,6 +5,7 @@ import com.battleship.backend.database.Database;
 import com.battleship.backend.auth.AuthService;
 import com.battleship.backend.auth.UserRepository;
 import com.battleship.backend.match.MatchRepository;
+import java.net.InetAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.net.SocketException;
@@ -19,9 +20,13 @@ public final class TcpServer implements AutoCloseable {
     private final ExecutorService workers = Executors.newVirtualThreadPerTaskExecutor();
 
     public TcpServer(int port) throws IOException, java.sql.SQLException {
+        this(port, null);
+    }
+
+    TcpServer(int port, InetAddress bindAddress) throws IOException, java.sql.SQLException {
         Database database = Database.fromEnvironment();
         database.migrate();
-        server = new ServerSocket(port);
+        server = new ServerSocket(port, 50, bindAddress);
         connections = new ConnectionManager(new AuthService(new UserRepository(database)), new MatchRepository(database),
                 new com.battleship.backend.leaderboard.LeaderboardRepository(database),
                 new com.battleship.backend.friends.FriendsRepository(database));
