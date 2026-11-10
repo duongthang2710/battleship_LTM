@@ -15,6 +15,11 @@ import com.battleship.shared.game.ShipType;
 import com.battleship.shared.game.Side;
 import com.battleship.shared.game.Player;
 import com.battleship.shared.game.PlacementState;
+import com.battleship.shared.game.SkillDirection;
+import com.battleship.shared.game.SkillResult;
+import com.battleship.shared.game.SkillTargeting;
+import com.battleship.shared.game.SkillType;
+import com.battleship.shared.game.SonarReading;
 import com.battleship.shared.match.MatchSnapshot;
 import com.battleship.frontend.pvp.PvpController;
 import com.jme3.math.Vector2f;
@@ -65,6 +70,9 @@ public final class GameController {
     private Runnable openSettings = () -> { };
     public void onSettings(Runnable action) { openSettings = action; }
     private String message = "Choose a ship, then click a cell.";
+    private SkillType armedSkill;
+    private SkillDirection torpedoDirection = SkillDirection.EAST;
+    private String skillHint = "";
 
     public GameController(GameEngine engine, BoardPicker picker, FleetRenderer fleet,
                           PlacementFeedback feedback, PlacementHud controls, BattleHud hud, OwnBoardMinimap minimap,
@@ -103,6 +111,7 @@ public final class GameController {
         effects.clear(); beforeShot = null; lastPlacementBoard = null; resultSoundPlayed = false;
         countingIntoBattle = false; startFlash = 0; hud.setStartCountdown(0, false);
         networkPlacement = false;
+        clearSkills();
         designer.clear(); drawingMode = false;
         engine.restart(); engine.setRules(com.battleship.shared.game.GameRules.DEFAULT);
         network = null;
@@ -148,6 +157,7 @@ public final class GameController {
         effects.clear(); beforeShot = null; lastPlacementBoard = null; resultSoundPlayed = false;
         countingIntoBattle = false; startFlash = 0; hud.setStartCountdown(0, false);
         engine.setRules(rules); designer.clear(); drawingMode = designerMode();
+        clearSkills();
         var options=network.room()==null?com.battleship.shared.room.RoomOptions.DEFAULT:network.room().options();
         hud.setFleetReportVisible(!options.hideSunkInfo());
         networkPlacement = true;
@@ -182,7 +192,11 @@ public final class GameController {
                 new Player(snapshot.opponentId(), snapshot.opponentName(), snapshot.enemyBoard().board()),
                 snapshot.currentPlayerId(), snapshot.winnerId(), snapshot.lastAttack(), PlacementState.initial(), true,
                 snapshot.turnNumber());
-        AttackResult attack = snapshot.lastAttack();
+        SkillResult skill = snapshot.skills() == null ? null : snapshot.skills().lastSkill();
+        if (!snapshot.currentPlayerId().equals(snapshot.playerId()) || snapshot.phase() != GamePhase.BATTLE) armedSkill = null;
+        if (skill != null) skillHint = skillSummary(skill, snapshot.playerId());
+        // A skill volley is shown as one lead projectile; every affected cell appears on impact.
+        AttackResult attack = skill != null ? leadImpact(skill) : snapshot.lastAttack();
         effects.clear();
         if (snapshot.phase() == GamePhase.GAME_OVER && snapshot.endReason() != com.battleship.shared.match.MatchEndReason.FLEET_DESTROYED) {
             if (snapshot.timedOut()) sound.accept(Cue.TIMEOUT);
@@ -191,8 +205,11 @@ public final class GameController {
             showGameOver();
             return;
         }
-        enemyView = attack == null || attack.attackerId().equals(snapshot.playerId());
-        message = attack == null ? "Battle started. Player 1 goes first." : attack.type() + " at " + cellName(attack.coordinate());
+        String shooter = skill != null ? skill.attackerId() : attack == null ? null : attack.attackerId();
+        enemyView = skill != null && attack == null ? state().currentPlayerId().equals(snapshot.playerId())
+                : shooter == null || shooter.equals(snapshot.playerId());
+        message = skill != null ? skillHint : attack == null ? "Battle started. Player 1 goes first." : attack.type() + " at " + cellName(attack.coordinate());
+        if (skill != null && attack == null) sound.accept(Cue.TARGET);
         beforeShot = previous;
         if (attack != null) sound.accept(Cue.CANNON);
         if (attack != null) effects.play(attack, attack.sunk() ? attack.affectedCells() : List.of(),
@@ -208,6 +225,7 @@ public final class GameController {
     public void networkError(String detail) {
         if (!networkPlacement) return;
         message = detail;
+        if (skillMode() && state().phase() == GamePhase.BATTLE) skillHint = detail;
         refreshHud();
     }
 
@@ -252,6 +270,7 @@ public final class GameController {
         if (!effects.isBusy()) minimap.update(state().player().board());
         if (draggedShip != null) { dragShip(cursor); return; }
         hover = overHud(cursor) ? null : picker.pick(cursor).orElse(null);
+        if (skillMode()) refreshSkillTray();
         targeting.clear();
         if (state().phase() == GamePhase.PLACEMENT && designerMode() && !placementLocked() && drawingMode) {
             if (designer.hasDraft()) feedback.showPreview(designer.cells(), designer.validation().success());
@@ -261,6 +280,8 @@ public final class GameController {
                 && state().player().board().ship(state().placement().selectedType()) == null) {
             PlacementResult preview = engine.previewPlacement(hover);
             feedback.showPreview(preview.affectedCells(), preview.success());
+        } else if (armedSkill != null && state().phase() == GamePhase.BATTLE && enemyView && hover != null && !effects.isBusy()) {
+            feedback.showPreview(skillPreview(armedSkill, hover), canUseSkills() && energy() >= armedSkill.cost());
         } else if (!effects.isBusy() && hover != null && canTarget(hover)) {
             feedback.clearPreview();
             targeting.show(hover);
@@ -404,6 +425,7 @@ public final class GameController {
         gameOver.setEndReason(null);
         lastPlacementBoard = null; resultSoundPlayed = false;
         designer.clear(); drawingMode = designerMode();
+        clearSkills();
         networkState = null;
         effects.clear();
         targeting.clear();
@@ -419,6 +441,7 @@ public final class GameController {
 
     public void perform(PlacementHud.Action action) {
         if (action == PlacementHud.Action.SETTINGS) { sound.accept(Cue.CLICK); cancelShipDrag(); openSettings.run(); return; }
+        if (skillMode() && state().phase() == GamePhase.BATTLE && skillAction(action)) return;
         if (action.name().startsWith("SELECT_")
                 && !engine.rules().allows(ShipType.valueOf(action.name().substring(7)))) return;
         if (networkPlacement && action == PlacementHud.Action.LEAVE_ROOM) { cancelShipDrag(); if(askLeave!=null) askLeave.run(); else leaveRoom.run(); return; }
@@ -540,6 +563,7 @@ public final class GameController {
     }
 
     private void attack() {
+        if (networkPlacement && armedSkill != null) { fireSkill(); return; }
         if (networkPlacement) {
             if (!canTarget(hover)) { message = "Wait for your turn; target enemy waters."; refreshHud(); return; }
             if (network.attack(hover)) { sound.accept(Cue.TARGET); message = "Volley sent. Awaiting server."; targeting.clear(); refreshHud(); }
@@ -618,6 +642,8 @@ public final class GameController {
         var selected = state().player().board().ship(state().placement().selectedType());
         if (state().phase() == GamePhase.PLACEMENT && selected != null)
             feedback.showSelection(selected.occupiedCells());
+        else if (skillMode() && enemyView && state().phase() != GamePhase.PLACEMENT && !scans().isEmpty())
+            feedback.showSelection(scans().stream().flatMap(scan -> scan.area().stream()).distinct().toList());
         else feedback.clearSelection();
         feedback.clearPreview();
         if (designer.hasDraft()) feedback.showPreview(designer.cells(), designer.validation().success());
@@ -639,6 +665,7 @@ public final class GameController {
         controls.setRules(engine.rules());
         controls.setDesigner(designerMode(), drawingMode, designer.cells().size(), designer.hasDraft());
         controls.update(state(), message, enemyView);
+        refreshSkillTray();
         if (effects.isBusy()) { refreshShotStatus(); return; }
         hud.clearShotResult();
         if (state().phase() == GamePhase.PLACEMENT) {
@@ -687,6 +714,88 @@ public final class GameController {
             }
         }
     }
+    private boolean skillMode() { return networkPlacement && engine.rules().skills(); }
+    private int energy() {
+        return network == null || network.match() == null || network.match().skills() == null ? 0 : network.match().skills().ownEnergy();
+    }
+    private List<SonarReading> scans() {
+        return network == null || network.match() == null || network.match().skills() == null ? List.of() : network.match().skills().ownScans();
+    }
+    private boolean canUseSkills() {
+        return skillMode() && state().phase() == GamePhase.BATTLE && !introBlocked() && !effects.isBusy() && !network.pending()
+                && state().currentPlayerId().equals(state().player().id());
+    }
+    private void clearSkills() { armedSkill = null; torpedoDirection = SkillDirection.EAST; skillHint = ""; }
+
+    private void refreshSkillTray() {
+        boolean shown = skillMode() && state().phase() == GamePhase.BATTLE;
+        String hint = skillHint;
+        if (armedSkill != null) hint = armedSkill.label() + (armedSkill == SkillType.TORPEDO ? " " + torpedoDirection + " [T]" : "")
+                + ": pick a cell";
+        else if (hover != null && enemyView) {
+            for (SonarReading scan : scans()) if (scan.area().contains(hover)) { hint = "Sonar: " + scan.count() + " ship cells here"; break; }
+        }
+        if (hint.isEmpty()) hint = "[1-4] arm a skill";
+        controls.setSkills(shown, energy(), SkillType.MAX_ENERGY, armedSkill, canUseSkills(), hint);
+    }
+
+    /** Keys 1-4 and the tray buttons arm/disarm skills; T turns the torpedo. Returns true when consumed. */
+    private boolean skillAction(PlacementHud.Action action) {
+        SkillType skill = switch (action) {
+            case SKILL_CLUSTER, SELECT_CARRIER -> SkillType.CLUSTER;
+            case SKILL_BARRAGE, SELECT_BATTLESHIP -> SkillType.BARRAGE;
+            case SKILL_TORPEDO, SELECT_CRUISER -> SkillType.TORPEDO;
+            case SKILL_SONAR, SELECT_SUBMARINE -> SkillType.SONAR;
+            default -> null;
+        };
+        if (action == PlacementHud.Action.ROTATE && armedSkill == SkillType.TORPEDO) {
+            torpedoDirection = torpedoDirection.next(); sound.accept(Cue.ROTATE); refreshSkillTray(); return true;
+        }
+        if (skill == null) return false;
+        if (introBlocked() || effects.isBusy()) return true;
+        if (armedSkill == skill) { armedSkill = null; skillHint = skill.label() + " cancelled."; sound.accept(Cue.CLICK); }
+        else if (!canUseSkills()) { skillHint = "Skills can be used on your turn."; sound.accept(Cue.ERROR); }
+        else if (energy() < skill.cost()) { skillHint = skill.label() + " needs " + skill.cost() + " energy."; sound.accept(Cue.ERROR); }
+        else { armedSkill = skill; enemyView = true; sound.accept(Cue.CLICK); }
+        refresh();
+        return true;
+    }
+
+    private List<Coordinate> skillPreview(SkillType skill, Coordinate cell) {
+        Board enemy = state().enemy().board();
+        List<Coordinate> area = SkillTargeting.area(skill, cell, torpedoDirection);
+        return skill == SkillType.TORPEDO ? area.stream().filter(c -> !enemy.wasAttacked(c)).toList() : area;
+    }
+
+    private void fireSkill() {
+        if (!canUseSkills()) { skillHint = "Wait for your turn."; refreshHud(); return; }
+        if (energy() < armedSkill.cost()) { skillHint = armedSkill.label() + " needs " + armedSkill.cost() + " energy."; refreshHud(); return; }
+        if (network.useSkill(armedSkill, hover, armedSkill == SkillType.TORPEDO ? torpedoDirection : null)) {
+            sound.accept(Cue.TARGET); skillHint = armedSkill.label() + " launched. Awaiting server.";
+            targeting.clear(); feedback.clearPreview();
+        }
+        refreshHud();
+    }
+
+    /** The most important shot of a volley: the winning or sinking hit, else any hit, else the last shot. */
+    private static AttackResult leadImpact(SkillResult skill) {
+        var impacts = skill.impacts();
+        if (impacts.isEmpty()) return null;
+        return impacts.stream().filter(AttackResult::gameOver).findFirst()
+                .or(() -> impacts.stream().filter(AttackResult::sunk).findFirst())
+                .or(() -> impacts.stream().filter(i -> i.type() != com.battleship.shared.game.AttackResultType.MISS).findFirst())
+                .orElse(impacts.getLast());
+    }
+
+    private static String skillSummary(SkillResult skill, String ownId) {
+        String who = skill.attackerId().equals(ownId) ? "" : "Enemy ";
+        if (skill.skill() == SkillType.SONAR)
+            return skill.sonarCount() == null ? "Enemy sonar swept your waters near " + cellName(skill.origin()) + "."
+                    : "Sonar: " + skill.sonarCount() + " ship cells near " + cellName(skill.origin()) + ".";
+        long hits = skill.impacts().stream().filter(i -> i.type() != com.battleship.shared.game.AttackResultType.MISS).count();
+        return who + skill.skill().label() + ": " + hits + " hit" + (hits == 1 ? "" : "s") + " / " + skill.impacts().size() + " shots.";
+    }
+
     private boolean introBlocked() {
         return (networkPlacement || ai != null) && state().phase() == GamePhase.BATTLE
                 && (remainingStartMillis() > 0 || startFlash > 0);

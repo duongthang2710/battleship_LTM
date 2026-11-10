@@ -3,6 +3,8 @@ package com.battleship.shared.game;
 import com.battleship.shared.game.PlacementResult.Failure;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.List;
 import java.util.Objects;
 import java.util.Random;
@@ -12,9 +14,12 @@ public final class GameEngine {
     private final Random random;
     private GameState state;
     private GameRules rules = GameRules.DEFAULT;
+    private final Map<String, Integer> energy = new HashMap<>();
+    private final Map<String, List<SonarReading>> scans = new HashMap<>();
+    private SkillResult lastSkill;
     public GameMode mode() { return rules.mode(); }
     public GameRules rules() { return rules; }
-    public void setMode(GameMode mode) { setRules(new GameRules(mode, rules.shipCount(), rules.turnRule())); }
+    public void setMode(GameMode mode) { setRules(new GameRules(mode, rules.shipCount(), rules.turnRule(), rules.combatMode())); }
     public void setRules(GameRules rules) {
         if (state.phase() != GamePhase.PLACEMENT || !state.player().board().ships().isEmpty() || !state.enemy().board().ships().isEmpty())
             throw new IllegalStateException("Choose room rules before placing ships");
@@ -34,8 +39,10 @@ public final class GameEngine {
     public GameState state() { return state; }
 
     /** Player 1 opens the server-owned match, independently of faction color. */
-    public GameEngine(Player first, Player second) {
-        random = new Random();
+    public GameEngine(Player first, Player second) { this(first, second, new Random()); }
+
+    public GameEngine(Player first, Player second, Random random) {
+        this.random = Objects.requireNonNull(random);
         state = new GameState(GamePhase.PLACEMENT, first, second, first.id(), null, null,
                 PlacementState.initial(), false, 0);
     }
@@ -253,7 +260,73 @@ public final class GameEngine {
         state = new GameState(winnerId == null ? GamePhase.BATTLE : GamePhase.GAME_OVER, player, enemy,
                 winnerId == null && !(rules.turnRule() == TurnRule.HIT_CONTINUES && target != null) ? defender.id() : attackerId, winnerId, result, state.placement(), state.ready(),
                 state.turnNumber() + 1);
+        lastSkill = null;
+        if (rules.skills()) energy.merge(attackerId, 1, (old, gain) -> Math.min(SkillType.MAX_ENERGY, old + gain));
         return result;
+    }
+
+    public int energy(String playerId) { return energy.getOrDefault(playerId, 0); }
+    public List<SonarReading> scans(String playerId) { return scans.getOrDefault(playerId, List.of()); }
+    /** The skill that produced the current state, or null when the last action was a normal shot. */
+    public SkillResult lastSkill() { return lastSkill; }
+
+    /** Uses one skill instead of a normal shot. An accepted skill spends energy and always passes the turn. */
+    public SkillResult useSkill(String attackerId, SkillType skill, Coordinate origin, SkillDirection direction) {
+        boolean playerAttacks = state.player().id().equals(attackerId);
+        Player defender = playerAttacks ? state.enemy() : state.enemy().id().equals(attackerId) ? state.player() : null;
+        String defenderId = defender == null ? null : defender.id();
+        AttackResultType rejection = skillRejection(attackerId, skill, origin, direction);
+        List<Coordinate> shots = rejection == null ? SkillTargeting.shots(skill, origin, direction, defender.board(), random) : List.of();
+        if (rejection == null && skill != SkillType.SONAR && shots.isEmpty()) rejection = AttackResultType.ALREADY_ATTACKED;
+        if (rejection != null) return SkillResult.rejected(rejection, skill, attackerId, defenderId, origin, direction,
+                state.phase() == GamePhase.GAME_OVER, state.winnerId());
+
+        List<Coordinate> area = SkillTargeting.area(skill, origin, direction);
+        Board board = defender.board();
+        List<AttackResult> impacts = new ArrayList<>();
+        String winnerId = null;
+        boolean anyHit = false, anySunk = false;
+        for (Coordinate cell : shots) {
+            board = board.withAttack(cell);
+            Ship target = board.shipAt(cell);
+            boolean sunk = target != null && target.isSunk();
+            winnerId = board.fleet().isSunk(rules) ? attackerId : null;
+            AttackResultType type = winnerId != null ? AttackResultType.GAME_OVER
+                    : target == null ? AttackResultType.MISS : sunk ? AttackResultType.SUNK : AttackResultType.HIT;
+            impacts.add(new AttackResult(type, cell, target == null ? null : target.type(), sunk, winnerId != null,
+                    attackerId, defenderId, winnerId, sunk ? target.occupiedCells() : List.of(cell)));
+            anyHit |= target != null;
+            anySunk |= sunk;
+            if (winnerId != null) break;
+        }
+        Integer sonarCount = null;
+        if (skill == SkillType.SONAR) {
+            sonarCount = SkillTargeting.sonarCount(area, defender.board());
+            List<SonarReading> readings = new ArrayList<>(scans(attackerId));
+            readings.add(new SonarReading(area, sonarCount));
+            scans.put(attackerId, List.copyOf(readings));
+        }
+        energy.put(attackerId, energy(attackerId) - skill.cost());
+        AttackResultType summary = winnerId != null ? AttackResultType.GAME_OVER : skill == SkillType.SONAR ? AttackResultType.SCANNED
+                : anySunk ? AttackResultType.SUNK : anyHit ? AttackResultType.HIT : AttackResultType.MISS;
+        SkillResult result = new SkillResult(summary, skill, attackerId, defenderId, origin, direction, area, impacts,
+                sonarCount, winnerId != null, winnerId);
+        Player player = playerAttacks ? state.player() : state.player().withBoard(board);
+        Player enemy = playerAttacks ? state.enemy().withBoard(board) : state.enemy();
+        state = new GameState(winnerId == null ? GamePhase.BATTLE : GamePhase.GAME_OVER, player, enemy,
+                winnerId == null ? defenderId : attackerId, winnerId, impacts.isEmpty() ? null : impacts.getLast(),
+                state.placement(), state.ready(), state.turnNumber() + 1);
+        lastSkill = result;
+        return result;
+    }
+
+    private AttackResultType skillRejection(String attackerId, SkillType skill, Coordinate origin, SkillDirection direction) {
+        if (state.phase() == GamePhase.GAME_OVER) return AttackResultType.GAME_FINISHED;
+        if (state.phase() != GamePhase.BATTLE) return AttackResultType.NOT_IN_BATTLE;
+        if (!rules.skills() || skill == null || skill == SkillType.TORPEDO && direction == null) return AttackResultType.INVALID_SKILL;
+        if (!state.currentPlayerId().equals(attackerId)) return AttackResultType.NOT_YOUR_TURN;
+        if (!Board.inBounds(origin)) return AttackResultType.INVALID_COORDINATE;
+        return energy(attackerId) < skill.cost() ? AttackResultType.NOT_ENOUGH_ENERGY : null;
     }
 
     public boolean timeoutCurrentTurn() { return forfeit(state.currentPlayerId()); }
@@ -265,6 +338,7 @@ public final class GameEngine {
         String winner = playerId.equals(state.player().id()) ? state.enemy().id() : state.player().id();
         state = new GameState(GamePhase.GAME_OVER, state.player(), state.enemy(), state.currentPlayerId(),
                 winner, null, state.placement(), state.ready(), state.turnNumber());
+        lastSkill = null;
         return true;
     }
 
@@ -273,6 +347,9 @@ public final class GameEngine {
         Player enemy = state.enemy().withBoard(new Board());
         state = new GameState(GamePhase.PLACEMENT, player, enemy, player.id(), null, null,
                 PlacementState.initial(), false, 0);
+        energy.clear();
+        scans.clear();
+        lastSkill = null;
     }
 
     private AttackResultType attackRejection(String attackerId, Coordinate coordinate) {

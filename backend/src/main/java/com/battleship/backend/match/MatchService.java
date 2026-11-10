@@ -6,6 +6,8 @@ import com.battleship.shared.match.FleetSubmission;
 import com.battleship.shared.match.MatchSnapshot;
 import com.battleship.shared.match.TurnTimer;
 import com.battleship.shared.match.MatchEndReason;
+import com.battleship.shared.match.SkillRequest;
+import com.battleship.shared.match.SkillState;
 import com.battleship.shared.room.RoomPlayer;
 import com.battleship.shared.room.RoomOptions;
 import java.util.List;
@@ -42,13 +44,17 @@ public final class MatchService {
         this(players, rules, options, System::nanoTime);
     }
     MatchService(List<RoomPlayer> players, GameRules rules, RoomOptions options, LongSupplier nanoTime) {
+        this(players, rules, options, nanoTime, new java.util.Random());
+    }
+    /** {@code random} only drives the missile barrage, so checks can seed it. */
+    MatchService(List<RoomPlayer> players, GameRules rules, RoomOptions options, LongSupplier nanoTime, java.util.Random random) {
         this.nanoTime = nanoTime;
         this.options = options;
         RoomPlayer first = players.get(0);
         RoomPlayer second = players.get(1);
         firstSide = first.side();
         engine = new GameEngine(new Player(first.clientId(), first.playerName(), new Board()),
-                new Player(second.clientId(), second.playerName(), new Board()));
+                new Player(second.clientId(), second.playerName(), new Board()), random);
         engine.setRules(rules);
     }
 
@@ -86,6 +92,27 @@ public final class MatchService {
         return result;
     }
 
+    /** Same deadline/countdown guard as a normal shot; an accepted skill always passes the turn. */
+    public SkillResult useSkill(String clientId, SkillRequest request) {
+        expireTurn();
+        SkillType skill = request == null ? null : request.skill();
+        Coordinate target = request == null ? null : request.target();
+        SkillDirection direction = request == null ? null : request.direction();
+        if (phase() == GamePhase.BATTLE && nanoTime.getAsLong() - turnStarts < 0) {
+            GameState state = engine.state();
+            String defender = state.player().id().equals(clientId) ? state.enemy().id() : state.player().id();
+            return new SkillResult(AttackResultType.NOT_IN_BATTLE, skill, clientId, defender, target, direction,
+                    List.of(), List.of(), null, false, null);
+        }
+        SkillResult result = engine.useSkill(clientId, skill, target, direction);
+        if (result.accepted()) {
+            revision++;
+            if (phase() == GamePhase.BATTLE) startTurn();
+            else if (phase() == GamePhase.GAME_OVER) endReason = MatchEndReason.FLEET_DESTROYED;
+        }
+        return result;
+    }
+
     private void startTurn() {
         startTurn(0);
     }
@@ -112,9 +139,8 @@ public final class MatchService {
     }
 
     public MatchEndReason endReason() { return endReason; }
-    public int totalTurns() {
-        return engine.state().player().board().attackedCells().size() + engine.state().enemy().board().attackedCells().size();
-    }
+    /** One normal shot or one skill each counts as a turn. */
+    public int totalTurns() { return engine.state().turnNumber(); }
     public Integer winnerSlot() {
         String winner = engine.state().winnerId();
         return winner == null ? null : winner.equals(engine.state().player().id()) ? 1 : 2;
@@ -154,18 +180,38 @@ public final class MatchService {
         Player enemy = first ? state.enemy() : state.player();
         boolean concealSinking = options.hideSunkInfo() && state.phase() != GamePhase.GAME_OVER;
         boolean revealEnemyFleet = options.hideSunkInfo() && state.phase() == GamePhase.GAME_OVER;
-        AttackResult attack = state.lastAttack();
-        if (attack != null && concealSinking) {
-            attack = new AttackResult(attack.type() == AttackResultType.MISS ? AttackResultType.MISS : AttackResultType.HIT,
-                    attack.coordinate(), null, false, false, attack.attackerId(), attack.defenderId(), null,
-                    List.of(attack.coordinate()));
-        } else if (attack != null && !attack.sunk()) attack = new AttackResult(attack.type(), attack.coordinate(), null,
-                false, false, attack.attackerId(), attack.defenderId(), null, attack.affectedCells());
+        AttackResult attack = mask(state.lastAttack(), concealSinking);
         return new MatchSnapshot(revision, state.phase(), own.id(), enemy.id(), enemy.name(),
                 first ? firstSide : firstSide.opponent(), BoardView.from(own.board(), false),
                 BoardView.from(enemy.board(), !revealEnemyFleet, concealSinking),
                 own.fleet().isComplete(engine.rules()), enemy.fleet().isComplete(engine.rules()), state.currentPlayerId(), state.turnNumber(),
-                state.winnerId(), attack, timer(), endReason == MatchEndReason.TURN_TIMEOUT, endReason);
+                state.winnerId(), attack, timer(), endReason == MatchEndReason.TURN_TIMEOUT, endReason,
+                skillState(own.id(), enemy.id(), concealSinking));
+    }
+
+    private SkillState skillState(String ownId, String enemyId, boolean concealSinking) {
+        if (!engine.rules().skills()) return null;
+        SkillResult skill = engine.lastSkill();
+        if (skill != null) {
+            AttackResultType type = concealSinking && skill.type() == AttackResultType.SUNK ? AttackResultType.HIT : skill.type();
+            // Only the scanner learns the sonar count.
+            Integer count = ownId.equals(skill.attackerId()) ? skill.sonarCount() : null;
+            skill = new SkillResult(type, skill.skill(), skill.attackerId(), skill.defenderId(), skill.origin(),
+                    skill.direction(), skill.area(), skill.impacts().stream().map(i -> mask(i, concealSinking)).toList(),
+                    count, skill.gameOver(), skill.winnerId());
+        }
+        return new SkillState(engine.energy(ownId), engine.energy(enemyId), SkillType.MAX_ENERGY, engine.scans(ownId), skill);
+    }
+
+    /** Ship identity is only revealed on a sink, and not at all while sinking information is hidden. */
+    private static AttackResult mask(AttackResult attack, boolean concealSinking) {
+        if (attack == null) return null;
+        if (concealSinking) return new AttackResult(attack.type() == AttackResultType.MISS ? AttackResultType.MISS : AttackResultType.HIT,
+                attack.coordinate(), null, false, false, attack.attackerId(), attack.defenderId(), null,
+                List.of(attack.coordinate()));
+        if (!attack.sunk()) return new AttackResult(attack.type(), attack.coordinate(), null,
+                false, false, attack.attackerId(), attack.defenderId(), null, attack.affectedCells());
+        return attack;
     }
 
 }

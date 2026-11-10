@@ -198,6 +198,9 @@ public final class PvpController implements AutoCloseable {
     }
 
     public boolean attack(Coordinate cell) { return send(MessageType.ATTACK, new AttackRequest(cell)); }
+    public boolean useSkill(com.battleship.shared.game.SkillType skill, Coordinate cell, com.battleship.shared.game.SkillDirection direction) {
+        return send(MessageType.USE_SKILL, new com.battleship.shared.match.SkillRequest(skill, cell, direction));
+    }
 
     public void open() {
         active = true;

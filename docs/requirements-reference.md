@@ -60,3 +60,12 @@ Submarine, Destroyer; số lượng chọn quyết định lấy 3, 4 hoặc c�
 Đây là thay đổi trực tiếp từ người dùng cho cả hai chế độ. Giữ timeout 60 giây;
 mỗi phát bắn hợp lệ reset thời gian, phát sai hoặc trùng không reset. Server sở hữu
 cấu hình phòng, giữ cấu hình khi chơi lại và không nhận luật từ lệnh bắn của client.
+
+
+## Bổ sung theo yêu cầu mới: Skill battle
+
+Yêu cầu ngày 10/11/2026: thêm chế độ chiến đấu riêng có kỹ năng, chọn được Classic hoặc Skill battle trong Room Settings PvP.
+Người dùng chốt: làm PvP trước, AI Battle sau; một thanh năng lượng chung (+1 mỗi phát bắn thường, tối đa 8);
+skill luôn kết thúc lượt; 4 skill Cluster (3), Barrage (4), Torpedo (5), Sonar (3). Combat mode độc lập với
+Basic/Fleet Designer, số tàu, luật bắn và tùy chọn ẩn thông tin chìm. Giữ 5 tàu thẳng ở Basic, luật 60 giây hết lượt thì thua;
+server xác thực và tính mọi kết quả skill. Chưa làm: bot dùng skill trong AI Battle, lưu combat mode vào lịch sử database.
