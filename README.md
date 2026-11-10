@@ -279,8 +279,8 @@ Một tài khoản chỉ có một phiên đăng nhập. Đăng xuất giải ph
 Password hashing dùng PBKDF2-HMAC-SHA256, 600.000 vòng, salt ngẫu nhiên riêng 16 byte,
 so sánh hằng thời gian; không lưu/gửi password hash về client.
 Thông số theo [OWASP Password Storage](https://cheatsheetseries.owasp.org/cheatsheets/Password_Storage_Cheat_Sheet.html).
-TCP hiện chưa mã hóa TLS: dùng mạng tin cậy/VPN khi truyền thông tin đăng nhập;
-triển khai công khai cần lớp mã hóa TCP/TLS trước khi dùng tài khoản thật.
+Kết nối phát triển mặc định dùng TCP thuần. Khi phát hành công khai, dùng client bật TLS
+và cổng TLS ở trước backend. Xem [triển khai EC2 và đóng gói client Windows](docs/deploy-public-ec2.md).
 
 `users` lưu tài khoản và `last_seen_at` khi đăng nhập/đăng xuất; `matches` và `match_players` lưu thời gian, kết quả, nguyên nhân
 (`FLEET_DESTROYED`, `TURN_TIMEOUT`, `PLAYER_LEFT`) cùng số phát bắn/hit/tàu chìm theo tài khoản.
