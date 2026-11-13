@@ -347,5 +347,55 @@
     "sha256": "4a2a47b107b071cae76476550c16f893ee53c4ddcde55e02bc8600505f6c5b20",
     "edits": "PCM16 44.1kHz; peak level; fades/trim; circular crossfade",
     "download_url": "https://opengameart.org/sites/default/files/wind1.wav"
+  },
+  "skill_sonar.wav": {
+    "source_file": "frontend/scripts/generate-skill-audio.py",
+    "source_page": "Original project synthesis",
+    "author": "Battleship project",
+    "license": "CC0-1.0",
+    "loop": false,
+    "seconds": 1.2,
+    "sha256": "3e5546bbc6e5564fe1ea37425c23545136a1cf3185793ac38a6ab312da2ac0b7",
+    "edits": "Original PCM16 mono synthesis"
+  },
+  "skill_mine.wav": {
+    "source_file": "frontend/scripts/generate-skill-audio.py",
+    "source_page": "Original project synthesis",
+    "author": "Battleship project",
+    "license": "CC0-1.0",
+    "loop": false,
+    "seconds": 1.7,
+    "sha256": "de1894208b6c7a839de513294c6d633886946f3cb99bc110ef3118cc3f5bb63d",
+    "edits": "Original PCM16 mono synthesis"
+  },
+  "skill_shield.wav": {
+    "source_file": "frontend/scripts/generate-skill-audio.py",
+    "source_page": "Original project synthesis",
+    "author": "Battleship project",
+    "license": "CC0-1.0",
+    "loop": false,
+    "seconds": 1.1,
+    "sha256": "af060580232632c52960602adbcb73b5e137e74ccaefeda32f837338d146766a",
+    "edits": "Original PCM16 mono synthesis"
+  },
+  "skill_shield_break.wav": {
+    "source_file": "frontend/scripts/generate-skill-audio.py",
+    "source_page": "Original project synthesis",
+    "author": "Battleship project",
+    "license": "CC0-1.0",
+    "loop": false,
+    "seconds": 0.65,
+    "sha256": "a6869ad08a6c55e571d1ed540b969a454fde6043c578196b8d0ab680316ce314",
+    "edits": "Original PCM16 mono synthesis"
+  },
+  "skill_airstrike.wav": {
+    "source_file": "frontend/scripts/generate-skill-audio.py",
+    "source_page": "Original project synthesis",
+    "author": "Battleship project",
+    "license": "CC0-1.0",
+    "loop": false,
+    "seconds": 2.8,
+    "sha256": "5f1211bf8b1817b0c292ce782b435d1e4025c530cc790d7d4afdabb1c49109a1",
+    "edits": "Original PCM16 mono synthesis"
   }
 }

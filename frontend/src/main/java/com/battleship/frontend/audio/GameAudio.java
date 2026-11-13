@@ -19,7 +19,8 @@ public final class GameAudio implements AutoCloseable {
         YOUR_TURN("turn_yours"), ENEMY_TURN("turn_enemy"), TARGET("target_select"),
         TIMER_WARNING("timer_warning"), TIMEOUT("timer_timeout"), CHAT("chat_receive"),
         INVITE("invite_receive"), JOIN("room_join"), LEAVE("room_leave"),
-        DISCONNECTED("connection_lost"), REMATCH("rematch_request");
+        DISCONNECTED("connection_lost"), REMATCH("rematch_request"), SONAR("skill_sonar"), MINE("skill_mine"),
+        SHIELD("skill_shield"), SHIELD_BREAK("skill_shield_break"), AIRSTRIKE("skill_airstrike");
         final String file;
         Cue(String file) { this.file=file; }
     }
@@ -81,10 +82,12 @@ public final class GameAudio implements AutoCloseable {
     public Music music() { return music; }
     public void configure(ClientPreferences settings) {
         boolean gainChanged=Math.abs(volume-settings.volume())>.0001f;
+        boolean muteChanged=muted!=settings.muted();
         volume=settings.volume(); muted=settings.muted();
         musicLoop.wake(); oceanLoop.wake(); windLoop.wake();
         if(closed) return;
         worker.execute(() -> {
+            if(muteChanged) lastPlayed.clear();
             if(muted) clips.values().forEach(Clip::stop);
             else if(gainChanged) {
                 // Only running effects need an immediate gain change. Idle clips rebuild lazily.
