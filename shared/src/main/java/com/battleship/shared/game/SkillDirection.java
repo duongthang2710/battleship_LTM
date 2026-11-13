@@ -1,6 +1,6 @@
 package com.battleship.shared.game;
 
-/** Direction a torpedo travels; it enters from the opposite edge. */
+/** Cardinal axes used to select an Airstrike row or column. */
 public enum SkillDirection {
     NORTH(-1, 0), EAST(0, 1), SOUTH(1, 0), WEST(0, -1);
     private final int rows, columns;

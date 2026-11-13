@@ -1,184 +1,150 @@
 package com.battleship.shared.game;
 
-import java.util.ArrayList;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Random;
+import java.util.*;
 
-/** Skill battle rules: energy, the four skill geometries, turn passing, rejection atomicity and victory. */
 public final class SkillChecks {
-    private static final GameRules SKILLS = new GameRules(GameMode.CLASSIC, 5, TurnRule.ALTERNATING, CombatMode.SKILLS);
-
+    private static final GameRules RULES = new GameRules(GameMode.CLASSIC,5,TurnRule.ALTERNATING,CombatMode.SKILLS);
     public static void main(String[] args) {
-        classicRejectsSkills();
-        energyAndCluster();
-        hitContinuesStillPassesTurn();
-        torpedo();
-        sonar();
-        barrage();
-        rejectionsAndVictory();
-        System.out.println("Skill checks passed: energy +1/cap 8, cluster, barrage, torpedo, sonar, turn pass, rejections, victory, restart.");
+        energyAndSonar();
+        singleUsePerMatch();
+        mineAndCounterVictory();
+        shieldAndAirstrike();
+        victoryAndRestart();
+        System.out.println("PASS tactical rules: one energy per valid normal shot, count-only sonar, one use per skill/player/match, private mine, shield, airstrike and reset.");
     }
-
-    private static void classicRejectsSkills() {
-        GameEngine engine = battle(GameRules.DEFAULT, 1);
-        for (int i = 0; i < 6; i++) { miss(engine, "a"); miss(engine, "b"); }
-        check(engine.energy("a") == 0, "Classic combat never charges energy");
-        check(engine.useSkill("a", SkillType.SONAR, new Coordinate(5, 5), null).type() == AttackResultType.INVALID_SKILL,
-                "Classic combat rejects every skill");
-    }
-
-    private static void energyAndCluster() {
-        GameEngine engine = battle(SKILLS, 2);
-        check(engine.energy("a") == 0, "Energy starts at zero");
-        int turn = engine.state().turnNumber();
-        SkillResult early = engine.useSkill("a", SkillType.CLUSTER, new Coordinate(0, 0), null);
-        check(early.type() == AttackResultType.NOT_ENOUGH_ENERGY && !early.accepted(), "Skill needs enough energy");
-        check(engine.state().turnNumber() == turn && engine.state().currentPlayerId().equals("a")
-                && engine.state().enemy().board().attackedCells().isEmpty(), "Rejected skill keeps state unchanged");
-        for (int i = 0; i < 3; i++) { miss(engine, "a"); miss(engine, "b"); }
-        check(engine.energy("a") == 3 && engine.energy("b") == 3, "Each accepted normal shot adds one energy");
-
-        turn = engine.state().turnNumber();
-        SkillResult cluster = engine.useSkill("a", SkillType.CLUSTER, new Coordinate(0, 0), null);
-        check(cluster.accepted() && cluster.type() == AttackResultType.HIT, "Cluster hits the corner fleet");
-        check(new HashSet<>(cluster.impacts().stream().map(AttackResult::coordinate).toList())
-                .equals(new HashSet<>(List.of(new Coordinate(0, 0), new Coordinate(1, 0), new Coordinate(0, 1)))),
-                "Corner cluster keeps only in-bounds plus cells");
-        check(engine.energy("a") == 0 && engine.state().currentPlayerId().equals("b")
-                && engine.state().turnNumber() == turn + 1, "Cluster spends 3 energy, passes turn, counts one turn");
-        check(engine.lastSkill() == cluster && engine.state().lastAttack().equals(cluster.impacts().getLast()),
-                "Last skill and last impact are exposed");
-
-        miss(engine, "b");
-        check(engine.energy("a") == 0 && engine.lastSkill() == null, "Skill shots do not charge energy; normal shot clears last skill");
-        miss(engine, "a");
-        miss(engine, "b");
-        SkillResult second = engine.useSkill("a", SkillType.CLUSTER, new Coordinate(0, 1), null);
-        check(second.type() == AttackResultType.NOT_ENOUGH_ENERGY, "Energy is spent");
-        for (int i = 0; i < 2; i++) { miss(engine, "a"); miss(engine, "b"); }
-        second = engine.useSkill("a", SkillType.CLUSTER, new Coordinate(0, 1), null);
-        check(second.impacts().size() == 2, "Cluster skips cells already attacked");
-
-        GameEngine capped = battle(SKILLS, 3);
-        for (int i = 0; i < 12; i++) { miss(capped, "a"); miss(capped, "b"); }
-        check(capped.energy("a") == SkillType.MAX_ENERGY, "Energy is capped at 8");
-        capped.restart();
-        check(capped.energy("a") == 0 && capped.scans("a").isEmpty() && capped.lastSkill() == null, "Restart clears skill state");
-    }
-
-    private static void hitContinuesStillPassesTurn() {
-        GameEngine engine = battle(new GameRules(GameMode.CLASSIC, 5, TurnRule.HIT_CONTINUES, CombatMode.SKILLS), 4);
-        for (int i = 0; i < 3; i++) { miss(engine, "a"); miss(engine, "b"); }
-        SkillResult hit = engine.useSkill("a", SkillType.CLUSTER, new Coordinate(1, 1), null);
-        check(hit.type() == AttackResultType.HIT && engine.state().currentPlayerId().equals("b"),
-                "A hitting skill still ends the turn under Hit grants another shot");
-    }
-
-    private static void torpedo() {
-        GameEngine engine = battle(SKILLS, 5);
-        for (int i = 0; i < 5; i++) { miss(engine, "a"); miss(engine, "b"); }
-        SkillResult noDirection = engine.useSkill("a", SkillType.TORPEDO, new Coordinate(2, 5), null);
-        check(noDirection.type() == AttackResultType.INVALID_SKILL, "Torpedo requires a direction");
-        SkillResult west = engine.useSkill("a", SkillType.TORPEDO, new Coordinate(2, 5), SkillDirection.WEST);
-        List<Coordinate> cells = west.impacts().stream().map(AttackResult::coordinate).toList();
-        check(cells.getFirst().equals(new Coordinate(2, 9)) && cells.getLast().equals(new Coordinate(2, 2)) && cells.size() == 8,
-                "Westward torpedo enters at the east edge and stops on the cruiser");
-        check(west.impacts().subList(0, 7).stream().allMatch(i -> i.type() == AttackResultType.MISS)
-                && west.impacts().getLast().type() == AttackResultType.HIT && engine.energy("a") == 0, "Water path is revealed as misses");
-        check(SkillTargeting.area(SkillType.TORPEDO, new Coordinate(2, 5), SkillDirection.SOUTH).getFirst().equals(new Coordinate(0, 5)),
-                "Southward torpedo enters from the north edge");
-
-        GameEngine through = battle(SKILLS, 6);
-        for (int i = 0; i < 5; i++) { miss(through, "a"); miss(through, "b"); }
-        check(through.attack("a", new Coordinate(4, 0)).accepted(), "Destroyer bow hit by a normal shot");
-        miss(through, "b");
-        SkillResult east = through.useSkill("a", SkillType.TORPEDO, new Coordinate(4, 8), SkillDirection.EAST);
-        check(east.impacts().size() == 1 && east.impacts().getFirst().coordinate().equals(new Coordinate(4, 1))
-                && east.type() == AttackResultType.SUNK, "Torpedo passes over attacked cells and sinks the next ship cell");
-    }
-
-    private static void sonar() {
-        GameEngine engine = battle(SKILLS, 7);
-        for (int i = 0; i < 3; i++) { miss(engine, "a"); miss(engine, "b"); }
-        int shotsBefore = engine.state().enemy().board().attackedCells().size();
-        SkillResult scan = engine.useSkill("a", SkillType.SONAR, new Coordinate(0, 0), null);
-        check(scan.type() == AttackResultType.SCANNED && scan.sonarCount() == 9 && scan.area().size() == 9,
-                "Corner sonar clamps to 3x3 and counts unhit ship cells");
-        check(engine.state().enemy().board().attackedCells().size() == shotsBefore && scan.impacts().isEmpty(),
-                "Sonar does not mark any cell as attacked");
-        check(engine.scans("a").size() == 1 && engine.scans("b").isEmpty() && engine.state().currentPlayerId().equals("b"),
-                "Sonar reading belongs to the scanner and ends the turn");
-    }
-
-    private static void barrage() {
-        GameEngine engine = battle(SKILLS, 8);
-        for (int i = 0; i < 4; i++) { miss(engine, "a"); miss(engine, "b"); }
-        SkillResult barrage = engine.useSkill("a", SkillType.BARRAGE, new Coordinate(9, 9), null);
-        var area = SkillTargeting.area(SkillType.BARRAGE, new Coordinate(9, 9), null);
-        check(area.size() == 16 && area.getFirst().equals(new Coordinate(6, 6)), "Barrage area clamps inside the board");
-        var shots = barrage.impacts().stream().map(AttackResult::coordinate).toList();
-        check(shots.size() == 4 && new HashSet<>(shots).size() == 4 && area.containsAll(shots), "Four distinct missiles inside the area");
-
-        Board board = new Board();
-        for (Coordinate cell : area.subList(0, 14)) board = board.withAttack(cell);
-        check(SkillTargeting.shots(SkillType.BARRAGE, new Coordinate(6, 6), null, board, new Random(1)).size() == 2,
-                "Barrage fires at the remaining open cells only");
-        check(SkillTargeting.shots(SkillType.BARRAGE, new Coordinate(6, 6), null, board, new Random(9))
-                .equals(SkillTargeting.shots(SkillType.BARRAGE, new Coordinate(6, 6), null, board, new Random(9))),
-                "Barrage is deterministic for a seeded random");
-    }
-
-    private static void rejectionsAndVictory() {
-        GameEngine engine = battle(new GameRules(GameMode.CLASSIC, 3, TurnRule.ALTERNATING, CombatMode.SKILLS), 9);
-        for (int i = 0; i < 3; i++) { miss(engine, "a"); miss(engine, "b"); }
-        check(engine.useSkill("b", SkillType.SONAR, new Coordinate(5, 5), null).type() == AttackResultType.NOT_YOUR_TURN,
-                "Skill only on own turn");
-        check(engine.useSkill("a", SkillType.CLUSTER, new Coordinate(10, 0), null).type() == AttackResultType.INVALID_COORDINATE,
-                "Out-of-bounds origin rejected");
-        // Leave only the carrier bow (0,0): sink everything else with normal shots.
-        List<Coordinate> targets = new ArrayList<>();
-        for (Ship ship : engine.state().enemy().board().ships()) targets.addAll(ship.occupiedCells());
-        targets.remove(new Coordinate(0, 0));
-        for (Coordinate cell : targets) {
-            check(engine.attack("a", cell).accepted(), "Setup shot");
-            miss(engine, "b");
+    private static void energyAndSonar() {
+        GameEngine game = battle(new Random(1));
+        check(game.energy("a")==0 && game.energy("b")==0,"Both players start at zero");
+        check(game.useSkill("a",SkillType.SONAR,new Coordinate(0,0),null).type()==AttackResultType.NOT_ENOUGH_ENERGY,"Insufficient energy");
+        miss(game,"a");
+        check(game.energy("a")==1 && game.energy("b")==0,"Miss grants exactly one to the shooter");
+        miss(game,"b");
+        check(game.energy("a")==1 && game.energy("b")==1,"Changing turn grants no extra energy");
+        check(game.attack("a",new Coordinate(-1,0)).type()==AttackResultType.INVALID_COORDINATE
+                && game.attack("a",new Coordinate(0,5)).type()==AttackResultType.ALREADY_ATTACKED
+                && game.attack("b",new Coordinate(0,0)).type()==AttackResultType.NOT_YOUR_TURN
+                && game.energy("a")==1 && game.energy("b")==1,"Rejected shots grant no energy");
+        charge(game,3);
+        int turn=game.state().turnNumber();
+        SkillResult sonar=game.useSkill("a",SkillType.SONAR,new Coordinate(0,0),null);
+        check(sonar.accepted() && sonar.sonarCount()==6 && game.scans("a").getFirst().count()==6,"Sonar reports only the area's count");
+        check(!new com.google.gson.Gson().toJson(game.scans("a")).contains("contacts"),"Sonar payload contains no ship-contact coordinates");
+        check(game.state().currentPlayerId().equals("a") && game.state().turnNumber()==turn && game.energy("a")==0,"Sonar preserves the main shot and grants no energy");
+        check(game.state().enemy().board().attackedCells().size()==3,"Sonar causes no damage");
+        game.attack("a",new Coordinate(0,0));
+        check(game.energy("a")==1,"Normal hit grants exactly one energy");
+        miss(game,"b"); charge(game,10); miss(game,"a");
+        check(game.energy("a")==10,"Energy capped at ten");
+        GameEngine chain=battle(new Random(7),TurnRule.HIT_CONTINUES);
+        for(int column=0;column<5;column++) {
+            check(chain.attack("a",new Coordinate(0,column)).accepted() && chain.energy("a")==column+1
+                    && chain.energy("b")==0,"Hit-again and sinking grant one point per shot");
         }
-        SkillResult finish = engine.useSkill("a", SkillType.CLUSTER, new Coordinate(0, 0), null);
-        check(finish.type() == AttackResultType.GAME_OVER && finish.gameOver() && "a".equals(finish.winnerId())
-                && engine.state().phase() == GamePhase.GAME_OVER, "A skill can finish the fleet and win");
-        check(engine.useSkill("b", SkillType.SONAR, new Coordinate(5, 5), null).type() == AttackResultType.GAME_FINISHED,
-                "No skills after game over");
     }
-
-    private static final List<Coordinate> WATER = water();
-
-    private static List<Coordinate> water() {
-        List<Coordinate> cells = new ArrayList<>();
-        for (int row = 5; row < Board.SIZE; row++) for (int column = 0; column < Board.SIZE; column++) cells.add(new Coordinate(row, column));
-        return List.copyOf(cells);
+    private static void singleUsePerMatch() {
+        for(SkillType skill:SkillType.values()) {
+            GameEngine game=battle(new Random(6)); charge(game,10);
+            Coordinate origin=skill==SkillType.MINE?new Coordinate(8,8):new Coordinate(0,0);
+            check(game.useSkill("a",skill,origin,SkillDirection.SOUTH).accepted(),"First use accepted for "+skill);
+            if(skill.endsTurn()) miss(game,"b");
+            int energy=game.energy("a"), turn=game.state().turnNumber();
+            check(game.useSkill("a",skill,new Coordinate(7,7),SkillDirection.EAST).type()==AttackResultType.SKILL_ALREADY_USED
+                    && game.energy("a")==energy && game.state().turnNumber()==turn,"Repeat cannot spend energy or change state for "+skill);
+            check(game.usedSkills("a").contains(skill) && game.usedSkills("b").isEmpty(),"Skill use belongs to its player");
+            miss(game,"a");
+            check(game.useSkill("b",skill,origin,SkillDirection.SOUTH).accepted(),"Opponent can independently use "+skill);
+            if(!skill.endsTurn()) miss(game,"b");
+            charge(game,skill.cost());
+            int laterEnergy=game.energy("a"),laterTurn=game.state().turnNumber();
+            check(game.useSkill("a",skill,origin,SkillDirection.SOUTH).type()==AttackResultType.SKILL_ALREADY_USED
+                    && game.energy("a")==laterEnergy && game.state().turnNumber()==laterTurn,
+                    "Skill remains spent on later turns even after recharging for "+skill);
+            game.restart();
+            check(game.usedSkills("a").isEmpty() && game.usedSkills("b").isEmpty(),"Replay restores both skill inventories");
+            var fleet=Arrays.stream(ShipType.values()).map(type->new Ship(type,new Coordinate(type.ordinal()*2,0),ShipOrientation.HORIZONTAL)).toList();
+            game.submitFleet("a",fleet); game.submitFleet("b",fleet); charge(game,skill.cost());
+            check(game.useSkill("a",skill,origin,SkillDirection.SOUTH).accepted(),"Skill is available again in a new match for "+skill);
+        }
     }
+    private static void mineAndCounterVictory() {
+        GameEngine game=battle(new Random(2)); charge(game,4);
+        Coordinate mine=new Coordinate(9,8);
+        int energy=game.energy("a");
+        check(game.useSkill("a",SkillType.MINE,new Coordinate(0,0),null).type()==AttackResultType.INVALID_SKILL
+                && game.energy("a")==energy,"Mine cannot occupy a ship");
+        check(game.useSkill("a",SkillType.MINE,mine,null).accepted() && game.mines("a").contains(mine),"Mine deployed privately");
+        check(!game.useSkill("a",SkillType.MINE,mine,null).accepted(),"Duplicate mine rejected");
+        miss(game,"a");
+        int previous=game.state().enemy().board().attackedCells().size();
+        AttackResult counter=game.attack("b",mine);
+        check(counter.defense()==DefenseKind.MINE && counter.counterattacks().size()==1 && game.mines("a").isEmpty(),"Mine consumes itself and counterattacks");
+        check(game.state().enemy().board().attackedCells().size()==previous+1,"Counter chooses an unshot cell");
 
-    private static void miss(GameEngine engine, String actor) {
-        Board defender = actor.equals("a") ? engine.state().enemy().board() : engine.state().player().board();
-        Coordinate cell = WATER.stream().filter(c -> !defender.wasAttacked(c)).findFirst().orElseThrow();
-        check(engine.attack(actor, cell).type() == AttackResultType.MISS, "Water shot misses");
+        game=battle(new Random(0) { @Override public int nextInt(int bound) { return 0; } });
+        var cells=game.state().enemy().board().ships().stream().flatMap(ship->ship.occupiedCells().stream()).toList();
+        for(Coordinate cell:cells) if(!cell.equals(new Coordinate(0,0))) { game.attack("a",cell); miss(game,"b"); }
+        check(game.useSkill("a",SkillType.MINE,mine,null).accepted(),"Winning defense deployed");
+        miss(game,"a");
+        AttackResult finish=game.attack("b",mine);
+        check(finish.gameOver() && "a".equals(finish.winnerId()) && "a".equals(game.state().winnerId()),"Counterattack victory belongs to defender");
     }
+    private static void shieldAndAirstrike() {
+        GameEngine game=battle(new Random(3)); charge(game,4);
+        check(game.useSkill("a",SkillType.SHIELD,new Coordinate(2,1),null).accepted() && game.shields("a").size()==5,"Shield covers a cross");
+        miss(game,"a");
+        int beforeBlock=game.energy("b");
+        AttackResult blocked=game.attack("b",new Coordinate(2,1));
+        check(game.energy("b")==beforeBlock+1,"A valid blocked shot grants one point");
+        check(blocked.type()==AttackResultType.BLOCKED && blocked.defense()==DefenseKind.SHIELD
+                && !game.state().player().board().wasAttacked(new Coordinate(2,1)),"Shield absorbs damage and leaves the tile attackable");
+        check(game.shields("a").size()==4 && game.shields("a").getFirst().remainingTurns()==1,"Only hit segment breaks");
+        miss(game,"a"); miss(game,"b");
+        check(game.shields("a").isEmpty(),"Shield expires after two enemy main actions");
+        miss(game,"a");
+        check(game.attack("b",new Coordinate(2,1)).type()==AttackResultType.HIT,"Unshielded tile can be hit later");
 
-    /** Both fleets: ship i on row i starting at column 0, horizontal. */
-    private static GameEngine battle(GameRules rules, long seed) {
-        GameEngine engine = new GameEngine(new Player("a", "A", new Board()), new Player("b", "B", new Board()), new Random(seed));
-        engine.setRules(rules);
-        List<Ship> fleet = new ArrayList<>();
-        for (int i = 0; i < rules.shipCount(); i++)
-            fleet.add(new Ship(rules.shipTypes().get(i), new Coordinate(i, 0), ShipOrientation.HORIZONTAL));
-        engine.submitFleet("a", fleet);
-        engine.submitFleet("b", fleet);
-        check(engine.state().phase() == GamePhase.BATTLE, "Both fleets start battle");
-        return engine;
+        game=battle(new Random(4)); charge(game,10);
+        game.useSkill("a",SkillType.SHIELD,new Coordinate(2,1),null); miss(game,"a");
+        SkillResult strike=game.useSkill("b",SkillType.AIRSTRIKE,new Coordinate(2,7),SkillDirection.EAST);
+        check(strike.impacts().size()==10 && strike.impacts().stream().filter(i->i.defense()==DefenseKind.SHIELD).count()==3,"Airstrike respects every shield segment");
+        check(game.state().player().board().ship(ShipType.BATTLESHIP).hitCells().size()==1,"Only unshielded ship segment is damaged");
+        check(game.state().currentPlayerId().equals("a") && game.energy("b")==2,"Airstrike costs eight, ends turn and grants no hit energy");
+        check(SkillTargeting.area(SkillType.AIRSTRIKE,new Coordinate(7,3),SkillDirection.SOUTH).stream().allMatch(c->c.column()==3),"Vertical airstrike targets a column");
+        check(SkillTargeting.area(SkillType.SONAR,new Coordinate(9,9),null).size()==9,"Corner scan stays 3x3 within bounds");
     }
-
-    private static void check(boolean condition, String message) {
-        if (!condition) throw new AssertionError(message);
+    private static void victoryAndRestart() {
+        GameEngine game=battle(new Random(5));
+        var cells=game.state().enemy().board().ships().stream().flatMap(ship->ship.occupiedCells().stream()).toList();
+        for(Coordinate cell:cells) if(!cell.equals(new Coordinate(0,0))) { game.attack("a",cell); miss(game,"b"); }
+        var finish=game.useSkill("a",SkillType.AIRSTRIKE,new Coordinate(0,0),SkillDirection.EAST);
+        check(finish.gameOver() && game.state().phase()==GamePhase.GAME_OVER,"Airstrike can win");
+        check(!game.useSkill("a",SkillType.SONAR,new Coordinate(0,0),null).accepted(),"Skills locked after game over");
+        game.restart();
+        check(game.energy("a")==0 && game.usedSkills("a").isEmpty() && game.scans("a").isEmpty() && game.mines("a").isEmpty()
+                && game.shields("a").isEmpty() && game.lastSkill()==null,"Restart clears all tactical state");
     }
+    static GameEngine battle(Random random) {
+        return battle(random,TurnRule.ALTERNATING);
+    }
+    private static GameEngine battle(Random random,TurnRule turnRule) {
+        GameEngine game=new GameEngine(new Player("a","A",new Board()),new Player("b","B",new Board()),random);
+        game.setRules(new GameRules(RULES.mode(),RULES.shipCount(),turnRule,RULES.combatMode()));
+        var fleet=Arrays.stream(ShipType.values()).map(type->new Ship(type,new Coordinate(type.ordinal()*2,0),ShipOrientation.HORIZONTAL)).toList();
+        game.submitFleet("a",fleet); game.submitFleet("b",fleet);
+        return game;
+    }
+    static void charge(GameEngine game,int amount) {
+        while(game.energy("a")<amount) { miss(game,"a"); miss(game,"b"); }
+    }
+    static void miss(GameEngine game,String actor) {
+        Board target=actor.equals("a")?game.state().enemy().board():game.state().player().board();
+        for(int row=0;row<10;row++) for(int column=5;column<10;column++) {
+            Coordinate cell=new Coordinate(row,column);
+            if(!target.wasAttacked(cell) && !game.mines(actor.equals("a")?"b":"a").contains(cell)) {
+                check(game.attack(actor,cell).accepted(),"Water shot accepted"); return;
+            }
+        }
+        throw new AssertionError("Water exhausted");
+    }
+    static void check(boolean condition,String message) { if(!condition) throw new AssertionError(message); }
 }

@@ -2,7 +2,9 @@ package com.battleship.shared.game;
 
 import java.util.List;
 
-/** Number of not-yet-hit ship cells inside the scanned area when the scan happened. */
+/** The scanner learns only the total occupied-cell count for the whole area. */
 public record SonarReading(List<Coordinate> area, int count) {
-    public SonarReading { area = List.copyOf(area); }
+    public SonarReading {
+        area = List.copyOf(area);
+    }
 }

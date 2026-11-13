@@ -16,7 +16,8 @@ public record SkillResult(AttackResultType type, SkillType skill, String attacke
 
     public boolean accepted() {
         return type == AttackResultType.HIT || type == AttackResultType.MISS || type == AttackResultType.SUNK
-                || type == AttackResultType.GAME_OVER || type == AttackResultType.SCANNED;
+                || type == AttackResultType.GAME_OVER || type == AttackResultType.SCANNED || type == AttackResultType.DEPLOYED
+                || type == AttackResultType.BLOCKED;
     }
 
     static SkillResult rejected(AttackResultType type, SkillType skill, String attackerId, String defenderId,
