@@ -61,6 +61,12 @@ public final class PlacementHud {
     public void setRules(com.battleship.shared.game.GameRules rules) { this.rules = rules; }
     private int draftCount;
     private boolean skillTray, skillsUsable;
+    private boolean chatExpanded;
+    public void setChatExpanded(boolean expanded) {
+        if (chatExpanded == expanded) return;
+        chatExpanded = expanded;
+        if (skillTray && state != null && state.phase() != GamePhase.PLACEMENT) rebuild();
+    }
     private int energy, maxEnergy;
     private com.battleship.shared.game.SkillType armedSkill;
     private String skillHint = "";
@@ -167,7 +173,7 @@ public final class PlacementHud {
             button(w/2-167,32,214,34,enemyView?"YOUR FLEET  [Tab]":"ENEMY WATERS  [Tab]",Action.TOGGLE_BOARD,true,true);
             if(networkPlacement || aiMode) button(w/2+60,32,105,34,"LEAVE",Action.LEAVE_ROOM,true,false);
             regions.add(new Region(w/2-180,22,360,54));
-            if (skillTray) skillTray(draw, w);
+            if (skillTray && !chatExpanded) skillTray(draw, w);
             return;
         }
         float left = com.battleship.frontend.ui.BattleSidebarLayout.flagLeft(w);

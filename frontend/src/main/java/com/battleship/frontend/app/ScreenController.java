@@ -302,6 +302,7 @@ public final class ScreenController implements AutoCloseable {
                 || game.state().phase() == com.battleship.shared.game.GamePhase.GAME_OVER);
         chatPanel.setMode(waitingChat ? ChatPanel.Mode.WAITING : battleChat ? ChatPanel.Mode.BATTLE : ChatPanel.Mode.HIDDEN);
         if (screen == Screen.MAIN_MENU) {
+        placementHud.setChatExpanded(battleChat && !chatPanel.collapsed());
             menu.update(cursor);
             MainMenu.Action nextHover = menu.actionAt(cursor).orElse(null);
             if (nextHover != null && hoveredMenu != nextHover) audio.play(com.battleship.frontend.audio.GameAudio.Cue.HOVER);

@@ -69,19 +69,20 @@ public final class ChatPanel {
     public void setContext(ChatContext next) {
         if (context == null || !context.contextId().equals(next.contextId())) reset();
         context = next;
-        if (!next.canSend()) { focused = false; busy = false; }
+        if (!next.canSend()) { busy = false; }
         rebuild();
     }
     public void clear() { context = null; reset(); rebuild(); }
     private void reset() {
         scrollDragging = false;
         messages.clear(); lines.clear(); draft = status = ""; focused = busy = false; firstLine = unread = 0;
+        collapsed = mode == Mode.BATTLE;
     }
     public void setMode(Mode value) {
         if (mode != value) {
             boolean follow = atBottom();
             scrollDragging = false;
-            mode = value; focused = false; collapsed = false; layout();
+            mode = value; focused = false; collapsed = value == Mode.BATTLE; layout();
             reflowLines(); firstLine = follow ? maxFirst() : Math.min(firstLine, maxFirst()); rebuild();
         }
         root.setCullHint(visible() ? Spatial.CullHint.Never : Spatial.CullHint.Always);
@@ -96,7 +97,6 @@ public final class ChatPanel {
     }
     public void append(ChatMessage message) {
         boolean follow = atBottom(); int oldStart = firstLine;
-        if(mode==Mode.BATTLE && collapsed) { collapsed=false; layout(); }
         messages.add(message);
         int removedLines = 0;
         if (messages.size() > 100) removedLines = messageLines(messages.removeFirst()).size();
@@ -109,16 +109,21 @@ public final class ChatPanel {
     public void sent() { busy = false; draft = status = ""; rebuild(); }
     public void error(String message) { busy = false; status = message; rebuild(); }
     public void focus() {
-        if (!visible() || !writable()) return;
-        if (collapsed) { collapsed = false; firstLine = maxFirst(); unread = 0; layout(); }
+        if (!visible() || (!writable() && mode != Mode.BATTLE)) return;
+        if (collapsed) { collapsed = false; if (atBottom()) unread = 0; layout(); }
         focused = true; rebuild();
     }
-    public void blur() { if (focused) { focused = false; rebuild(); } }
+    public void blur() {
+        if (!focused && (mode != Mode.BATTLE || collapsed)) return;
+        focused = false; scrollDragging = false;
+        if (mode == Mode.BATTLE) collapsed = true;
+        rebuild();
+    }
     public void character(char c) {
-        if (focused && !busy && !ChatText.forbidden(c) && draft.codePointCount(0, draft.length()) < ChatText.MAX_LENGTH) { draft += c; status = ""; rebuild(); }
+        if (focused && writable() && !busy && !ChatText.forbidden(c) && draft.codePointCount(0, draft.length()) < ChatText.MAX_LENGTH) { draft += c; status = ""; rebuild(); }
     }
     public void backspace() {
-        if (focused && !busy && !draft.isEmpty()) { draft = draft.substring(0, draft.offsetByCodePoints(draft.length(), -1)); rebuild(); }
+        if (focused && writable() && !busy && !draft.isEmpty()) { draft = draft.substring(0, draft.offsetByCodePoints(draft.length(), -1)); rebuild(); }
     }
     public void toggle() {
         if (mode != Mode.BATTLE) return;
@@ -128,7 +133,7 @@ public final class ChatPanel {
     }
     public void updateCaret(float delta) { entry.setContent(safe(draft), visible() && !collapsed && focused && !busy && writable()); entry.update(delta); }
     public boolean caretVisible() { return entry.caretVisible(); }
-    public void scroll(int amount) { firstLine = Math.max(0, Math.min(maxFirst(), firstLine + amount)); if (atBottom()) unread = 0; rebuild(); }
+    public void scroll(int amount) { if (collapsed) return; firstLine = Math.max(0, Math.min(maxFirst(), firstLine + amount)); if (atBottom()) unread = 0; rebuild(); }
     private float trackBottom() { return mode==Mode.BATTLE?66:132; }
     private float trackHeight() { return height - (mode==Mode.BATTLE?88:174); }
     private float thumbHeight() { return Math.min(trackHeight(), Math.max(26, trackHeight() * capacity() / Math.max(capacity(), lines.size()))); }
@@ -263,13 +268,14 @@ public final class ChatPanel {
 
         rect(6,6,width-12,38,new ColorRGBA(.01f,.025f,.04f,focused?.86f:.6f));
         rect(6,6,width-12,1,Materials.rgb(focused?CYAN:0x5F777E));
-        entry.layout(width-28,36); entry.setContent(safe(draft),focused&&!busy&&writable());
+        entry.layout(width-(collapsed && unread>0?104:28),36); entry.setContent(safe(draft),focused&&!busy&&writable());
         entry.setLocalTranslation(14,7,115); card.attachChild(entry);
-        if(!status.isBlank() || !writable()) {
+        if(!collapsed && (!status.isBlank() || !writable())) {
             BitmapText hint=text(body,!status.isBlank()?status:"Match ended / chat is read-only",10,12,60,CYAN);
             UiTypography.fit(hint,width-42);
         }
-        if(unread>0&&!atBottom()) button(Action.LATEST,width-90,45,76,20,"NEW "+unread);
+        if(collapsed && unread>0) text(body,"+"+unread,10,width-68,31,CYAN);
+        else if(unread>0&&!atBottom()) button(Action.LATEST,width-90,45,76,20,"NEW "+unread);
     }
     private void button(Action action, float x, float y, float w, float h, String value) {
         buttons.add(new Button(action, x, y, w, h)); rect(x, y, w, h, new ColorRGBA(.025f, .055f, .095f, 1)); frame(x, y, w, h, 0x516275);
