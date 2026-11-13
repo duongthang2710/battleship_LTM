@@ -64,8 +64,14 @@ cấu hình phòng, giữ cấu hình khi chơi lại và không nhận luật t
 
 ## Bổ sung theo yêu cầu mới: Skill battle
 
-Yêu cầu ngày 10/11/2026: thêm chế độ chiến đấu riêng có kỹ năng, chọn được Classic hoặc Skill battle trong Room Settings PvP.
-Người dùng chốt: làm PvP trước, AI Battle sau; một thanh năng lượng chung (+1 mỗi phát bắn thường, tối đa 8);
-skill luôn kết thúc lượt; 4 skill Cluster (3), Barrage (4), Torpedo (5), Sonar (3). Combat mode độc lập với
-Basic/Fleet Designer, số tàu, luật bắn và tùy chọn ẩn thông tin chìm. Giữ 5 tàu thẳng ở Basic, luật 60 giây hết lượt thì thua;
-server xác thực và tính mọi kết quả skill. Chưa làm: bot dùng skill trong AI Battle, lưu combat mode vào lịch sử database.
+Yêu cầu mới thay bộ Cluster/Barrage/Torpedo bằng Sonar (3), Naval Mine (4), Aegis
+Shield (4), Airstrike (8). Energy riêng mỗi người tối đa 10, bắt đầu 0. Theo yêu cầu
+ngày 11/11/2026, mỗi phát bắn thường hợp lệ nhận đúng +1, gồm trúng, trượt và bị chặn.
+Mỗi skill dùng tối đa một lần cho mỗi người trong một ván, được cấp lại khi chơi lại.
+Sonar/Mine/Shield hỗ trợ phát bắn thường, giữ thời gian còn lại.
+Airstrike bắn cả hàng/cột và kết thúc lượt. Khiên tồn tại qua hai hành động tấn công
+chính của đối thủ, từng ô vỡ riêng và vẫn có thể bị bắn lại. Mìn riêng tư, dùng một
+lần và phản đòn vào ô chưa bị bắn. Sonar chỉ gửi vùng quét và tổng số ô có tàu cho
+người quét. Rê chuột vào vùng để xem tổng số, vùng đã quét có một viền ngoài 3×3.
+Combat mode độc lập với Basic/Fleet Designer, số tàu, luật bắn và ẩn thông tin chìm.
+Giữ luật 60 giây hết lượt thì thua. Phần triển khai hiện phục vụ PvP.

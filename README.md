@@ -606,24 +606,30 @@ Bài kiểm tra dùng file riêng trong `build/pvp-verification`, không ghi c�
 
 ## Skill battle
 
-**PvP → Create Room → Room Settings → COMBAT → SKILL BATTLE.** Chế độ PvP; AI Battle vẫn là Classic.
+Chọn **PvP → Create Room → COMBAT → SKILL BATTLE**.
 
-- Mỗi phát bắn thường hợp lệ +1 năng lượng (tối đa 8, bắt đầu 0). Phát bắn bằng skill không cộng năng lượng.
-- Dùng skill thay cho phát bắn của lượt: trừ năng lượng, **luôn chuyển lượt** (kể cả luật Hit grants another shot) và mở cửa sổ 60 giây mới.
-  Skill bị từ chối (thiếu năng lượng, ô đã bắn hết, chưa tới lượt) không đổi lượt và không reset đồng hồ. Hết 60 giây vẫn thua.
-- Server tính toàn bộ kết quả, kể cả vị trí ngẫu nhiên của Rải tên lửa; client chỉ gửi `USE_SKILL {skill, target, direction}`.
+Energy bắt đầu ở 0 và tối đa 10. Mỗi phát bắn thường hợp lệ nhận đúng +1, gồm trúng,
+trượt hoặc bị khiên/mìn chặn. Mỗi người dùng mỗi skill tối đa một lần trong một ván.
+Các lượt được bắn tiếp cũng nhận +1 cho từng phát bắn hợp lệ.
 
-| Skill | Năng lượng | Hiệu ứng |
+| Skill | Energy | Cách dùng |
 | --- | --- | --- |
-| Cluster (đạn chùm) | 3 | Ô tâm và 4 ô kề cạnh (hình +); bỏ qua ô ngoài bàn/đã bắn. |
-| Barrage (rải tên lửa) | 4 | 4 tên lửa rơi ngẫu nhiên vào ô chưa bắn trong vùng 4×4. |
-| Torpedo (ngư lôi) | 5 | Chạy dọc hàng/cột theo hướng chọn (T xoay N/E/S/W), đánh dấu MISS ô nước đi qua, dừng ở ô tàu chưa bị bắn đầu tiên. |
-| Sonar | 3 | Quét 3×3, chỉ người quét thấy số ô tàu chưa bị bắn; không bắn ô nào. Vùng đã quét được viền trên bàn địch. |
+| Sonar | 3 | Quét 3×3 trên bàn địch. Rê chuột vào vùng đã quét để xem tổng số ô có tàu trong vùng. |
+| Naval Mine | 4 | Đặt ở ô nước trống chưa bị bắn trên bàn mình. Đạn trúng mìn kích hoạt phản đòn ngẫu nhiên vào ô chưa bắn trên bàn người tấn công. |
+| Aegis Shield | 4 | Bảo vệ hình chữ thập trên bàn mình trong hai hành động tấn công chính của địch. Ô khiên trúng đạn vỡ và có thể bị bắn lại sau đó. Vùng ở mép bàn được cắt theo biên. |
+| Airstrike | 8 | Ném bom cả hàng hoặc cột, bỏ qua ô đã bắn. T kết hợp chuột chọn hướng. |
 
-Trong trận: phím **1–4** hoặc nút trên khay skill để chọn/hủy, di chuột xem vùng ảnh hưởng, click ô để dùng.
-Khi bật ẩn thông tin chìm, kết quả skill cũng chỉ hiện HIT/MISS. Lịch sử trận đếm một skill là một lượt; chưa lưu combat mode vào database.
+Sonar, Mine và Shield giữ lượt và thời gian còn lại để bắn thường tiếp. Airstrike
+là đòn chính, kết thúc lượt và mở đồng hồ 60 giây cho đối phương. Khiên cũng chặn
+phản đòn mìn. Các mìn bị phản đòn kích hoạt tiếp theo chuỗi hữu hạn, mỗi mìn dùng một lần.
 
-Kiểm tra: `./gradlew :shared:skillChecks :backend:checkSkillMatch` (cũng chạy trong `build`).
+Phím **1–4** hoặc bốn biểu tượng hình thoi chọn/hủy skill. **T** đổi Airstrike ngang/dọc.
+Mìn và khiên nhắm vào bàn mình, Sonar và Airstrike nhắm vào bàn địch. Đồng hồ và mọi
+kết quả do server quyết định. Chỉ chủ sở hữu nhận tọa độ mìn và tổng số ô có tàu trong vùng Sonar.
+
+Kiểm tra luật qua `:shared:skillChecks :backend:checkSkillMatch`. Kiểm tra hai client
+3D qua `:frontend:checkSkillBattleScreens` với backend đang chạy. Âm thanh skill được
+tổng hợp từ script `frontend/scripts/generate-skill-audio.py` và có nguồn trong manifest.
 
 ## Hạm đội tự thiết kế
 
