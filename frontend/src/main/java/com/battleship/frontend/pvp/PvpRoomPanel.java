@@ -254,7 +254,7 @@ public final class PvpRoomPanel {
         boolean skills=selectedCombat==com.battleship.shared.game.CombatMode.SKILLS;
         button(366,109,308,44,"CLASSIC",Action.COMBAT_CLASSIC,!skills);
         button(694,109,320,44,"SKILL BATTLE",Action.COMBAT_SKILLS,skills);
-        setupText(skills ? "Normal shots charge energy (max 8). Spend it on skills; a skill ends your turn."
+        setupText(skills ? "Energy 10. Sonar, Mine and Shield support your shot. Airstrike ends the turn."
                 : "Normal shots only.",12,366,79,CYAN,648);
         statusLabel=text(body,wrapStatus(status),10,366,30,CYAN); positionStatus(); refreshButtons();
     }
