@@ -28,7 +28,7 @@ public final class PlacementHud {
     public enum Action {
         SELECT_CARRIER, SELECT_BATTLESHIP, SELECT_CRUISER, SELECT_SUBMARINE,
         SELECT_DESTROYER, ROTATE, REMOVE, RESET, RANDOM, READY, TOGGLE_BOARD, RESTART, LEAVE_ROOM, TOGGLE_DRAW, MORE, SETTINGS,
-        SKILL_CLUSTER, SKILL_BARRAGE, SKILL_TORPEDO, SKILL_SONAR
+        SKILL_SONAR, SKILL_MINE, SKILL_SHIELD, SKILL_AIRSTRIKE
     }
 
     private static final int GOLD = 0xDEB663;
@@ -70,14 +70,20 @@ public final class PlacementHud {
     private int energy, maxEnergy;
     private com.battleship.shared.game.SkillType armedSkill;
     private String skillHint = "";
+    private List<com.battleship.shared.game.SkillType> usedSkills = List.of();
     /** Skill battle tray above the battle bar; hidden in Classic combat. */
     public void setSkills(boolean shown, int energy, int maxEnergy, com.battleship.shared.game.SkillType armed,
                           boolean usable, String hint) {
+        setSkills(shown, energy, maxEnergy, armed, usable, hint, List.of());
+    }
+    public void setSkills(boolean shown, int energy, int maxEnergy, com.battleship.shared.game.SkillType armed,
+                          boolean usable, String hint, List<com.battleship.shared.game.SkillType> used) {
         String hintText = hint == null ? "" : hint;
         if (skillTray == shown && this.energy == energy && this.maxEnergy == maxEnergy && armedSkill == armed
-                && skillsUsable == usable && skillHint.equals(hintText)) return;
+                && skillsUsable == usable && skillHint.equals(hintText) && usedSkills.equals(used)) return;
         skillTray = shown; this.energy = energy; this.maxEnergy = maxEnergy; armedSkill = armed;
         skillsUsable = usable; skillHint = hintText;
+        usedSkills = List.copyOf(used);
         if (state != null && state.phase() != GamePhase.PLACEMENT) rebuild();
     }
     public static Action skillAction(com.battleship.shared.game.SkillType skill) { return Action.valueOf("SKILL_" + skill.name()); }
@@ -153,6 +159,8 @@ public final class PlacementHud {
         for (Button button : buttons) {
             if (button.enabled && x >= button.x && x <= button.x + button.width
                     && y >= button.y && y <= button.y + button.height) {
+                if (button.action.name().startsWith("SKILL_")
+                        && Math.abs(x-button.x-button.width/2)+Math.abs(y-button.y-button.height/2)>button.width/2) continue;
                 return Optional.of(button.action);
             }
         }
@@ -215,20 +223,32 @@ public final class PlacementHud {
     }
 
     private void skillTray(NavalHudSkin draw, float w) {
-        float x = w/2-250, y = 82, width = 500, height = 62;
-        draw.panel(x, y, width, height, 0x082D46);
-        regions.add(new Region(x, y, width, height));
-        text(body, "ENERGY", 10, x + 14, y + 57, GOLD);
-        for (int i = 0; i < maxEnergy; i++)
-            panel(x + 88 + i * 14, y + 46, 10, 6, Materials.rgb(i < energy ? CYAN : 0x2B3F52)).setUserData("uiRole", "energy-pip");
-        BitmapText hint = text(body, skillHint, 10, x + 214, y + 57, CYAN);
-        hint.setUserData("uiRole", "skill-hint");
-        UiTypography.fit(hint, width - 226);
+        float center = com.battleship.frontend.ui.BattleSidebarLayout.CENTER_X;
+        float top = logicalHeight-com.battleship.frontend.ui.BattleSidebarLayout.MAP_TOP-180-55;
+        float[][] positions = {{center, top}, {center-56, top-56}, {center+56, top-56}, {center, top-112}};
         var skills = com.battleship.shared.game.SkillType.values();
         for (int i = 0; i < skills.length; i++) {
             var skill = skills[i];
-            button(x + 13 + i * 120, y + 6, 114, 32, skill.name() + " " + skill.cost(),
-                    skillAction(skill), skillsUsable && energy >= skill.cost(), skill == armedSkill);
+            float x = positions[i][0], y = positions[i][1], radius = 39;
+            boolean spent = usedSkills.contains(skill);
+            boolean enabled = skillsUsable && !spent && energy >= skill.cost();
+            boolean selected = skill == armedSkill;
+            var rim = draw.polygon("Skill button " + skill, new float[] {x,y-radius,x+radius,y,x,y+radius,x-radius,y},
+                    selected ? 0xF8D675 : enabled ? GOLD : 0x78818A, 1);
+            rim.setUserData("skillType", skill.name());
+            rim.setUserData("used", spent);
+            draw.polygon("Skill diamond inset", new float[] {x,y-35,x+35,y,x,y+35,x-35,y}, selected ? 0x176386 : 0x132B3D, .98f).move(0,0,.2f);
+            var icon = new NavalHudSkin(assets, layout, 34);
+            com.battleship.frontend.ui.SkillIcons.draw(icon, skill, x, y, enabled ? IVORY : 0x829099);
+            icon.text(Integer.toString(i+1), 10, x-9,y+19,18,16,enabled?GOLD:0x829099);
+            draw.polygon("Skill cost pennant", new float[] {x,y-62,x+20,y-49,x+20,y-34,x-20,y-34,x-20,y-49},0x104E79,1);
+            if (spent) icon.text("USED",11,x-22,y-58,44,25,0x829099);
+            else {
+                com.battleship.frontend.ui.SkillIcons.bolt(icon, x-7,y-45,.55f,IVORY);
+                icon.text(Integer.toString(skill.cost()),17,x-1,y-58,23,25,IVORY);
+            }
+            buttons.add(new Button(x-radius,y-radius,radius*2,radius*2,skillAction(skill),enabled));
+            regions.add(new Region(x-radius,y-62,radius*2,radius+62));
         }
     }
 

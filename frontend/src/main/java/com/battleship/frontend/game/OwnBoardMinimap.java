@@ -40,6 +40,7 @@ public final class OwnBoardMinimap {
     private final Node[][] markers = new Node[Board.SIZE][Board.SIZE];
     private Board displayedBoard;
     private float scale = 1;
+    private float mapScale = 1;
     private float left;
     private float bottom;
     public void setBattleVisible(boolean visible) { layout.setCullHint(visible ? CullHint.Inherit : CullHint.Always); }
@@ -72,14 +73,24 @@ public final class OwnBoardMinimap {
     private void position() {
         boolean reversed = side == com.battleship.shared.game.Side.WHITE;
         layout.setLocalRotation(new com.jme3.math.Quaternion().fromAngles(0, 0, reversed ? FastMath.PI : 0));
-        layout.setLocalTranslation((left + (reversed ? SIZE : 0)) * scale, (bottom + (reversed ? SIZE : 0)) * scale, 0);
+        layout.setLocalTranslation((left + (reversed ? SIZE*mapScale : 0)) * scale,
+                (bottom + (reversed ? SIZE*mapScale : 0)) * scale, 0);
     }
 
+    private boolean skillsLayout;
+    private int viewportWidth = 1280, viewportHeight = 800;
+    public void setSkillsLayout(boolean skills) {
+        if (skillsLayout == skills) return;
+        skillsLayout = skills;
+        resize(viewportWidth, viewportHeight);
+    }
     public void resize(int width, int height) {
+        viewportWidth = width; viewportHeight = height;
         scale = com.battleship.frontend.ui.UiTypography.scale(width, height);
-        left = BattleSidebarLayout.mapLeft();
-        bottom = BattleSidebarLayout.mapBottom(height / scale);
-        layout.setLocalScale(scale);
+        mapScale = skillsLayout ? .9f : 1;
+        left = BattleSidebarLayout.CENTER_X-SIZE*mapScale/2;
+        bottom = height/scale-BattleSidebarLayout.MAP_TOP-SIZE*mapScale;
+        layout.setLocalScale(scale*mapScale);
         position();
         layout.detachAllChildren();
         quad(layout, "Crystalline minimap grid", 0, 0, SIZE, SIZE, 19, surface);
@@ -128,8 +139,8 @@ public final class OwnBoardMinimap {
 
     public boolean contains(Vector2f screen) {
         float x = screen.x / scale, y = screen.y / scale;
-        return layout.getLocalCullHint() != CullHint.Always && cells[0][0] != null && x >= left - 2 && x <= left + SIZE + 2
-                && y >= bottom - 2 && y <= bottom + SIZE + 2;
+        return layout.getLocalCullHint() != CullHint.Always && cells[0][0] != null && x >= left - 2 && x <= left + SIZE*mapScale + 2
+                && y >= bottom - 2 && y <= bottom + SIZE*mapScale + 2;
     }
 
     private void renderBoard() {

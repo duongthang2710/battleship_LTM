@@ -34,6 +34,18 @@ public final class NavalHudSkin {
         Geometry g = rect(x, y, FastMath.sqrt(dx*dx+dy*dy), thickness, color, 1);
         g.rotate(0,0,FastMath.atan2(dy,dx)); g.move(0,0,2.2f);
     }
+    public Geometry polygon(String name, float[] points, int color, float alpha) {
+        int count = points.length / 2;
+        float[] vertices = new float[count * 3];
+        int[] indices = new int[(count - 2) * 3];
+        for (int i = 0; i < count; i++) { vertices[i * 3] = points[i * 2]; vertices[i * 3 + 1] = points[i * 2 + 1]; }
+        for (int i = 0; i < count - 2; i++) { indices[i * 3] = 0; indices[i * 3 + 1] = i + 1; indices[i * 3 + 2] = i + 2; }
+        Mesh mesh = new Mesh(); mesh.setBuffer(VertexBuffer.Type.Position, 3, vertices);
+        mesh.setBuffer(VertexBuffer.Type.Index, 3, indices); mesh.updateBound();
+        ColorRGBA tint = Materials.linear(color); tint.a = alpha;
+        Geometry geometry = new Geometry(name, mesh); geometry.setMaterial(materials.flat(tint));
+        geometry.setLocalTranslation(0, 0, z); return attach(geometry);
+    }
     public void taperedRule(String name,float x,float y,float width,float thickness,int color,float alpha) {
         Mesh mesh=new Mesh();
         mesh.setBuffer(VertexBuffer.Type.Position,3,new float[]{0,0,0,width/2,-thickness/2,0,width,0,0,width/2,thickness/2,0});
