@@ -46,7 +46,7 @@ public final class MatchService {
     MatchService(List<RoomPlayer> players, GameRules rules, RoomOptions options, LongSupplier nanoTime) {
         this(players, rules, options, nanoTime, new java.util.Random());
     }
-    /** {@code random} only drives the missile barrage, so checks can seed it. */
+    /** Seeded randomness makes mine counterattacks reproducible in checks. */
     MatchService(List<RoomPlayer> players, GameRules rules, RoomOptions options, LongSupplier nanoTime, java.util.Random random) {
         this.nanoTime = nanoTime;
         this.options = options;
@@ -92,7 +92,7 @@ public final class MatchService {
         return result;
     }
 
-    /** Same deadline/countdown guard as a normal shot; an accepted skill always passes the turn. */
+    /** Support preserves the deadline. Airstrike opens the next player's attack window. */
     public SkillResult useSkill(String clientId, SkillRequest request) {
         expireTurn();
         SkillType skill = request == null ? null : request.skill();
@@ -107,7 +107,7 @@ public final class MatchService {
         SkillResult result = engine.useSkill(clientId, skill, target, direction);
         if (result.accepted()) {
             revision++;
-            if (phase() == GamePhase.BATTLE) startTurn();
+            if (phase() == GamePhase.BATTLE && skill.endsTurn()) startTurn();
             else if (phase() == GamePhase.GAME_OVER) endReason = MatchEndReason.FLEET_DESTROYED;
         }
         return result;
@@ -151,7 +151,9 @@ public final class MatchService {
         long remaining = phase() == GamePhase.BATTLE ? Math.min(TURN_NANOS, Math.max(0, turnDeadline - now)) : 0;
         long delay = phase() == GamePhase.BATTLE ? Math.max(0, turnStarts - now) : 0;
         return new TurnTimer(revision, engine.state().turnNumber(), engine.state().currentPlayerId(),
-                (remaining + 999_999) / 1_000_000, (delay + 999_999) / 1_000_000);
+                (remaining + 999_999) / 1_000_000, (delay + 999_999) / 1_000_000,
+                engine.rules().skills() ? java.util.Map.of(engine.state().player().id(), engine.energy(engine.state().player().id()),
+                        engine.state().enemy().id(), engine.energy(engine.state().enemy().id())) : java.util.Map.of());
     }
 
     public TurnTimer clockUpdate() {
@@ -200,18 +202,19 @@ public final class MatchService {
                     skill.direction(), skill.area(), skill.impacts().stream().map(i -> mask(i, concealSinking)).toList(),
                     count, skill.gameOver(), skill.winnerId());
         }
-        return new SkillState(engine.energy(ownId), engine.energy(enemyId), SkillType.MAX_ENERGY, engine.scans(ownId), skill);
+        if (skill != null && skill.skill() == SkillType.MINE && !ownId.equals(skill.attackerId())) skill = null;
+        return new SkillState(engine.energy(ownId), engine.energy(enemyId), SkillType.MAX_ENERGY, engine.scans(ownId), skill,
+                engine.mines(ownId), engine.shields(ownId), engine.usedSkills(ownId));
     }
 
     /** Ship identity is only revealed on a sink, and not at all while sinking information is hidden. */
     private static AttackResult mask(AttackResult attack, boolean concealSinking) {
         if (attack == null) return null;
-        if (concealSinking) return new AttackResult(attack.type() == AttackResultType.MISS ? AttackResultType.MISS : AttackResultType.HIT,
-                attack.coordinate(), null, false, false, attack.attackerId(), attack.defenderId(), null,
-                List.of(attack.coordinate()));
-        if (!attack.sunk()) return new AttackResult(attack.type(), attack.coordinate(), null,
-                false, false, attack.attackerId(), attack.defenderId(), null, attack.affectedCells());
-        return attack;
+        var counters = attack.counterattacks().stream().map(counter -> mask(counter, concealSinking)).toList();
+        var type = concealSinking && attack.sunk() ? AttackResultType.HIT : attack.type();
+        return new AttackResult(type, attack.coordinate(), !concealSinking && attack.sunk() ? attack.shipType() : null,
+                !concealSinking && attack.sunk(), attack.gameOver(), attack.attackerId(), attack.defenderId(), attack.winnerId(),
+                concealSinking ? List.of(attack.coordinate()) : attack.affectedCells(), attack.defense(), counters);
     }
 
 }

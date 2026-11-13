@@ -313,6 +313,7 @@ public final class RoomManager implements AutoCloseable {
                         publishMatch(room, MessageType.MATCH_UPDATED, null, null);
                     error(player, message, result.type().name(), switch (result.type()) {
                         case NOT_ENOUGH_ENERGY -> "Not enough energy for this skill.";
+                        case SKILL_ALREADY_USED -> "This skill has already been used in this match.";
                         case ALREADY_ATTACKED -> "Every target cell has already been attacked.";
                         case INVALID_SKILL -> "Skills are not available in this room.";
                         case NOT_YOUR_TURN -> "Wait for your turn.";
