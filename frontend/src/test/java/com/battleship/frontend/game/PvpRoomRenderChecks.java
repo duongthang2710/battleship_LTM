@@ -28,6 +28,7 @@ import com.battleship.shared.game.Ship;
 import com.battleship.shared.game.ShipOrientation;
 import com.battleship.shared.game.AttackResultType;
 import com.battleship.shared.game.CellState;
+import com.battleship.shared.game.SkillType;
 import com.jme3.app.FlyCamAppState;
 import com.jme3.app.SimpleApplication;
 import com.jme3.input.InputManager;
@@ -77,6 +78,8 @@ public final class PvpRoomRenderChecks extends SimpleApplication {
     private long finalTurnStarted;
     private int replayShots;
     private long replayRevision = -1;
+    private int verifiedSkills;
+    private SkillType supportNeedsShot;
     private final java.util.EnumSet<AttackResultType> replayResults = java.util.EnumSet.noneOf(AttackResultType.class);
 
     private PvpRoomRenderChecks(String role, Path journal) { this.role = role; this.journal = journal; }
@@ -119,7 +122,8 @@ public final class PvpRoomRenderChecks extends SimpleApplication {
                         "-Dbattleship.leaderboardOnly=" + Boolean.getBoolean("battleship.leaderboardOnly"),
                         "-Dbattleship.friendsOnly=" + Boolean.getBoolean("battleship.friendsOnly"),
                         "-Dbattleship.gameInviteOnly=" + Boolean.getBoolean("battleship.gameInviteOnly"),
-                        "-Dbattleship.chatOnly=" + Boolean.getBoolean("battleship.chatOnly"), "-cp",
+                        "-Dbattleship.chatOnly=" + Boolean.getBoolean("battleship.chatOnly"),
+                        "-Dbattleship.skillsOnly=" + Boolean.getBoolean("battleship.skillsOnly"), "-cp",
                         System.getProperty("java.class.path"), "-Dbattleship.port=" + System.getProperty("battleship.port", "2209"),
                         PvpRoomRenderChecks.class.getName(), role, journal.toString())
                         .redirectErrorStream(true).redirectOutput(journal.resolve(role + ".log").toFile()).start();
@@ -143,7 +147,9 @@ public final class PvpRoomRenderChecks extends SimpleApplication {
                 require(clients[0].waitFor(120, TimeUnit.SECONDS) && clients[0].exitValue() == 0, "Saved settings survive an actual desktop restart");
                 System.out.println(Files.readString(journal.resolve("reload.log")));
             }
-            System.out.println(Boolean.getBoolean("battleship.settingsOnly")
+            System.out.println(Boolean.getBoolean("battleship.skillsOnly")
+                    ? "PASS: two Skill Battle desktop clients; diamond HUD, all four skills, energy locks, support shots, Airstrike axis, private sonar, victory/defeat and clean rematch."
+                    : Boolean.getBoolean("battleship.settingsOnly")
                     ? "PASS: desktop Settings, 960x600/1280x720, borderless fullscreen, save/reset/discard, live TCP session and application restart with restored preferences."
                     : Boolean.getBoolean("battleship.chatOnly")
                     ? "PASS: two desktop chat clients; login/friend invitation, waiting messages, safe scrolling, Battle input isolation and timer, read-only game over, rematch chat reset and Main Menu."
@@ -206,6 +212,7 @@ public final class PvpRoomRenderChecks extends SimpleApplication {
                 require(!screens.mainMenu().visible(), "Requesting Main Menu cannot bypass login");
                 stage = -1;
             } else if (stage < 0) authenticate();
+            else if (Boolean.getBoolean("battleship.skillsOnly")) skillScreens();
             else if (Boolean.getBoolean("battleship.settingsOnly")) settingsScreens();
             else if (Boolean.getBoolean("battleship.friendsOnly")) friendsScreens();
             else if (Boolean.getBoolean("battleship.leaderboardOnly")) leaderboardScreens();
@@ -467,7 +474,6 @@ public final class PvpRoomRenderChecks extends SimpleApplication {
     private void chatSend(String text, boolean sendButton) {
         var panel = screens.chatPanel();
         require(panel.visible() && panel.writable(), "Chat is visible and writable");
-        if (panel.collapsed()) click(panel.buttonCenter(ChatPanel.Action.TOGGLE));
         click(panel.inputCenter()); require(panel.focused(), "Chat input receives focus");
         for (char c : text.toCharArray()) key(switch (c) {
             case 'F' -> KeyInput.KEY_F; case 'C' -> KeyInput.KEY_C; case 'T' -> KeyInput.KEY_T; case 'R' -> KeyInput.KEY_R; default -> 0;
@@ -535,7 +541,7 @@ public final class PvpRoomRenderChecks extends SimpleApplication {
             }
             case 208 -> {
                 if (screens.game().state().phase() == GamePhase.BATTLE && context != null && context.canSend()) {
-                    require(!panel.collapsed() && panel.messages().stream().allMatch(m -> m.contextId().equals(context.contextId()) && m.text().startsWith("FCTR")), "Battle chat opens with only live messages from this match");
+                    require(panel.collapsed() && panel.messages().stream().allMatch(m -> m.contextId().equals(context.contextId()) && m.text().startsWith("FCTR")), "Battle chat starts compact with only live messages from this match");
                     chatBoardView = screens.game().enemyView(); chatRevision = screens.pvp().match().revision(); chatRemaining = screens.pvp().remainingTurnMillis(); chatFirstBattleAt = System.nanoTime();
                     var cameraBefore = cam.getRotation().clone(); chatSend("FCTR [] <tag> \\#ff0000# " + role, false);
                     require(chatBoardView == screens.game().enemyView() && cameraBefore.equals(cam.getRotation()), "F/C/T/R/Tab while typing never reach gameplay or camera");
@@ -546,22 +552,26 @@ public final class PvpRoomRenderChecks extends SimpleApplication {
                 if (panel.messages().size() >= 2 && !panel.busy()) {
                     require(screens.pvp().match().revision() == chatRevision && screens.pvp().match().turnNumber() == 1
                             && screens.pvp().remainingTurnMillis() <= chatRemaining + 150, "Battle chat preserves shots, turn and countdown");
+                    require(panel.collapsed(),"Receiving battle chat leaves the history compact");
+                    click(panel.inputCenter());
                     require(textShown(guiNode, "\\ #ff0000#"), "Color-tag input is rendered as safe literal text");
                     for (int row = 0; row < 10; row++) for (int column = 0; column < 10; column++) {
                         var projected = cam.getScreenCoordinates(new BoardCoordinates(board).worldCenter(new Coordinate(row, column), .185f));
                         require(!panel.contains(new Vector2f(projected.x, projected.y)), "Expanded chat does not cover a target cell at the player view");
                     }
                     capture = "chat-battle-" + role + ".png";
-                    click(panel.buttonCenter(ChatPanel.Action.TOGGLE)); stage = 210;
+                    stage = 210;
                 }
             }
             case 210 -> {
+                if(capture!=null) return;
+                panel.blur();
                 if (playReplay()) {
                     require(context != null && !context.canSend() && panel.messages().size() == 2, "Finished match keeps displayed chat but disables sending");
-                    click(panel.buttonCenter(ChatPanel.Action.TOGGLE)); capture = "chat-game-over-" + role + ".png"; stage = 211;
+                    key(KeyInput.KEY_RETURN, '\n'); capture = "chat-game-over-" + role + ".png"; stage = 211;
                 }
             }
-            case 211 -> { if (capture == null) { key(KeyInput.KEY_RETURN, '\n'); stage = 212; } }
+            case 211 -> { if (capture == null) { panel.blur(); key(KeyInput.KEY_RETURN, '\n'); stage = 212; } }
             case 212 -> {
                 if (screens.game().state().phase() == GamePhase.PLACEMENT) {
                     require(context != null && !context.contextId().equals(chatContextId) && panel.messages().isEmpty() && panel.draft().isEmpty(), "Rematch discards old messages and input state");
@@ -859,6 +869,188 @@ public final class PvpRoomRenderChecks extends SimpleApplication {
             }
             default -> { }
         }
+    }
+
+    private void skillScreens() throws Exception {
+        var network = screens.pvp();
+        var game = screens.game();
+        switch (stage) {
+            case 1 -> {
+                if (role.equals("A") && screens.roomPanel().enabled(PvpRoomPanel.Action.SHOW_CREATE)) {
+                    action(PvpRoomPanel.Action.SHOW_CREATE);
+                    action(PvpRoomPanel.Action.COMBAT_SKILLS);
+                    require(screens.roomPanel().selectedRules().skills(), "Mouse click selects Skill Battle through ScreenController");
+                    action(PvpRoomPanel.Action.CREATE_ROOM);
+                    stage = 2;
+                } else if (role.equals("B") && Files.exists(journal.resolve("code"))) {
+                    code = Files.readString(journal.resolve("code"));
+                    join(code);
+                    stage = 2;
+                }
+            }
+            case 2 -> {
+                if (network.room() == null) return;
+                if (role.equals("A") && code == null) {
+                    code = network.room().roomCode();
+                    Files.writeString(journal.resolve("code"), code);
+                }
+                if (twoPlayers()) {
+                    require(network.room().rules().skills(), "Both clients inherit Skill Battle");
+                    action(PvpRoomPanel.Action.TOGGLE_READY);
+                    stage = 3;
+                }
+            }
+            case 3 -> {
+                if (screens.networkPlacement()) {
+                    prepareReplay();
+                    stage = 4;
+                }
+            }
+            case 4 -> {
+                if (game.attackAnimating()) game.update(4, new Vector2f(-1, -1));
+                if (capture != null) return;
+                var state = game.state();
+                var match = network.match();
+                if (match == null || match.skills() == null || network.pending() || game.inputBusy()) return;
+                var skill = match.skills().lastSkill();
+                if(role.equals("B") && Files.exists(journal.resolve("A-skill-MINE"))) {
+                    require(match.skills().ownMines().isEmpty(),"Opponent never receives private mines");
+                    Files.writeString(journal.resolve("B-skill-MINE"),"ok");
+                }
+                if (skill != null && skill.attackerId().equals(network.room().players().getFirst().clientId())) {
+                    if (skill.skill() == SkillType.AIRSTRIKE) {
+                        require(skill.direction() == com.battleship.shared.game.SkillDirection.SOUTH, "T rotates the airstrike before firing");
+                        require(game.enemyView() == state.currentPlayerId().equals(state.player().id()),
+                                "Both clients automatically show the correct board after Airstrike changes turn");
+                    }
+                    if (skill.skill() == SkillType.SONAR) {
+                        require(role.equals("A") ? skill.sonarCount() != null && game.enemyView()
+                                : skill.sonarCount() == null && match.skills().ownScans().isEmpty(),
+                                "Scanner keeps the enemy board in view and only scanner receives the count");
+                        if(role.equals("A")) {
+                            var markers=(com.jme3.scene.Node)board.getChild("Private tactical markers");
+                            require(markers.getQuantity()==1 && markers.getChild(0).getName().equals("Sonar scanned area outline"),
+                                    "Normal client flow keeps exactly one scan outline on the enemy board");
+                            var scanned=cam.getScreenCoordinates(new BoardCoordinates(board).worldCenter(skill.area().getFirst(),.185f));
+                            game.update(0,new Vector2f(scanned.x,scanned.y));
+                            require(textShown(guiNode,skill.sonarCount()+" SHIP CELLS IN THIS AREA"),"Hovering scanned cells shows only the area's count at the top");
+                            game.update(0,new Vector2f(-1,-1));
+                            require(!textShown(guiNode,skill.sonarCount()+" SHIP CELLS IN THIS AREA"),"Leaving the scan hides its count");
+                        }
+                    }
+                    Files.writeString(journal.resolve(role + "-skill-" + skill.skill()), "ok");
+                    if (role.equals("A") && verifiedSkills < SkillType.values().length
+                            && skill.skill() == SkillType.values()[verifiedSkills]) {
+                        require(match.skills().ownUsedSkills().contains(skill.skill()),"Used skill is synchronized to its owner");
+                        game.perform(PlacementHud.skillAction(skill.skill()));
+                        require(!network.pending(),"A used skill cannot send another request from keyboard or button action");
+                        capture = "skill-result-" + skill.skill() + ".png";
+                        verifiedSkills++;
+                        if(!skill.skill().endsTurn()) supportNeedsShot=skill.skill();
+                    }
+                }
+                if (state.phase() == GamePhase.GAME_OVER) {
+                    for (SkillType expected : SkillType.values())
+                        require(Files.exists(journal.resolve(role + "-skill-" + expected)), "Both clients observed " + expected);
+                    require(textShown(guiNode, role.equals("A") ? "VICTORY" : "DEFEAT"), "Correct result overlay after Skill Battle");
+                    capture = "skill-game-over-" + role + ".png";
+                    stage = 5;
+                    return;
+                }
+                if (!state.currentPlayerId().equals(state.player().id())) return;
+                if (!game.enemyView()) game.perform(PlacementHud.Action.TOGGLE_BOARD);
+                if (role.equals("B")) {
+                    if (skill != null && !Files.exists(journal.resolve("A-skill-" + skill.skill()))) return;
+                    skillWaterShot();
+                    return;
+                }
+                if(supportNeedsShot!=null) {
+                    if(!Files.exists(journal.resolve("B-skill-"+supportNeedsShot))) return;
+                    supportNeedsShot=null; skillWaterShot(); return;
+                }
+                if (verifiedSkills == SkillType.values().length) {
+                    Coordinate target = java.util.Arrays.stream(ShipType.values())
+                            .flatMap(type -> new Ship(type, new Coordinate(type.ordinal() * 2, 0), ShipOrientation.HORIZONTAL).occupiedCells().stream())
+                            .filter(cell -> !state.enemy().board().wasAttacked(cell)).findFirst().orElseThrow();
+                    pointAt(target);
+                    require(network.pending(), "Normal shots still work after all four skills");
+                    return;
+                }
+                SkillType next = SkillType.values()[verifiedSkills];
+                if (match.skills().ownEnergy() < next.cost()) {
+                    if (match.skills().ownEnergy() == 0 && verifiedSkills == 0) {
+                        key(KeyInput.KEY_1, '1');
+                        require(!network.pending(), "Insufficient-energy shortcut sends no skill request");
+                    }
+                    skillWaterShot();
+                    return;
+                }
+                click(skillButtonCenter(next));
+                if (verifiedSkills == 0) {
+                    key(KeyInput.KEY_TAB, '\t');
+                    require(!game.enemyView(), "Tab switches to the own fleet");
+                    pointAt(new Coordinate(5, 5));
+                    require(!network.pending(), "Switching to the own fleet cancels an armed skill");
+                    key(KeyInput.KEY_1, '1');
+                    require(game.enemyView(), "Skill shortcut returns to enemy waters");
+                }
+                if (next == SkillType.AIRSTRIKE) {
+                    key(KeyInput.KEY_T, 't');
+                }
+                pointAt(next==SkillType.MINE?new Coordinate(8,8):next==SkillType.SHIELD?new Coordinate(2,1):new Coordinate(0,0));
+                require(network.pending(), "Raycast on the 3D board sends the selected skill");
+            }
+            case 5 -> {
+                if (capture != null) return;
+                game.perform(PlacementHud.Action.RESTART);
+                stage = 6;
+            }
+            case 6 -> {
+                if (game.state().phase() == GamePhase.PLACEMENT && !network.pending()) {
+                    prepareReplay();
+                    stage = 7;
+                }
+            }
+            case 7 -> {
+                if (Files.exists(journal.resolve("skill-rematch-A")) && Files.exists(journal.resolve("skill-rematch-B"))) {
+                    System.out.println("PASS Skill Battle client " + role);
+                    stage = 8;
+                    stop();
+                    return;
+                }
+                var match = network.match();
+                if (match != null && match.phase() == GamePhase.BATTLE) {
+                    require(match.skills().ownEnergy() == 0 && match.skills().opponentEnergy() == 0
+                            && match.skills().ownScans().isEmpty() && match.skills().ownUsedSkills().isEmpty() && match.skills().lastSkill() == null
+                            && match.ownBoard().shots().isEmpty() && match.enemyBoard().shots().isEmpty(),
+                            "Rematch resets energy, scans, skill results and shot history");
+                    Files.writeString(journal.resolve("skill-rematch-" + role), "ok");
+                }
+            }
+            default -> { }
+        }
+    }
+
+    private void skillWaterShot() {
+        Board target = screens.game().state().enemy().board();
+        Coordinate water = java.util.stream.IntStream.range(0, Board.SIZE * 5)
+                .mapToObj(index -> new Coordinate(index / 5, 5 + index % 5))
+                .filter(cell -> !target.wasAttacked(cell)).findFirst().orElseThrow();
+        pointAt(water);
+        require(screens.pvp().pending(), "Normal shot through 3D picking charges energy");
+    }
+
+    private Vector2f skillButtonCenter(SkillType skill) {
+        guiNode.updateGeometricState();
+        var center = new Vector2f(-1, -1);
+        guiNode.depthFirstTraversal(node -> {
+            if (skill.name().equals(node.getUserData("skillType"))) {
+                var bounds = (com.jme3.bounding.BoundingBox) node.getWorldBound();
+                center.set(bounds.getCenter().x,bounds.getCenter().y);
+            }
+        });
+        require(center.x >= 0, "Skill button is visible in the battle HUD");
+        return center;
     }
 
     private void stepA() throws Exception {

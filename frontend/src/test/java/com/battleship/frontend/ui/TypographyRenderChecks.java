@@ -158,10 +158,13 @@ public final class TypographyRenderChecks extends SimpleApplication {
         chat.setLocalAccountId(captain.id());
         var rival=new AccountProfile(UUID.randomUUID(),"opponent","Admiral Dusk");
         chat.append(new ChatMessage(context.contextId(),6,rival,"Your move, admiral. Good luck!",Instant.now().toString()));
+        require(chat.collapsed(),"Incoming messages keep battle chat compact until input is focused");
+        var compactBattle=(Node)gameplay.clone(); compactBattle.attachChild(chat.root().clone()); add("battle-chat-compact",compactBattle);
+        chat.focus();
         var chatRoles=new java.util.HashSet<String>();
         chat.root().depthFirstTraversal(n->{ String role=n.getUserData("chatRole"); if(role!=null) chatRoles.add(role); });
         require(chatRoles.containsAll(java.util.Set.of("self","opponent","content")),"Chat renders own name, opponent name and content as distinct roles");
-        require(!chat.collapsed() && chat.inputCenter().y>0,"Battle chat opens at bottom-left with Enter input");
+        require(!chat.collapsed() && chat.focused() && chat.inputCenter().y>0,"Focusing input opens battle chat history");
         require(!ownMap.contains(chat.inputCenter()),"Chat input stays clear of minimap");
         hud.root().updateLogicalState(0); hud.root().updateGeometricState();
         ownMap.root().updateLogicalState(0); ownMap.root().updateGeometricState();
@@ -169,15 +172,51 @@ public final class TypographyRenderChecks extends SimpleApplication {
         float mapCenter=((com.jme3.bounding.BoundingBox)ownMap.root().getChild("Crystalline minimap grid").getWorldBound()).getCenter().x;
         require(Math.abs(avatarCenter-mapCenter)<.01f,"Avatar and minimap remain centered above corner chat");
         var battle = (Node) gameplay.clone(); battle.attachChild(chat.root().clone()); add("battle", battle);
-        placement.setSkills(true, 5, com.battleship.shared.game.SkillType.MAX_ENERGY, com.battleship.shared.game.SkillType.TORPEDO,
-                true, "Torpedo EAST [T]: pick a cell");
+        placement.setSkills(true, 10, com.battleship.shared.game.SkillType.MAX_ENERGY, com.battleship.shared.game.SkillType.AIRSTRIKE,
+                true, "Airstrike / T to rotate");
         for (var skill : com.battleship.shared.game.SkillType.values()) {
             var action = PlacementHud.skillAction(skill);
             require(placement.actionAt(placement.buttonCenter(action)).orElseThrow() == action, "Skill tray hit target " + skill);
         }
         for (var skill : com.battleship.shared.game.SkillType.values())
-            require(countText(placement.root(), skill.name() + " " + skill.cost()) == 1, "Skill tray shows full name and cost: " + skill);
+            {
+                int[] icons={0}; placement.root().depthFirstTraversal(node->{if(skill.name().equals(node.getUserData("skillType"))) icons[0]++;});
+                require(icons[0]==1,"Each skill has a distinct diamond icon");
+            }
+        hud.setBattleState(engine.state(),new com.battleship.shared.game.GameRules(com.battleship.shared.game.GameMode.CLASSIC,5,
+                com.battleship.shared.game.TurnRule.ALTERNATING,com.battleship.shared.game.CombatMode.SKILLS));
+        hud.setEnergy(10); ownMap.setSkillsLayout(true);
+        var energyBadge=(Node)hud.root().getChild("Commander energy badge");
+        require(energyBadge.getQuantity()==3 && energyBadge.getChild("Energy lightning")!=null
+                && energyBadge.getChild("Energy lightning tip")!=null,
+                "Energy badge contains only the clean two-piece bolt and its number");
+        chat.blur();
+        ownMap.root().updateGeometricState();
+        var skillMap=(com.jme3.bounding.BoundingBox)ownMap.root().getChild("Crystalline minimap grid").getWorldBound();
+        require(Math.abs(skillMap.getCenter().x-avatarCenter)<.01f,"Skill minimap stays centered beneath own portrait");
+        for(var skill:com.battleship.shared.game.SkillType.values()) {
+            var button=placement.buttonCenter(PlacementHud.skillAction(skill));
+            require(button.y<skillMap.getCenter().y-skillMap.getYExtent(),"Skills are below minimap");
+            require(!chat.contains(button),"Compact chat does not intercept skill buttons");
+        }
         var skillBattle = (Node) gameplay.clone(); skillBattle.attachChild(chat.root().clone()); add("battle-skills", skillBattle);
+        hud.setGameStatus("Skill","Enemy sonar swept your waters near G3.");
+        var noticeBattle=(Node)gameplay.clone(); noticeBattle.attachChild(chat.root().clone()); add("battle-skill-notice",noticeBattle);
+        chat.focus();
+        placement.setChatExpanded(true);
+        var expandedBattle=(Node)gameplay.clone(); expandedBattle.attachChild(chat.root().clone()); add("battle-skills-chat-history",expandedBattle);
+        chat.blur();
+        placement.setChatExpanded(false);
+        placement.setSkills(true,10,com.battleship.shared.game.SkillType.MAX_ENERGY,null,true,"",
+                java.util.List.of(com.battleship.shared.game.SkillType.values()));
+        for(var skill:com.battleship.shared.game.SkillType.values())
+            require(placement.actionAt(placement.buttonCenter(PlacementHud.skillAction(skill))).isEmpty(),"Used skill button remains disabled even at full energy");
+        hud.setHoverNotice("Sonar / 6 ship cells in this area");
+        hud.update(4);
+        require(((Node)hud.root().getChild("Battle turn notice")).getQuantity()>0,"Scan count remains visible while hovering");
+        var spentBattle=(Node)gameplay.clone(); spentBattle.attachChild(chat.root().clone()); add("battle-skills-used",spentBattle);
+        hud.setHoverNotice("");
+        hud.setBattleState(engine.state(),com.battleship.shared.game.GameRules.DEFAULT); ownMap.setSkillsLayout(false);
         placement.setSkills(false, 0, 0, null, false, "");
         hud.setFleetReportVisible(false);add("battle-hidden-report",gameplay);hud.setFleetReportVisible(true);
         for(int seconds=3;seconds>=1;seconds--) {
