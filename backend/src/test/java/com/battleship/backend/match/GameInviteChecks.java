@@ -110,10 +110,15 @@ public final class GameInviteChecks {
         request(b, MessageType.READY, null, MessageType.ROOM_UPDATED);
         receive(a, m -> m.type() == MessageType.START_PLACEMENT); receive(b, m -> m.type() == MessageType.START_PLACEMENT);
         rejected(a, MessageType.SEND_GAME_INVITE, new SendGameInvite(c.accountId), "started");
+        inviteBusyFriend(c,a);
+        inviteBusyFriend(c,b);
         request(a, MessageType.SUBMIT_FLEET, TcpMatchChecks.fleet(), MessageType.FLEET_ACCEPTED);
         request(b, MessageType.SUBMIT_FLEET, TcpMatchChecks.fleet(), MessageType.START_BATTLE);
         var state = receive(a, m -> m.type() == MessageType.START_BATTLE).payloadAs(MatchSnapshot.class);
         require(state.currentPlayerId().equals(a.id) && state.enemyBoard().ships().isEmpty(), "Invited match keeps first turn and private fleets");
+        inviteBusyFriend(c,a);
+        inviteBusyFriend(c,b);
+        Thread.sleep(state.timer().startsInMillis()+30);
         var cells = TcpMatchChecks.fleet().ships().stream().flatMap(p -> p.ship().occupiedCells().stream()).toList();
         int ai = 0, bi = 0;
         while (state.phase() == GamePhase.BATTLE) {
@@ -125,6 +130,14 @@ public final class GameInviteChecks {
             state = updated;
         }
         require(state.winnerId().equals(a.id), "Invited match finishes with the correct winner");
+    }
+    private static void inviteBusyFriend(Peer inviter,Peer recipient) throws Exception {
+        rejected(inviter,MessageType.SEND_GAME_INVITE,new SendGameInvite(recipient.accountId),"another room");
+        require(request(inviter,MessageType.PING,null,MessageType.PONG).type()==MessageType.PONG,
+                "Inviting a busy friend preserves the same TCP connection");
+        require(request(inviter,MessageType.FRIENDS_REQUEST,new FriendsRequest(FriendsAction.FRIENDS,null,null,0),
+                MessageType.FRIENDS_RESULT).type()==MessageType.FRIENDS_RESULT,
+                "Inviting a busy friend preserves the authenticated session");
     }
 
     private static void friends(Peer a, Peer b) throws Exception {
