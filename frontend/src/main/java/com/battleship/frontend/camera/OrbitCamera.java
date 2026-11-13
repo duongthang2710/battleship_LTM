@@ -56,6 +56,15 @@ public final class OrbitCamera {
     }
 
     public void useDefaultView() { homeYaw = INITIAL_YAW; reset(); }
+    private float lastShake;
+    public void shake(float strength) {
+        if (strength == 0 && lastShake == 0) return;
+        lastShake = strength;
+        update();
+        float time = (System.nanoTime() % 10_000_000_000L) / 1_000_000_000f;
+        camera.setLocation(camera.getLocation().add(FastMath.sin(time*63)*strength,
+                FastMath.sin(time*77)*strength*.7f, 0));
+    }
 
     public void update() {
         camera.setFrustumPerspective(58, (float) camera.getWidth() / camera.getHeight(), 0.1f, 1400);

@@ -60,7 +60,12 @@ public final class GameController {
     private Runnable askLeave;
     public void onLeave(Runnable askLeave) { this.askLeave=askLeave; }
     private java.util.function.Consumer<Cue> sound = cue -> { };
-    public void onSound(java.util.function.Consumer<Cue> sound) { this.sound = sound; }
+    public void onSound(java.util.function.Consumer<Cue> sound) {
+        this.sound = sound;
+        effects.skills().onSound(sound);
+    }
+    private java.util.function.Consumer<Float> shake = amount -> { };
+    public void onShake(java.util.function.Consumer<Float> callback) { shake = callback; }
     private Board lastPlacementBoard;
     private boolean resultSoundPlayed;
     private boolean countingIntoBattle;
@@ -71,8 +76,9 @@ public final class GameController {
     public void onSettings(Runnable action) { openSettings = action; }
     private String message = "Choose a ship, then click a cell.";
     private SkillType armedSkill;
-    private SkillDirection torpedoDirection = SkillDirection.EAST;
+    private SkillDirection strikeDirection = SkillDirection.EAST;
     private String skillHint = "";
+    private String displayedSkillHint = "";
 
     public GameController(GameEngine engine, BoardPicker picker, FleetRenderer fleet,
                           PlacementFeedback feedback, PlacementHud controls, BattleHud hud, OwnBoardMinimap minimap,
@@ -193,10 +199,11 @@ public final class GameController {
                 snapshot.currentPlayerId(), snapshot.winnerId(), snapshot.lastAttack(), PlacementState.initial(), true,
                 snapshot.turnNumber());
         SkillResult skill = snapshot.skills() == null ? null : snapshot.skills().lastSkill();
+        if (skill != null && skill.attackerId().equals(snapshot.playerId())) armedSkill = null;
         if (!snapshot.currentPlayerId().equals(snapshot.playerId()) || snapshot.phase() != GamePhase.BATTLE) armedSkill = null;
-        if (skill != null) skillHint = skillSummary(skill, snapshot.playerId());
+        skillHint = skill == null ? "" : skillSummary(skill, snapshot.playerId());
         // A skill volley is shown as one lead projectile; every affected cell appears on impact.
-        AttackResult attack = skill != null ? leadImpact(skill) : snapshot.lastAttack();
+        AttackResult attack = snapshot.lastAttack();
         effects.clear();
         if (snapshot.phase() == GamePhase.GAME_OVER && snapshot.endReason() != com.battleship.shared.match.MatchEndReason.FLEET_DESTROYED) {
             if (snapshot.timedOut()) sound.accept(Cue.TIMEOUT);
@@ -205,9 +212,30 @@ public final class GameController {
             showGameOver();
             return;
         }
+        if (skill != null) {
+            boolean ourSkill = skill.attackerId().equals(snapshot.playerId());
+            enemyView = skill.skill().targetsOwnBoard() ? !ourSkill : ourSkill;
+            beforeShot = previous;
+            message = skillHint;
+            effects.skills().play(skill, ourSkill ? snapshot.side() : snapshot.side().opponent(),
+                    defender -> { enemyView = !defender.equals(snapshot.playerId()); refresh(); },
+                    this::refresh, this::finishNetworkPresentation);
+            refresh();
+            return;
+        }
+        if (attack != null && attack.defense() != null) {
+            skillHint = attack.defense() == com.battleship.shared.game.DefenseKind.SHIELD
+                    ? "Aegis shield blocked the shot" : "Naval mine triggered a counterattack";
+            enemyView = !attack.defenderId().equals(snapshot.playerId()); beforeShot = previous;
+            effects.skills().playDefense(attack, attack.attackerId().equals(snapshot.playerId())?snapshot.side():snapshot.side().opponent(),
+                    defender -> { enemyView = !defender.equals(snapshot.playerId()); refresh(); },
+                    this::refresh, this::finishNetworkPresentation);
+            refresh();
+            return;
+        }
+        if (attack == null && snapshot.turnNumber() == previous.turnNumber()) { refresh(); return; }
         String shooter = skill != null ? skill.attackerId() : attack == null ? null : attack.attackerId();
-        enemyView = skill != null && attack == null ? state().currentPlayerId().equals(snapshot.playerId())
-                : shooter == null || shooter.equals(snapshot.playerId());
+        enemyView = shooter == null || shooter.equals(snapshot.playerId());
         message = skill != null ? skillHint : attack == null ? "Battle started. Player 1 goes first." : attack.type() + " at " + cellName(attack.coordinate());
         if (skill != null && attack == null) sound.accept(Cue.TARGET);
         beforeShot = previous;
@@ -227,6 +255,13 @@ public final class GameController {
         message = detail;
         if (skillMode() && state().phase() == GamePhase.BATTLE) skillHint = detail;
         refreshHud();
+        hud.showNotice(detail, 3.2f);
+    }
+
+    private void finishNetworkPresentation() {
+        if (state().phase() == GamePhase.GAME_OVER) showGameOver();
+        else enemyView = state().currentPlayerId().equals(state().player().id());
+        refresh();
     }
 
     private boolean placementLocked() { return networkPlacement && (submitted || network.pending()); }
@@ -242,6 +277,7 @@ public final class GameController {
         hud.update(delta);
         updateIntro(delta);
         effects.update(delta);
+        shake.accept(effects.skills().shake());
         if (ai != null) {
             GameState before = state();
             AttackResult botShot = ai.updateBot(!effects.isBusy() && !introBlocked());
@@ -280,8 +316,9 @@ public final class GameController {
                 && state().player().board().ship(state().placement().selectedType()) == null) {
             PlacementResult preview = engine.previewPlacement(hover);
             feedback.showPreview(preview.affectedCells(), preview.success());
-        } else if (armedSkill != null && state().phase() == GamePhase.BATTLE && enemyView && hover != null && !effects.isBusy()) {
-            feedback.showPreview(skillPreview(armedSkill, hover), canUseSkills() && energy() >= armedSkill.cost());
+        } else if (armedSkill != null && state().phase() == GamePhase.BATTLE && hover != null && !effects.isBusy()) {
+            feedback.showPreview(skillPreview(armedSkill, hover), canUseSkills()
+                    && energy() >= armedSkill.cost() && validSkillTarget(hover));
         } else if (!effects.isBusy() && hover != null && canTarget(hover)) {
             feedback.clearPreview();
             targeting.show(hover);
@@ -492,6 +529,7 @@ public final class GameController {
         if (action == PlacementHud.Action.TOGGLE_BOARD) {
             if (state().phase() != GamePhase.PLACEMENT) {
                 enemyView = !enemyView;
+                if (armedSkill != null && enemyView == armedSkill.targetsOwnBoard()) armedSkill = null;
                 feedback.clearPreview();
                 refresh();
             }
@@ -642,11 +680,14 @@ public final class GameController {
         var selected = state().player().board().ship(state().placement().selectedType());
         if (state().phase() == GamePhase.PLACEMENT && selected != null)
             feedback.showSelection(selected.occupiedCells());
-        else if (skillMode() && enemyView && state().phase() != GamePhase.PLACEMENT && !scans().isEmpty())
-            feedback.showSelection(scans().stream().flatMap(scan -> scan.area().stream()).distinct().toList());
         else feedback.clearSelection();
         feedback.clearPreview();
         if (designer.hasDraft()) feedback.showPreview(designer.cells(), designer.validation().success());
+        if (skillMode() && network.match() != null && network.match().skills() != null) {
+            var tactical = network.match().skills();
+            effects.skills().sync(enemyView ? List.of() : tactical.ownMines(),
+                    enemyView ? List.of() : tactical.ownShields(), enemyView ? tactical.ownScans() : List.of());
+        }
         targeting.clear();
         refreshHud();
     }
@@ -658,6 +699,7 @@ public final class GameController {
         }
         hud.setBattleState(state(), engine.rules());
         hud.setOpponentReady(ai != null || networkPlacement && network.match() != null && network.match().opponentSubmitted());
+        minimap.setSkillsLayout(skillMode() && state().phase() != GamePhase.PLACEMENT);
         minimap.setBattleVisible(state().phase() != GamePhase.PLACEMENT);
         GameState shown = effects.isBusy() && !effects.hasImpacted() && beforeShot != null ? beforeShot : state();
         minimap.update(shown.player().board());
@@ -685,7 +727,7 @@ public final class GameController {
 
     private void refreshShotStatus() {
         AttackResult shot = effects.result();
-        if (shot == null) return;
+        if (shot == null) { hud.clearShotResult(); hud.setGameStatus("Skill", skillHint); return; }
         String title = !effects.hasImpacted() ? "Volley incoming"
                 : shot.sunk() ? "Ship sunk" : shot.type().toString();
         hud.setShotResult(effects.hasImpacted() ? shot.sunk() ? "SUNK!" : shot.type().toString() : "",
@@ -716,83 +758,116 @@ public final class GameController {
     }
     private boolean skillMode() { return networkPlacement && engine.rules().skills(); }
     private int energy() {
-        return network == null || network.match() == null || network.match().skills() == null ? 0 : network.match().skills().ownEnergy();
+        return network == null || network.match() == null ? 0 : network.energy(network.match().playerId());
     }
     private List<SonarReading> scans() {
         return network == null || network.match() == null || network.match().skills() == null ? List.of() : network.match().skills().ownScans();
+    }
+    private List<SkillType> usedSkills() {
+        return network == null || network.match() == null || network.match().skills() == null
+                ? List.of() : network.match().skills().ownUsedSkills();
     }
     private boolean canUseSkills() {
         return skillMode() && state().phase() == GamePhase.BATTLE && !introBlocked() && !effects.isBusy() && !network.pending()
                 && state().currentPlayerId().equals(state().player().id());
     }
-    private void clearSkills() { armedSkill = null; torpedoDirection = SkillDirection.EAST; skillHint = ""; }
+    private void clearSkills() {
+        armedSkill = null; strikeDirection = SkillDirection.EAST; skillHint = "";
+        effects.skills().clear(); shake.accept(0f);
+    }
 
     private void refreshSkillTray() {
         boolean shown = skillMode() && state().phase() == GamePhase.BATTLE;
         String hint = skillHint;
-        if (armedSkill != null) hint = armedSkill.label() + (armedSkill == SkillType.TORPEDO ? " " + torpedoDirection + " [T]" : "")
-                + ": pick a cell";
-        else if (hover != null && enemyView) {
-            for (SonarReading scan : scans()) if (scan.area().contains(hover)) { hint = "Sonar: " + scan.count() + " ship cells here"; break; }
+        String scanNotice = "";
+        if (armedSkill != null) hint = armedSkill.label() + " / " + switch (armedSkill) {
+            case SONAR -> "Scan enemy waters (3x3)";
+            case MINE -> "Choose empty water in your fleet";
+            case SHIELD -> "Choose a cell in your fleet";
+            case AIRSTRIKE -> (strikeDirection.rows()==0?"Horizontal row":"Vertical column") + " / T to rotate";
+        };
+        else if (shown && hover != null && enemyView && !effects.isBusy()) {
+            for (SonarReading scan : scans()) if (scan.area().contains(hover)) {
+                scanNotice = "Sonar / " + scan.count() + " ship cells in this area";
+                hint = scanNotice;
+                break;
+            }
         }
-        if (hint.isEmpty()) hint = "[1-4] arm a skill";
-        controls.setSkills(shown, energy(), SkillType.MAX_ENERGY, armedSkill, canUseSkills(), hint);
+        if (hint.isEmpty()) hint = !state().currentPlayerId().equals(state().player().id()) ? "Opponent's turn"
+                : energy()<3 ? "Fire a normal shot to gain Energy" : "[1-4] Choose a skill or fire your normal shot";
+        hud.setEnergy(energy());
+        hud.setHoverNotice(scanNotice);
+        displayedSkillHint = hint;
+        controls.setSkills(shown, energy(), SkillType.MAX_ENERGY, armedSkill, canUseSkills(), hint, usedSkills());
     }
 
-    /** Keys 1-4 and the tray buttons arm/disarm skills; T turns the torpedo. Returns true when consumed. */
+    /** Keys 1-4 arm/disarm skills. T changes the Airstrike axis. */
     private boolean skillAction(PlacementHud.Action action) {
         SkillType skill = switch (action) {
-            case SKILL_CLUSTER, SELECT_CARRIER -> SkillType.CLUSTER;
-            case SKILL_BARRAGE, SELECT_BATTLESHIP -> SkillType.BARRAGE;
-            case SKILL_TORPEDO, SELECT_CRUISER -> SkillType.TORPEDO;
-            case SKILL_SONAR, SELECT_SUBMARINE -> SkillType.SONAR;
+            case SKILL_SONAR, SELECT_CARRIER -> SkillType.SONAR;
+            case SKILL_MINE, SELECT_BATTLESHIP -> SkillType.MINE;
+            case SKILL_SHIELD, SELECT_CRUISER -> SkillType.SHIELD;
+            case SKILL_AIRSTRIKE, SELECT_SUBMARINE -> SkillType.AIRSTRIKE;
             default -> null;
         };
-        if (action == PlacementHud.Action.ROTATE && armedSkill == SkillType.TORPEDO) {
-            torpedoDirection = torpedoDirection.next(); sound.accept(Cue.ROTATE); refreshSkillTray(); return true;
+        if (action == PlacementHud.Action.ROTATE && armedSkill == SkillType.AIRSTRIKE) {
+            strikeDirection = strikeDirection == SkillDirection.EAST ? SkillDirection.SOUTH : SkillDirection.EAST;
+            sound.accept(Cue.ROTATE); refreshSkillTray(); hud.showNotice(displayedSkillHint, 3.2f); return true;
         }
         if (skill == null) return false;
         if (introBlocked() || effects.isBusy()) return true;
         if (armedSkill == skill) { armedSkill = null; skillHint = skill.label() + " cancelled."; sound.accept(Cue.CLICK); }
+        else if (usedSkills().contains(skill)) { skillHint = skill.label() + " already used this match."; sound.accept(Cue.ERROR); }
         else if (!canUseSkills()) { skillHint = "Skills can be used on your turn."; sound.accept(Cue.ERROR); }
         else if (energy() < skill.cost()) { skillHint = skill.label() + " needs " + skill.cost() + " energy."; sound.accept(Cue.ERROR); }
-        else { armedSkill = skill; enemyView = true; sound.accept(Cue.CLICK); }
+        else { armedSkill = skill; enemyView = !skill.targetsOwnBoard(); sound.accept(Cue.CLICK); }
         refresh();
+        hud.showNotice(armedSkill == null ? skillHint : displayedSkillHint, 3.2f);
         return true;
     }
 
     private List<Coordinate> skillPreview(SkillType skill, Coordinate cell) {
-        Board enemy = state().enemy().board();
-        List<Coordinate> area = SkillTargeting.area(skill, cell, torpedoDirection);
-        return skill == SkillType.TORPEDO ? area.stream().filter(c -> !enemy.wasAttacked(c)).toList() : area;
+        return SkillTargeting.area(skill, cell, strikeDirection);
     }
 
     private void fireSkill() {
-        if (!canUseSkills()) { skillHint = "Wait for your turn."; refreshHud(); return; }
-        if (energy() < armedSkill.cost()) { skillHint = armedSkill.label() + " needs " + armedSkill.cost() + " energy."; refreshHud(); return; }
-        if (network.useSkill(armedSkill, hover, armedSkill == SkillType.TORPEDO ? torpedoDirection : null)) {
+        if (usedSkills().contains(armedSkill)) { skillHint = "This skill has already been used this match."; armedSkill = null; refreshHud(); hud.showNotice(skillHint, 3.2f); return; }
+        if (!canUseSkills()) { skillHint = "Wait for your turn."; refreshHud(); hud.showNotice(skillHint, 3.2f); return; }
+        if (energy() < armedSkill.cost()) { skillHint = armedSkill.label() + " needs " + armedSkill.cost() + " energy."; refreshHud(); hud.showNotice(skillHint, 3.2f); return; }
+        if (!validSkillTarget(hover)) {
+            skillHint = armedSkill.targetsOwnBoard() ? "Choose an available cell in your own waters." : "Choose enemy waters with an available target.";
+            sound.accept(Cue.ERROR);
+            refreshHud();
+            hud.showNotice(skillHint, 3.2f);
+            return;
+        }
+        if (network.useSkill(armedSkill, hover, armedSkill == SkillType.AIRSTRIKE ? strikeDirection : null)) {
             sound.accept(Cue.TARGET); skillHint = armedSkill.label() + " launched. Awaiting server.";
             targeting.clear(); feedback.clearPreview();
         }
         refreshHud();
     }
 
-    /** The most important shot of a volley: the winning or sinking hit, else any hit, else the last shot. */
-    private static AttackResult leadImpact(SkillResult skill) {
-        var impacts = skill.impacts();
-        if (impacts.isEmpty()) return null;
-        return impacts.stream().filter(AttackResult::gameOver).findFirst()
-                .or(() -> impacts.stream().filter(AttackResult::sunk).findFirst())
-                .or(() -> impacts.stream().filter(i -> i.type() != com.battleship.shared.game.AttackResultType.MISS).findFirst())
-                .orElse(impacts.getLast());
+    private boolean validSkillTarget(Coordinate cell) {
+        if (!Board.inBounds(cell) || armedSkill == null || enemyView == armedSkill.targetsOwnBoard()) return false;
+        if (armedSkill == SkillType.MINE) {
+            var own = state().player().board();
+            return own.shipAt(cell) == null && !own.wasAttacked(cell) && !network.match().skills().ownMines().contains(cell);
+        }
+        if (armedSkill == SkillType.SONAR || armedSkill == SkillType.SHIELD) return true;
+        return SkillTargeting.area(armedSkill, cell, strikeDirection).stream()
+                .anyMatch(target -> !state().enemy().board().wasAttacked(target));
     }
 
     private static String skillSummary(SkillResult skill, String ownId) {
         String who = skill.attackerId().equals(ownId) ? "" : "Enemy ";
+        if (skill.skill() == SkillType.MINE || skill.skill() == SkillType.SHIELD) return who + skill.skill().label() + " deployed. Fire your normal shot.";
         if (skill.skill() == SkillType.SONAR)
             return skill.sonarCount() == null ? "Enemy sonar swept your waters near " + cellName(skill.origin()) + "."
-                    : "Sonar: " + skill.sonarCount() + " ship cells near " + cellName(skill.origin()) + ".";
-        long hits = skill.impacts().stream().filter(i -> i.type() != com.battleship.shared.game.AttackResultType.MISS).count();
+                    : "Sonar complete. Hover over the scanned area.";
+        long hits = skill.impacts().stream().filter(i -> i.defense()==null
+                && (i.type()==com.battleship.shared.game.AttackResultType.HIT || i.type()==com.battleship.shared.game.AttackResultType.SUNK
+                || i.type()==com.battleship.shared.game.AttackResultType.GAME_OVER)).count();
         return who + skill.skill().label() + ": " + hits + " hit" + (hits == 1 ? "" : "s") + " / " + skill.impacts().size() + " shots.";
     }
 

@@ -143,6 +143,11 @@ public final class PvpController implements AutoCloseable {
 
     public RoomSnapshot room() { return room; }
     public String clientId() { return clientId; }
+    public int energy(String playerId) {
+        if (turnTimer != null && turnTimer.energy().containsKey(playerId)) return turnTimer.energy().get(playerId);
+        if (match == null || match.skills() == null) return 0;
+        return playerId.equals(match.playerId()) ? match.skills().ownEnergy() : match.skills().opponentEnergy();
+    }
     public boolean connected() { return connection.connected(); }
     public boolean connecting() { return connecting; }
     public String connectionProblem() { return connectionProblem; }

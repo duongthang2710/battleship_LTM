@@ -144,6 +144,7 @@ public final class ScreenController implements AutoCloseable {
         game.onLeave(this::confirmLeaveRoom);
         game.onSettings(() -> pendingAction = MainMenu.Action.SETTINGS);
         game.onSound(audio::play);
+        game.onShake(orbit::shake);
         pvp = new PvpController(roomPanel, player, room -> {
             placementRequested = room;
             roomRequested = false;
@@ -301,8 +302,8 @@ public final class ScreenController implements AutoCloseable {
         boolean battleChat = screen == Screen.PVP_PLACEMENT && (game.state().phase() == com.battleship.shared.game.GamePhase.BATTLE
                 || game.state().phase() == com.battleship.shared.game.GamePhase.GAME_OVER);
         chatPanel.setMode(waitingChat ? ChatPanel.Mode.WAITING : battleChat ? ChatPanel.Mode.BATTLE : ChatPanel.Mode.HIDDEN);
-        if (screen == Screen.MAIN_MENU) {
         placementHud.setChatExpanded(battleChat && !chatPanel.collapsed());
+        if (screen == Screen.MAIN_MENU) {
             menu.update(cursor);
             MainMenu.Action nextHover = menu.actionAt(cursor).orElse(null);
             if (nextHover != null && hoveredMenu != nextHover) audio.play(com.battleship.frontend.audio.GameAudio.Cue.HOVER);
