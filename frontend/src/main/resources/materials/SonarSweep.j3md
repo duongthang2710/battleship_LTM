@@ -1,0 +1,12 @@
+MaterialDef SonarSweep {
+    MaterialParameters {
+        Float Elapsed
+    }
+    Technique {
+        VertexShader GLSL150: materials/MinimapSurface.vert
+        FragmentShader GLSL150: materials/SonarSweep.frag
+        WorldParameters {
+            WorldViewProjectionMatrix
+        }
+    }
+}

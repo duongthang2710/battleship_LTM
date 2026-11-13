@@ -31,6 +31,12 @@ public final class Materials {
         return material;
     }
 
+    public Material sonarSweep() {
+        Material material = new Material(assets, "materials/SonarSweep.j3md");
+        material.setFloat("Elapsed", 0);
+        return material;
+    }
+
     public static ColorRGBA rgb(int hex) {
         return new ColorRGBA(((hex >> 16) & 255) / 255f,
                 ((hex >> 8) & 255) / 255f, (hex & 255) / 255f, 1);
