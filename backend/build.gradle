@@ -6,6 +6,19 @@ dependencies {
 application { mainClass = 'com.battleship.backend.server.ServerMain' }
 tasks.named('run') { workingDir rootProject.projectDir }
 
+tasks.register('seedDemoData', JavaExec) {
+    group = 'application'
+    description = 'Creates realistic demo accounts and complete PvP match history through the TCP server.'
+    dependsOn classes
+    classpath = sourceSets.main.runtimeClasspath
+    mainClass = 'com.battleship.backend.demo.DemoDataGenerator'
+    workingDir rootProject.projectDir
+    args providers.gradleProperty('demoSets').getOrElse('1'),
+            providers.gradleProperty('demoHost').getOrElse(''),
+            providers.gradleProperty('demoPort').getOrElse('2209'),
+            providers.gradleProperty('demoTls').getOrElse('false')
+}
+
 tasks.register('checkTcpMatch', JavaExec) {
     group = 'verification'
     dependsOn testClasses
