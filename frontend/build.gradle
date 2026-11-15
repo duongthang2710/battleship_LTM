@@ -81,11 +81,23 @@ tasks.register('checkPvpRooms', JavaExec) {
     mustRunAfter 'checkGameplayRendering', 'checkMainMenu'
 }
 
+tasks.register('checkSkillBattleScreens', JavaExec) {
+    group = 'verification'
+    description = 'Runs two desktop clients through Skill Battle against a running server.'
+    dependsOn testClasses
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'com.battleship.frontend.game.PvpRoomRenderChecks'
+    workingDir rootProject.projectDir
+    systemProperty 'battleship.skillsOnly', 'true'
+    systemProperty 'battleship.port', providers.gradleProperty('serverPort').getOrElse('2209')
+}
+
 def hostOs = System.getProperty('os.name').toLowerCase(Locale.ROOT)
 tasks.named('run', JavaExec) {
     if (hostOs.contains('mac')) jvmArgs '-XstartOnFirstThread'
     systemProperty 'battleship.host', providers.gradleProperty('serverHost').getOrElse('localhost')
     systemProperty 'battleship.port', providers.gradleProperty('serverPort').getOrElse('2209')
+    systemProperty 'battleship.tls', providers.gradleProperty('serverTls').getOrElse('false')
     systemProperty 'battleship.player', providers.gradleProperty('playerName').getOrElse('Captain')
 }
 
@@ -126,6 +138,7 @@ if (hostOs.contains('windows')) {
                         '-GpuPreference', preference,
                         '-ServerHost', providers.gradleProperty('serverHost').getOrElse('localhost'),
                         '-ServerPort', providers.gradleProperty('serverPort').getOrElse('2209'),
+                        '-ServerTls', providers.gradleProperty('serverTls').getOrElse('false'),
                         '-PlayerName', providers.gradleProperty('playerName').getOrElse('Captain')
             }
         }

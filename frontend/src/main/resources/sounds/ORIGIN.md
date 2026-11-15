@@ -55,3 +55,9 @@ On Windows the script downloads a checksum-verified FFmpeg wheel into the ignore
 Original downloads and source/license page snapshots stay in that directory.
 The old procedural placeholder generator has been removed. Use only the importer
 above to reproduce the current audio set.
+
+## Tactical skill audio
+
+Các file skill_sonar, skill_mine, skill_shield, skill_shield_break và skill_airstrike
+được tổng hợp nguyên gốc bởi frontend/scripts/generate-skill-audio.py. PCM16 mono
+44.1 kHz, khai báo CC0-1.0 trong manifest cùng SHA-256.

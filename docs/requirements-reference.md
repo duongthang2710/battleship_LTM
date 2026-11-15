@@ -60,3 +60,18 @@ Submarine, Destroyer; số lượng chọn quyết định lấy 3, 4 hoặc c�
 Đây là thay đổi trực tiếp từ người dùng cho cả hai chế độ. Giữ timeout 60 giây;
 mỗi phát bắn hợp lệ reset thời gian, phát sai hoặc trùng không reset. Server sở hữu
 cấu hình phòng, giữ cấu hình khi chơi lại và không nhận luật từ lệnh bắn của client.
+
+
+## Bổ sung theo yêu cầu mới: Skill battle
+
+Yêu cầu mới thay bộ Cluster/Barrage/Torpedo bằng Sonar (3), Naval Mine (4), Aegis
+Shield (4), Airstrike (8). Energy riêng mỗi người tối đa 10, bắt đầu 0. Theo yêu cầu
+ngày 11/11/2026, mỗi phát bắn thường hợp lệ nhận đúng +1, gồm trúng, trượt và bị chặn.
+Mỗi skill dùng tối đa một lần cho mỗi người trong một ván, được cấp lại khi chơi lại.
+Sonar/Mine/Shield hỗ trợ phát bắn thường, giữ thời gian còn lại.
+Airstrike bắn cả hàng/cột và kết thúc lượt. Khiên tồn tại qua hai hành động tấn công
+chính của đối thủ, từng ô vỡ riêng và vẫn có thể bị bắn lại. Mìn riêng tư, dùng một
+lần và phản đòn vào ô chưa bị bắn. Sonar chỉ gửi vùng quét và tổng số ô có tàu cho
+người quét. Rê chuột vào vùng để xem tổng số, vùng đã quét có một viền ngoài 3×3.
+Combat mode độc lập với Basic/Fleet Designer, số tàu, luật bắn và ẩn thông tin chìm.
+Giữ luật 60 giây hết lượt thì thua. Phần triển khai hiện phục vụ PvP.

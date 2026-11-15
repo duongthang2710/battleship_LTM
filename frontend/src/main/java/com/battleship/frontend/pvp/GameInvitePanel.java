@@ -1,6 +1,7 @@
 package com.battleship.frontend.pvp;
 
 import com.battleship.frontend.graphics.Materials;
+import com.battleship.frontend.ui.ButtonHover;
 import com.battleship.frontend.ui.UiTypography;
 import com.battleship.shared.room.*;
 import com.jme3.asset.AssetManager;
@@ -21,6 +22,7 @@ public final class GameInvitePanel {
     private final Materials materials;
     private final BitmapFont display, body;
     private final Map<Action, Float> buttons = new EnumMap<>(Action.class);
+    private final ButtonHover<Action> hover = new ButtonHover<>();
     private BitmapText countdown;
     private boolean visible, incoming, pending, busy;
     private long seconds = -1;
@@ -49,7 +51,7 @@ public final class GameInvitePanel {
     public void waiting() { incoming = pending = false; busy = true; build("PVP INVITATION", "Sending invitation...", "Waiting for server confirmation."); }
     public void error(String message) { incoming = pending = busy = false; build("PVP INVITATION", "Unable to complete the invitation", message); }
     private void build(String title, String name, String message) {
-        visible = true; root.setCullHint(Spatial.CullHint.Never); card.detachAllChildren(); buttons.clear(); seconds = -1;
+        visible = true; root.setCullHint(Spatial.CullHint.Never); card.detachAllChildren(); buttons.clear(); hover.clear(); seconds = -1;
         rect(0, 0, WIDTH, HEIGHT, new ColorRGBA(.003f, .009f, .025f, .99f));
         frame(0, 0, WIDTH, HEIGHT, 0xDEB663); frame(6, 6, WIDTH - 12, HEIGHT - 12, 0x655638);
         UiTypography.fit(text(display, title, 24, 18, HEIGHT - 18, 0xF4EAD1), WIDTH - 100);
@@ -79,9 +81,13 @@ public final class GameInvitePanel {
         if (x == null) throw new IllegalArgumentException("Invitation button not shown: " + action);
         return new Vector2f(left + (x + BUTTON_WIDTH / 2) * scale, bottom + (BUTTON_Y + BUTTON_HEIGHT / 2) * scale);
     }
+    public void updateHover(Vector2f cursor) { hover.update(actionAt(cursor).orElse(null)); }
+
     private void button(Action action, float x, String caption) {
-        buttons.put(action, x); rect(x, BUTTON_Y, BUTTON_WIDTH, BUTTON_HEIGHT, new ColorRGBA(.025f, .055f, .095f, 1));
-        frame(x, BUTTON_Y, BUTTON_WIDTH, BUTTON_HEIGHT, busy ? 0x516275 : 0xDEB663);
+        buttons.put(action, x);
+        var fill = rect(x, BUTTON_Y, BUTTON_WIDTH, BUTTON_HEIGHT, new ColorRGBA(.025f, .055f, .095f, 1));
+        var rim = frame(x, BUTTON_Y, BUTTON_WIDTH, BUTTON_HEIGHT, busy ? 0x516275 : 0xDEB663);
+        hover.add(action, fill, rim);
         UiTypography.centerIn(text(body, caption, 12, x, BUTTON_Y, busy ? 0x69788D : 0xF4EAD1), x, BUTTON_Y, BUTTON_WIDTH, BUTTON_HEIGHT);
     }
     private String wrapMessage(String value) {
@@ -100,13 +106,16 @@ public final class GameInvitePanel {
         return first + "\n" + probe.getText();
     }
 
-    private void frame(float x, float y, float w, float h, int color) {
-        com.battleship.frontend.ui.UiShapes.frame(card,x,y,w,h,6,1.6f,materials.flat(Materials.rgb(color)),201);
+    private com.jme3.material.Material frame(float x, float y, float w, float h, int color) {
+        var rim = materials.flat(Materials.rgb(color));
+        com.battleship.frontend.ui.UiShapes.frame(card,x,y,w,h,6,1.6f,rim,201);
+        return rim;
     }
-    private void rect(float x, float y, float w, float h, ColorRGBA color) {
+    private com.jme3.material.Material rect(float x, float y, float w, float h, ColorRGBA color) {
         var material = materials.flat(color); material.getAdditionalRenderState().setBlendMode(BlendMode.Alpha);
         Geometry geometry = new Geometry("Invitation detail", new Quad(w, h)); geometry.setMaterial(material);
         geometry.setLocalTranslation(x, y, 200 + card.getQuantity() * .01f); card.attachChild(geometry);
+        return material;
     }
     private BitmapText text(BitmapFont font, String value, float size, float x, float y, int color) {
         BitmapText label = new BitmapText(font); label.setText(UiTypography.normalize(value)); label.setSize(font == body ? UiTypography.bodySize(size) : size); label.setColor(Materials.rgb(color));

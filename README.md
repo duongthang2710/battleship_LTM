@@ -31,6 +31,7 @@ người tham gia nhận cùng cấu hình từ server. Cấu hình giữ nguyê
 - 5 tàu: thêm Destroyer (2 ô).
 - **Alternate shots:** mọi phát bắn hợp lệ đều chuyển lượt.
 - **Hit grants another shot:** bắn trúng hoặc đánh chìm được bắn tiếp; trượt thì chuyển lượt.
+- **Combat: Classic / Skill battle:** chọn độc lập với Basic/Fleet Designer, số tàu và luật bắn (xem [Skill battle](#skill-battle)).
 
 Player 1 mở trận. Mỗi phát bắn hợp lệ bắt đầu cửa sổ 60 giây tiếp theo (kể cả
 khi giữ lượt); bắn sai/bắn trùng không đặt lại đồng hồ. Hết giờ vẫn thua ngay.
@@ -58,6 +59,25 @@ Settings và xác nhận rời trận không tạm dừng timer. **PLAY AGAIN** 
 Bot được truyền `AiKnowledge` chỉ gồm lịch sử bắn công khai và loại tàu đã chìm. `AiMatchController`
 điều phối engine, timer và trì hoãn bắn; không có callback nền tồn tại sau khi rời trận.
 PvAI chưa lưu lịch sử database và không tính vào Leaderboard PvP. Fleet Designer/tùy chọn phòng hiện chỉ áp dụng PvP.
+
+## Dữ liệu demo
+
+Khi PostgreSQL đang chạy và `.env` trỏ tới database demo/local, có thể tạo sáu tài khoản tên tự nhiên
+và 30 trận PvP hoàn chỉnh bằng chính giao thức TCP của ứng dụng:
+
+```powershell
+.\gradlew.bat :backend:seedDemoData
+```
+
+Tác vụ có thể chạy lại để bổ sung lịch sử. Dùng `-PdemoSets=2` để tạo 60 trận trong một lần.
+Các ván đều đi qua đăng ký/đăng nhập, phòng chờ, xác thực đội tàu, lượt bắn và lưu kết quả;
+không chèn trực tiếp dữ liệu giả vào PostgreSQL.
+
+Để sinh dữ liệu trên server đã deploy qua TLS, truyền đúng endpoint của bản phát hành:
+
+```powershell
+.\gradlew.bat :backend:seedDemoData '-PdemoHost=game.example.com' '-PdemoPort=2209' '-PdemoTls=true'
+```
 
 Kiểm tra thuật toán, timer và render (lệnh cuối cần OpenGL; không cần server):
 
@@ -185,7 +205,7 @@ một message thành nhiều đoạn hoặc gộp nhiều message trong một l�
 | Tài khoản | `REGISTER`, `REGISTER_OK`, `LOGIN`, `LOGOUT`, `LOGOUT_OK`, `AUTH_SUCCESS`, `AUTH_FAILED` |
 | Phòng | `CREATE_ROOM`, `JOIN_ROOM`, `ROOM_CREATED`, `ROOM_JOINED`, `PLAYER_JOINED`, `ROOM_UPDATED` |
 | Sẵn sàng/rời phòng | `READY`, `NOT_READY`, `START_PLACEMENT`, `LEAVE_ROOM`, `ROOM_LEFT`, `PLAYER_LEFT` |
-| Trận đấu | `SUBMIT_FLEET`, `FLEET_ACCEPTED`, `START_BATTLE`, `ATTACK`, `MATCH_UPDATED`, `TURN_TIMER` |
+| Trận đấu | `SUBMIT_FLEET`, `FLEET_ACCEPTED`, `START_BATTLE`, `ATTACK`, `USE_SKILL`, `MATCH_UPDATED`, `TURN_TIMER` |
 | Xếp hạng | `LEADERBOARD_REQUEST`, `LEADERBOARD_RESULT`, `LEADERBOARD_ERROR` |
 | Chơi lại | `REMATCH_REQUEST`, `REMATCH_DECLINE`, `REMATCH_UPDATED` |
 | Lệnh bị từ chối | `ERROR` |
@@ -278,8 +298,8 @@ Một tài khoản chỉ có một phiên đăng nhập. Đăng xuất giải ph
 Password hashing dùng PBKDF2-HMAC-SHA256, 600.000 vòng, salt ngẫu nhiên riêng 16 byte,
 so sánh hằng thời gian; không lưu/gửi password hash về client.
 Thông số theo [OWASP Password Storage](https://cheatsheetseries.owasp.org/cheatsheets/Password_Storage_Cheat_Sheet.html).
-TCP hiện chưa mã hóa TLS: dùng mạng tin cậy/VPN khi truyền thông tin đăng nhập;
-triển khai công khai cần lớp mã hóa TCP/TLS trước khi dùng tài khoản thật.
+Kết nối phát triển mặc định dùng TCP thuần. Khi phát hành công khai, dùng client bật TLS
+và cổng TLS ở trước backend. Xem [triển khai EC2 và đóng gói client Windows](docs/deploy-public-ec2.md).
 
 `users` lưu tài khoản và `last_seen_at` khi đăng nhập/đăng xuất; `matches` và `match_players` lưu thời gian, kết quả, nguyên nhân
 (`FLEET_DESTROYED`, `TURN_TIMEOUT`, `PLAYER_LEFT`) cùng số phát bắn/hit/tàu chìm theo tài khoản.
@@ -603,6 +623,33 @@ mở hai client desktop kiểm tra đổi cửa sổ/toàn màn hình, lưu, b�
 Bài kiểm tra dùng file riêng trong `build/pvp-verification`, không ghi cấu hình cá nhân.
 
 
+## Skill battle
+
+Chọn **PvP → Create Room → COMBAT → SKILL BATTLE**.
+
+Energy bắt đầu ở 0 và tối đa 10. Mỗi phát bắn thường hợp lệ nhận đúng +1, gồm trúng,
+trượt hoặc bị khiên/mìn chặn. Mỗi người dùng mỗi skill tối đa một lần trong một ván.
+Các lượt được bắn tiếp cũng nhận +1 cho từng phát bắn hợp lệ.
+
+| Skill | Energy | Cách dùng |
+| --- | --- | --- |
+| Sonar | 3 | Quét 3×3 trên bàn địch. Rê chuột vào vùng đã quét để xem tổng số ô có tàu trong vùng. |
+| Naval Mine | 4 | Đặt ở ô nước trống chưa bị bắn trên bàn mình. Đạn trúng mìn kích hoạt phản đòn ngẫu nhiên vào ô chưa bắn trên bàn người tấn công. |
+| Aegis Shield | 4 | Bảo vệ hình chữ thập trên bàn mình trong hai hành động tấn công chính của địch. Ô khiên trúng đạn vỡ và có thể bị bắn lại sau đó. Vùng ở mép bàn được cắt theo biên. |
+| Airstrike | 8 | Ném bom cả hàng hoặc cột, bỏ qua ô đã bắn. T kết hợp chuột chọn hướng. |
+
+Sonar, Mine và Shield giữ lượt và thời gian còn lại để bắn thường tiếp. Airstrike
+là đòn chính, kết thúc lượt và mở đồng hồ 60 giây cho đối phương. Khiên cũng chặn
+phản đòn mìn. Các mìn bị phản đòn kích hoạt tiếp theo chuỗi hữu hạn, mỗi mìn dùng một lần.
+
+Phím **1–4** hoặc bốn biểu tượng hình thoi chọn/hủy skill. **T** đổi Airstrike ngang/dọc.
+Mìn và khiên nhắm vào bàn mình, Sonar và Airstrike nhắm vào bàn địch. Đồng hồ và mọi
+kết quả do server quyết định. Chỉ chủ sở hữu nhận tọa độ mìn và tổng số ô có tàu trong vùng Sonar.
+
+Kiểm tra luật qua `:shared:skillChecks :backend:checkSkillMatch`. Kiểm tra hai client
+3D qua `:frontend:checkSkillBattleScreens` với backend đang chạy. Âm thanh skill được
+tổng hợp từ script `frontend/scripts/generate-skill-audio.py` và có nguồn trong manifest.
+
 ## Hạm đội tự thiết kế
 
 Trong **PVP → CREATE ROOM**, chọn trực tiếp **BASIC** hoặc **FLEET DESIGNER** ở cột phải, chọn 3–5 tàu và luật lượt, rồi xác nhận **CREATE ROOM**. Cột trái hiển thị đội tàu theo số lượng đã chọn; các lựa chọn nằm ở cột phải.
@@ -639,7 +686,7 @@ client TCP test, chạy hai ván/rematch rồi dọn đúng tài khoản và l�
 Atlas hai phe và danh mục footprint được xuất vào `build/designer-review/` khi chạy rendering check.
 
 
-Kiểm tra cấu hình phòng: `./gradlew build` chạy 12 tổ hợp Basic/Designer × 3–5 tàu × 2 luật lượt
+Kiểm tra cấu hình phòng: `./gradlew build` chạy 48 tổ hợp Basic/Designer × 3–5 tàu × 2 luật lượt × Classic/Skill × ẩn/hiện thông tin chìm
 bằng MatchService với đồng hồ kiểm soát. `./gradlew :backend:checkRoomSettingsTcp -PdatabaseChecks`
 chạy hai kết nối TCP thật qua PostgreSQL, tạo/join phòng, đấu đủ ván và chơi lại;
 chỉ các tài khoản và trận QA do bài kiểm tra này vừa tạo được dọn sau khi chạy.

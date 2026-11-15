@@ -24,10 +24,14 @@ final class OceanGunfire {
     }
 
     Vector3f source(Side side, Vector3f boardTarget) {
+        return source(side, boardTarget, false);
+    }
+    Vector3f source(Side side, Vector3f boardTarget, boolean alternate) {
         scene.updateGeometricState();
         Vector3f target = board.localToWorld(boardTarget, new Vector3f());
         return muzzles.stream().filter(node -> side.name().equals(node.getUserData("firingSide")))
-                .min(Comparator.comparingDouble(node -> node.getWorldTranslation().distanceSquared(target)))
+                .sorted(Comparator.comparingDouble(node -> node.getWorldTranslation().distanceSquared(target)))
+                .skip(alternate ? 1 : 0).findFirst()
                 .map(node -> board.worldToLocal(node.getWorldTranslation(), new Vector3f()))
                 .orElseGet(() -> new Vector3f(0, .38f, side == Side.WHITE ? 7.5f : -7.5f));
     }

@@ -1,9 +1,11 @@
 package com.battleship.frontend.settings;
 
 import com.battleship.frontend.graphics.Materials;
+import com.battleship.frontend.ui.ButtonHover;
 import com.battleship.frontend.ui.UiTypography;
 import com.jme3.asset.AssetManager;
 import com.jme3.font.*;
+import com.jme3.material.Material;
 import com.jme3.material.RenderState.BlendMode;
 import com.jme3.math.*;
 import com.jme3.scene.*;
@@ -20,6 +22,7 @@ public final class SettingsPanel {
     private final Materials materials;
     private final BitmapFont display, body;
     private final List<Button> buttons = new ArrayList<>();
+    private final ButtonHover<Action> buttonHover = new ButtonHover<>();
     private ClientPreferences draft = ClientPreferences.defaults();
     private List<ClientPreferences.Resolution> sizes = ClientPreferences.RESOLUTIONS;
     private boolean visible, busy, displayAvailable;
@@ -67,6 +70,7 @@ public final class SettingsPanel {
         var b = buttons.stream().filter(v -> v.action == action).findFirst().orElseThrow();
         return new Vector2f(left + (b.x + b.width / 2) * scale, bottom + (b.y + 18) * scale);
     }
+    public void updateHover(Vector2f cursor) { buttonHover.update(actionAt(cursor).orElse(null)); }
     public void edit(Action action) {
         if (!enabled(action)) return;
         var size = new ClientPreferences.Resolution(draft.width(), draft.height());
@@ -86,7 +90,7 @@ public final class SettingsPanel {
         draft = new ClientPreferences(size.width(), size.height(), fullscreen, rotation, zoom, volume, muted); status = "Apply and save to use these changes."; rebuild();
     }
     private void rebuild() {
-        card.detachAllChildren(); buttons.clear();
+        card.detachAllChildren(); buttons.clear(); buttonHover.clear();
         rect(0, 0, WIDTH, HEIGHT, new ColorRGBA(.003f, .009f, .025f, .97f)); frame(0, 0, WIDTH, HEIGHT, GOLD); frame(8, 8, WIDTH - 16, HEIGHT - 16, 0x655638);
         text(body, "THE CAPTAIN'S PREFERENCES", 11, 30, 655, GOLD); text(display, "SETTINGS", 43, 28, 630, IVORY);
         text(display, "Display", 27, 30, 545, IVORY);
@@ -117,15 +121,21 @@ public final class SettingsPanel {
         text(body, Math.round(value * 100) + "%", 14, 331, y + 24, CYAN); button(up, 470, y, 40, "+");
     }
     private void button(Action action, float x, float y, float w, String value) {
-        buttons.add(new Button(action, x, y, w)); rect(x, y, w, 36, new ColorRGBA(.025f, .055f, .095f, 1)); frame(x, y, w, 36, enabled(action) ? 0x516275 : 0x334050);
+        buttons.add(new Button(action, x, y, w));
+        var fill = rect(x, y, w, 36, new ColorRGBA(.025f, .055f, .095f, 1));
+        var rim = frame(x, y, w, 36, enabled(action) ? 0x516275 : 0x334050);
+        buttonHover.add(action, fill, rim);
         var label = text(body, value, 13, 0, y + 24, enabled(action) ? IVORY : 0x69788D); UiTypography.centerIn(label, x, y, w, 36);
     }
-    private void frame(float x, float y, float w, float h, int color) {
-        com.battleship.frontend.ui.UiShapes.frame(card,x,y,w,h,5,1.6f,materials.flat(Materials.rgb(color)),91);
+    private Material frame(float x, float y, float w, float h, int color) {
+        var rim = materials.flat(Materials.rgb(color));
+        com.battleship.frontend.ui.UiShapes.frame(card, x, y, w, h, 5, 1.6f, rim, 91);
+        return rim;
     }
-    private void rect(float x, float y, float w, float h, ColorRGBA color) {
+    private Material rect(float x, float y, float w, float h, ColorRGBA color) {
         var material = materials.flat(color); material.getAdditionalRenderState().setBlendMode(BlendMode.Alpha);
         Geometry geometry = new Geometry("Settings detail", new Quad(w, h)); geometry.setMaterial(material); geometry.setLocalTranslation(x, y, 90 + card.getQuantity() * .001f); card.attachChild(geometry);
+        return material;
     }
     private BitmapText text(BitmapFont font, String value, float size, float x, float y, int color) {
         var label = new BitmapText(font); label.setText(UiTypography.normalize(value)); label.setSize(font == body ? UiTypography.bodySize(size) : size); label.setColor(Materials.rgb(color)); label.setLocalTranslation(x, y, 94); card.attachChild(label); return label;

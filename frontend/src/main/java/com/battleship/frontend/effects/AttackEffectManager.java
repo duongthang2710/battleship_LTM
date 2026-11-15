@@ -23,6 +23,8 @@ public final class AttackEffectManager {
     private final Materials materials;
     private final BoardCoordinates coordinates;
     private final OceanGunfire gunfire;
+    private final SkillEffectManager skills;
+    public SkillEffectManager skills() { return skills; }
     private Geometry muzzleFlash;
     private final List<Geometry> sunkRings = new ArrayList<>();
     private ProjectileEffect projectile;
@@ -40,12 +42,13 @@ public final class AttackEffectManager {
         this.materials = materials;
         coordinates = new BoardCoordinates(board);
         gunfire = new OceanGunfire(board);
+        skills = new SkillEffectManager(board, materials);
         board.attachChild(node);
     }
 
-    public boolean isBusy() { return result != null; }
+    public boolean isBusy() { return result != null || skills.busy(); }
     public AttackResult result() { return result; }
-    public boolean hasImpacted() { return impacted; }
+    public boolean hasImpacted() { return result != null ? impacted : skills.impacted(); }
 
     public void play(AttackResult result, List<Coordinate> sunkCells, Runnable onImpact, Runnable onComplete) {
         play(result, sunkCells, "player".equals(result.attackerId()) ? Side.WHITE : Side.BLACK, onImpact, onComplete);
@@ -72,7 +75,8 @@ public final class AttackEffectManager {
     }
 
     public void update(float dt) {
-        if (!isBusy()) return;
+        skills.update(dt);
+        if (result == null) return;
         elapsed += Math.max(0, dt);
         projectile.update(elapsed);
         float flashAge = elapsed - AIM_DURATION;
@@ -122,6 +126,7 @@ public final class AttackEffectManager {
     }
 
     public void clear() {
+        skills.clearAnimation();
         node.detachAllChildren();
         sunkRings.clear();
         result = null;

@@ -143,6 +143,11 @@ public final class PvpController implements AutoCloseable {
 
     public RoomSnapshot room() { return room; }
     public String clientId() { return clientId; }
+    public int energy(String playerId) {
+        if (turnTimer != null && turnTimer.energy().containsKey(playerId)) return turnTimer.energy().get(playerId);
+        if (match == null || match.skills() == null) return 0;
+        return playerId.equals(match.playerId()) ? match.skills().ownEnergy() : match.skills().opponentEnergy();
+    }
     public boolean connected() { return connection.connected(); }
     public boolean connecting() { return connecting; }
     public String connectionProblem() { return connectionProblem; }
@@ -198,6 +203,9 @@ public final class PvpController implements AutoCloseable {
     }
 
     public boolean attack(Coordinate cell) { return send(MessageType.ATTACK, new AttackRequest(cell)); }
+    public boolean useSkill(com.battleship.shared.game.SkillType skill, Coordinate cell, com.battleship.shared.game.SkillDirection direction) {
+        return send(MessageType.USE_SKILL, new com.battleship.shared.match.SkillRequest(skill, cell, direction));
+    }
 
     public void open() {
         active = true;
@@ -223,7 +231,9 @@ public final class PvpController implements AutoCloseable {
         switch (action) {
             case INVITE_FRIENDS -> inviteFriendsAction.run();
             case SHOW_CREATE -> { joining = false; panel.showCreate(); setStatus(""); }
-            case REPORT_SHOW, REPORT_HIDE, MODE_BASIC, MODE_DESIGNER, FLEET_THREE, FLEET_FOUR, FLEET_FIVE, RULE_ALTERNATING, RULE_HIT_CONTINUES, PRESET_DUEL, PRESET_TACTICAL, PRESET_CREATIVE -> panel.selectOption(action);
+            case COMBAT_CLASSIC, COMBAT_SKILLS, REPORT_SHOW, REPORT_HIDE, MODE_BASIC, MODE_DESIGNER,
+                    FLEET_THREE, FLEET_FOUR, FLEET_FIVE, RULE_ALTERNATING, RULE_HIT_CONTINUES,
+                    PRESET_DUEL, PRESET_TACTICAL, PRESET_CREATIVE -> panel.selectOption(action);
             case TOGGLE_MODE -> panel.toggleMode();
             case FEWER_SHIPS -> panel.changeShipCount(-1);
             case MORE_SHIPS -> panel.changeShipCount(1);

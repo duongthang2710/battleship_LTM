@@ -15,8 +15,11 @@ import com.jme3.input.dummy.DummyKeyInput;
 import com.jme3.input.dummy.DummyMouseInput;
 import com.jme3.input.event.KeyInputEvent;
 import com.jme3.input.event.MouseButtonEvent;
+import com.jme3.math.ColorRGBA;
 import com.jme3.math.Vector2f;
 import com.jme3.renderer.RenderManager;
+import com.jme3.scene.Geometry;
+import com.jme3.scene.Node;
 import com.jme3.scene.Spatial.CullHint;
 import com.jme3.system.AppSettings;
 import com.jme3.system.JmeContext;
@@ -83,6 +86,7 @@ public final class MainMenuFlowChecks extends SimpleApplication {
             require(!screens.accountPanel().registering(), "Esc returns from registration");
             screens.accountPanel().toggleServer(); key(KeyInput.KEY_ESCAPE, (char) 0);
             require(!screens.accountPanel().editingServer(), "Esc returns from connection settings");
+            checkAccountHover();
             var initialState = screens.game().state();
             key(KeyInput.KEY_F, 'f');
             key(KeyInput.KEY_RETURN, '\n');
@@ -106,8 +110,24 @@ public final class MainMenuFlowChecks extends SimpleApplication {
             };
             inputManager.update(1 / 60f);
             require(exitCalled, "EXIT closes the application before login");
-            System.out.println("PASS: mandatory login, no Local Game action, no menu bypass, scaled menu targets, login-screen Exit.");
+            System.out.println("PASS: mandatory login, no Local Game action, no menu bypass, scaled menu targets, login hover and Exit.");
         }
+    }
+
+    private void checkAccountHover() {
+        var panel = screens.accountPanel();
+        var card = (Node) panel.root().getChild(0);
+        var fill = card.getChildren().stream()
+                .filter(child -> child instanceof Geometry && child.getLocalTranslation().equals(new com.jme3.math.Vector3f(30, 22, 81)))
+                .map(Geometry.class::cast).findFirst().orElseThrow().getMaterial();
+        var outside = new Vector2f(-1, -1);
+        screens.update(0, outside);
+        ColorRGBA base = ((ColorRGBA) fill.getParam("Color").getValue()).clone();
+        screens.update(0, panel.buttonCenter(AccountPanel.Action.EXIT));
+        ColorRGBA highlighted = (ColorRGBA) fill.getParam("Color").getValue();
+        require(highlighted.b > base.b, "Screen controller highlights login button under the cursor");
+        screens.update(0, outside);
+        require(base.equals(fill.getParam("Color").getValue()), "Login button restores its color when the cursor leaves");
     }
 
     @Override public void simpleRender(RenderManager renderer) {

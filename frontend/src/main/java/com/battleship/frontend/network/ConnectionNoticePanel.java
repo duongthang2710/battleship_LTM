@@ -1,7 +1,9 @@
 package com.battleship.frontend.network;
 
 import com.battleship.frontend.graphics.Materials;
+import com.battleship.frontend.ui.ButtonHover;
 import com.battleship.frontend.ui.UiTypography;
+import com.jme3.material.Material;
 import com.jme3.asset.AssetManager;
 import com.jme3.font.*;
 import com.jme3.font.Rectangle;
@@ -18,6 +20,8 @@ public final class ConnectionNoticePanel {
     private final Node root = new Node("Connection notification"), card = new Node("Connection card");
     private final Materials materials;
     private final BitmapFont body, display;
+    private final ButtonHover<Action> hover = new ButtonHover<>();
+    private BitmapText dismiss;
     private boolean visible, busy;
     private String detail = "";
     private float left, bottom, scale = 1;
@@ -56,28 +60,42 @@ public final class ConnectionNoticePanel {
         return new Vector2f(left + (action == Action.RECONNECT ? 160 : action == Action.SETTINGS ? 452 : 310) * scale,
                 bottom + (action == Action.DISMISS ? 28 : 74) * scale);
     }
+    public void updateHover(Vector2f cursor) {
+        Action action = actionAt(cursor).orElse(null);
+        hover.update(action);
+        if (dismiss != null) dismiss.setColor(Materials.rgb(action == Action.DISMISS ? 0xDEB663 : 0xB9C7DB));
+    }
+
     private void rebuild() {
         card.detachAllChildren();
+        hover.clear();
         rect(0, 0, WIDTH, HEIGHT, new ColorRGBA(.003f, .009f, .025f, .99f));
         frame(0, 0, WIDTH, HEIGHT, 0xDEB663); frame(7, 7, WIDTH - 14, HEIGHT - 14, 0x655638);
         text(display, busy ? "RECONNECTING" : "CONNECTION LOST", 35, 28, 240, 0xF4EAD1);
         text(body, busy ? "Contacting the server..." : "Reconnect to continue, then sign in again.", 15, 30, 191, 0x91CEFF);
         BitmapText reason = text(body, detail, 14, 30, 160, 0xB9C7DB);
         reason.setBox(new Rectangle(0, 0, WIDTH - 60, 56)); reason.setLineWrapMode(LineWrapMode.Word);
-        button(28, 54, 264, busy ? "CONNECTING..." : "RECONNECT"); button(312, 54, 280, "CONNECTION SETTINGS");
-        UiTypography.centerIn(text(body, "BACK TO SIGN IN  /  ESC", 13, 28, 14, 0xB9C7DB), 28, 14, WIDTH - 56, 28);
+        button(Action.RECONNECT, 28, 54, 264, busy ? "CONNECTING..." : "RECONNECT");
+        button(Action.SETTINGS, 312, 54, 280, "CONNECTION SETTINGS");
+        dismiss = text(body, "BACK TO SIGN IN  /  ESC", 13, 28, 14, 0xB9C7DB);
+        UiTypography.centerIn(dismiss, 28, 14, WIDTH - 56, 28);
     }
-    private void button(float x, float y, float width, String label) {
-        rect(x, y, width, 40, new ColorRGBA(.025f, .055f, .095f, 1)); frame(x, y, width, 40, busy ? 0x334050 : 0xDEB663);
+    private void button(Action action, float x, float y, float width, String label) {
+        var fill = rect(x, y, width, 40, new ColorRGBA(.025f, .055f, .095f, 1));
+        var rim = frame(x, y, width, 40, busy ? 0x334050 : 0xDEB663);
+        hover.add(action, fill, rim);
         UiTypography.centerIn(text(body, label, 15, x, y, busy ? 0x69788D : 0xF4EAD1), x, y, width, 40);
     }
-    private void frame(float x, float y, float width, float height, int color) {
-        com.battleship.frontend.ui.UiShapes.frame(card,x,y,width,height,6,1.6f,materials.flat(Materials.rgb(color)),301);
+    private Material frame(float x, float y, float width, float height, int color) {
+        var rim = materials.flat(Materials.rgb(color));
+        com.battleship.frontend.ui.UiShapes.frame(card,x,y,width,height,6,1.6f,rim,301);
+        return rim;
     }
-    private void rect(float x, float y, float width, float height, ColorRGBA color) {
+    private Material rect(float x, float y, float width, float height, ColorRGBA color) {
         Geometry geometry = new Geometry("Connection notice detail", new Quad(width, height)); var material = materials.flat(color);
         material.getAdditionalRenderState().setBlendMode(BlendMode.Alpha); geometry.setMaterial(material);
         geometry.setLocalTranslation(x, y, 300 + card.getQuantity() * .001f); card.attachChild(geometry);
+        return material;
     }
     private BitmapText text(BitmapFont font, String value, float size, float x, float y, int color) {
         var label = new BitmapText(font); label.setText(UiTypography.normalize(value)); label.setSize(size);

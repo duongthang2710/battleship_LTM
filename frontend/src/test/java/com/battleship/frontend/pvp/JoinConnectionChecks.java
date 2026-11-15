@@ -107,6 +107,14 @@ public final class JoinConnectionChecks {
                 client.openAccount(); await(client, client::connected);
                 client.login("creator", "TestPassword!"); await(client, () -> client.account() != null); client.open();
                 client.handle(PvpRoomPanel.Action.SHOW_CREATE);
+                for (int[] size : new int[][] {{960, 600}, {1280, 800}, {1920, 1080}}) {
+                    panel.resize(size[0], size[1]);
+                    client.handle(panel.actionAt(panel.buttonCenter(PvpRoomPanel.Action.COMBAT_SKILLS)).orElseThrow());
+                    require(panel.selectedRules().skills(), "Clicking Skill Battle must reach the room controller");
+                    client.handle(panel.actionAt(panel.buttonCenter(PvpRoomPanel.Action.COMBAT_CLASSIC)).orElseThrow());
+                    require(!panel.selectedRules().skills(), "Clicking Classic must restore normal combat");
+                }
+                client.handle(PvpRoomPanel.Action.COMBAT_SKILLS);
                 client.handle(PvpRoomPanel.Action.TOGGLE_MODE);
                 client.handle(PvpRoomPanel.Action.FEWER_SHIPS); client.handle(PvpRoomPanel.Action.FEWER_SHIPS);
                 client.handle(PvpRoomPanel.Action.TOGGLE_TURN_RULE);
@@ -119,6 +127,7 @@ public final class JoinConnectionChecks {
                 await(client, () -> client.room() != null);
                 require(client.room().options().hideSunkInfo(),"TCP round-trip preserves hidden sinking information");
                 require(creates.get() == 1 && client.room().rules().equals(rules) && rules.shipCount() == 3
+                        && rules.skills() && client.room().rules().skills()
                         && rules.mode() == com.battleship.shared.game.GameMode.DESIGNER
                         && rules.turnRule() == com.battleship.shared.game.TurnRule.HIT_CONTINUES, "Confirmation sends selected rules once and consumes authoritative snapshot");
             }

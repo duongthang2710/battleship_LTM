@@ -182,7 +182,7 @@ public final class CombatPresentationChecks extends SimpleApplication {
         if (++frame < 5) return;
         frame = 0;
         try {
-            capture(manager, new String[] {"designer-white-seat", "designer-black-seat", "ocean-projectile", "tile-explosion", "tile-water-splash", "custom-wreck-white", "custom-wreck-black", "classic-wreck"}[stage]);
+            capture(manager, new String[] {"designer-white-seat", "designer-black-seat", "ocean-projectile", "tile-explosion", "tile-water-splash", "custom-wreck-white", "custom-wreck-black", "classic-wreck", "sonar-circular-waves", "aegis-above-ships", "airstrike-release", "airstrike-falling-bombs", "airstrike-column"}[stage]);
             switch (++stage) {
                 case 1 -> { renderer.display(fleet, true, ShipFactory.Fleet.ABYSSAL); orbit.setPlayerSide(Side.BLACK); hud.setPlayerSide(Side.BLACK); }
                 case 2 -> {
@@ -240,10 +240,110 @@ public final class CombatPresentationChecks extends SimpleApplication {
                 case 8 -> {
                     renderer.display(fleet, true, ShipFactory.Fleet.RADIANT);
                     require(renderer.root().getChild("Sunk ship damage") == null && renderer.root().getQuantity() == 5, "New fleet restores intact pieces without old damage");
-                    System.out.println("PASS OpenGL: compact placement/battle UI, result hold, both faction custom/classic wrecks, hidden-ship guard, fresh fleet reset; projectile/HIT/MISS callbacks."); stop();
+                    var scan=new SkillResult(AttackResultType.SCANNED,SkillType.SONAR,"self","opponent",target,null,
+                            SkillTargeting.area(SkillType.SONAR,target,SkillDirection.EAST),List.of(),2,false,null);
+                    effects.skills().play(scan,Side.WHITE,id->{},()->impacts++,()->completions++);
+                    effects.update(1.2f);
+                    var waves=(Node)board.getChild("Tactical skill effects");
+                    require(waves.getQuantity()==1 && waves.getChild("Sonar radar sweep")!=null,"Sonar draws its circular waves and rotating beam on one bounded surface");
+                    var radar=(Geometry)waves.getChild("Sonar radar sweep");
+                    require(((com.jme3.scene.shape.Quad)radar.getMesh()).getWidth()==3
+                            && ((com.jme3.scene.shape.Quad)radar.getMesh()).getHeight()==3,"Radar is clipped to all nine cells");
+                    effects.skills().sync(List.of(),List.of(),List.of(new SonarReading(scan.area(),2)));
+                    var markers=(Node)board.getChild("Private tactical markers");
+                    require(markers.getQuantity()==1 && markers.getChild(0).getName().equals("Sonar scanned area outline")
+                            && ((Geometry)markers.getChild(0)).getMesh().getVertexCount()==8,"Permanent scan marker is one outer border with no cell circles or ship contacts");
+                    require(effects.isBusy(),"Sonar continues beyond the former 1.15 seconds");
+                    hud.clearShotResult(); hud.setGameStatus("Skill","Sonar complete. Hover over the scanned area.");
+                }
+                case 9 -> {
+                    effects.update(1.7f);
+                    require(!effects.isBusy() && impacts==3 && completions==3,"Sonar finishes in 2.8 seconds with exactly one completion");
+                    effects.clear(); effects.skills().sync(List.of(),List.of(),List.of());
+                    require(((Node)board.getChild("Private tactical markers")).getQuantity()==0,"Changing board clears scan border");
+                    var area=SkillTargeting.area(SkillType.SHIELD,target,null);
+                    var shield=new SkillResult(AttackResultType.DEPLOYED,SkillType.SHIELD,"self","opponent",target,null,area,List.of(),null,false,null);
+                    effects.skills().play(shield,Side.WHITE,id->{},()->impacts++,()->completions++);
+                    effects.skills().sync(List.of(),area.stream().map(cell->new ShieldCell(cell,2)).toList(),List.of());
+                    effects.update(.5f); checkShieldClearance();
+                    require(((Node)board.getChild("Tactical skill effects")).getQuantity()==5,"Shield deployment has five matching hexagonal canopies");
+                    hud.setGameStatus("Skill","Aegis shield deployed.");
+                }
+                case 10 -> {
+                    Board classic=new Board().withShip(new Ship(ShipType.BATTLESHIP,new Coordinate(2,1),ShipOrientation.HORIZONTAL));
+                    renderer.display(classic,true,ShipFactory.Fleet.RADIANT); effects.update(0); checkShieldClearance();
+                    effects.update(2);
+                    require(completions==4 && impacts==4,"Shield completes once and keeps its persistent protection");
+                    var markers=(Node)board.getChild("Private tactical markers");
+                    require(markers.getQuantity()==5 && markers.getChildren().stream().allMatch(node->node.getLocalCullHint()!=Spatial.CullHint.Always),"Persistent shields become visible after deployment");
+                    effects.skills().sync(List.of(),List.of(),List.of());
+                    renderer.display(fleet,true,ShipFactory.Fleet.RADIANT);
+                    playAirstrike(SkillDirection.EAST,false,Side.WHITE);
+                    effects.update(.60f);
+                    var run=(Node)board.getChild("Tactical skill effects");
+                    var formation=(Node)run.getChild("Airstrike formation");
+                    board.updateGeometricState();
+                    require(formation.getQuantity()==3 && ((BoundingBox)formation.getChild(1).getWorldBound()).getXExtent()>1.2f,
+                            "Formation has three detailed bombers with a larger central aircraft");
+                    var bombs=airstrikeBombs();
+                    require(bombs.size()==10 && bombs.getFirst().getLocalCullHint()!=Spatial.CullHint.Always
+                            && bombs.get(1).getLocalCullHint()==Spatial.CullHint.Always,"Only released bombs appear beneath the flying aircraft");
+                    hud.setGameStatus("Skill","Airstrike incoming.");
+                }
+                case 11 -> {
+                    float before=airstrikeBombs().getFirst().getLocalTranslation().y;
+                    effects.update(.35f);
+                    require(airstrikeBombs().getFirst().getLocalTranslation().y<before-.5f,
+                            "Bombs accelerate downward from the bomber and keep their forward motion");
+                    require(airstrikeBombs().stream().filter(node->node.getLocalCullHint()!=Spatial.CullHint.Always).count()==3,
+                            "Three separate bombs form the staggered bombing stream");
+                }
+                case 12 -> {
+                    effects.update(5);
+                    require(completions==5 && impacts==5 && !effects.isBusy(),"Full row resolves with exactly one impact callback and one completion");
+                    playAirstrike(SkillDirection.SOUTH,true,Side.BLACK); effects.update(.60f);
+                }
+                case 13 -> {
+                    effects.update(.90f);
+                    var bombs=airstrikeBombs();
+                    require(bombs.size()==3 && bombs.get(1).getLocalCullHint()!=Spatial.CullHint.Always
+                            && bombs.getLast().getLocalCullHint()==Spatial.CullHint.Always,"Column strike keeps the original cell spacing when previously-shot cells are skipped");
+                    effects.update(5);
+                    require(completions==6 && impacts==6 && !effects.isBusy(),"Column and partial volleys complete without duplicate callbacks");
+                    System.out.println("PASS OpenGL: hull-height shields below designer/classic sails, detailed bombers, ballistic bombs, both axes/factions and effect cleanup."); stop();
                 }
             }
         } catch (Exception e) { throw new RuntimeException(e); }
+    }
+
+    private void checkShieldClearance() {
+        board.updateGeometricState();
+        var hull=(BoundingBox)renderer.root().getWorldBound();
+        float top=board.worldToLocal(hull.getCenter().add(0,hull.getYExtent(),0),new Vector3f()).y;
+        Node animation=(Node)board.getChild("Tactical skill effects");
+        for(Spatial shield:animation.getChildren()) {
+            var bounds=(BoundingBox)shield.getWorldBound();
+            float bottom=board.worldToLocal(bounds.getCenter().add(0,-bounds.getYExtent(),0),new Vector3f()).y;
+            float crown=board.worldToLocal(bounds.getCenter().add(0,bounds.getYExtent(),0),new Vector3f()).y;
+            require(bottom>=.80f && bottom<=.90f,"Aegis stays just above the hull at a stable height");
+            require(crown<top,"Ship masts remain above the shield canopy");
+        }
+    }
+
+    private void playAirstrike(SkillDirection direction,boolean partial,Side side) {
+        var area=SkillTargeting.area(SkillType.AIRSTRIKE,new Coordinate(4,5),direction);
+        var hits=new ArrayList<AttackResult>();
+        for(int i=0;i<area.size();i++) if(!partial || i==0 || i==4 || i==9) {
+            Coordinate cell=area.get(i);
+            hits.add(attack(fleet.shipAt(cell)==null?AttackResultType.MISS:AttackResultType.HIT,cell));
+        }
+        var result=new SkillResult(AttackResultType.HIT,SkillType.AIRSTRIKE,"self","opponent",area.getFirst(),direction,area,hits,null,false,null);
+        effects.skills().play(result,side,id->{},()->impacts++,()->completions++);
+    }
+
+    private List<Spatial> airstrikeBombs() {
+        var run=(Node)board.getChild("Airstrike bombing run");
+        return run.getChildren().stream().filter(node->node.getName().equals("Falling airstrike bomb")).toList();
     }
 
     private void showWreck(boolean classic, ShipFactory.Fleet faction) {

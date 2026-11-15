@@ -21,6 +21,20 @@ public final class BattleHud {
     private GamePhase phase=GamePhase.PLACEMENT;
     private GameRules rules=GameRules.DEFAULT;
     private int sunkMask;
+    private int energy;
+    private final Node energyBadge = new Node("Commander energy badge");
+    public void setEnergy(int amount) {
+        if (energy == amount) return;
+        energy = amount;
+        drawEnergy();
+    }
+    private void drawEnergy() {
+        energyBadge.detachAllChildren();
+        if (!rules.skills() || phase == GamePhase.PLACEMENT) return;
+        var draw = new NavalHudSkin(assets, energyBadge, 26);
+        com.battleship.frontend.ui.SkillIcons.bolt(draw, ownX-20, h-253, 1.1f, WHITE);
+        draw.text(Integer.toString(energy), 32, ownX-8, h-274, 57, 43, WHITE);
+    }
     private float scale=1, w=1280, h=800, left, flagWidth, ownX, ownY, rivalX, rivalY;
     private Geometry ownArc, rivalArc;
     private BitmapText header, caption;
@@ -38,6 +52,7 @@ public final class BattleHud {
     private final Node notice=new Node("Battle turn notice");
     private float noticeSeconds;
     private String noticeText="";
+    private String hoverNotice="";
     public void setOpponentReady(boolean ready) { if(opponentReady!=ready) { opponentReady=ready; rebuild(); } }
     public BattleHud(AssetManager assets,String playerName) {
         this.assets=assets; this.playerName=playerName; root.attachChild(layout);
@@ -50,7 +65,7 @@ public final class BattleHud {
         int mask=0;
         for(Ship ship:state.enemy().board().ships()) if(ship.isSunk()) mask|=1<<ship.type().ordinal();
         GamePhase next=state.phase()==GamePhase.PLACEMENT?GamePhase.PLACEMENT:GamePhase.BATTLE;
-        boolean layoutChanged=phase!=next; boolean fleetChanged=!rules.equals(this.rules)||mask!=sunkMask;
+        boolean layoutChanged=phase!=next || rules.skills()!=this.rules.skills(); boolean fleetChanged=!rules.equals(this.rules)||mask!=sunkMask;
         phase=next; this.rules=rules; sunkMask=mask;
         if(layoutChanged) rebuild(); else if(fleetChanged) rebuildFleet();
     }
@@ -82,6 +97,7 @@ public final class BattleHud {
             redrawNotice();
         }
         layout.attachChild(fleetList); layout.attachChild(feedback); layout.attachChild(intro); layout.attachChild(notice);
+        layout.attachChild(energyBadge); drawEnergy();
         rebuildFleet(); redrawFeedback(); redrawIntro(); drawnRemaining=-1; drawClock();
     }
     private void avatar(float x,float y,float radius,boolean radiant,boolean own) {
@@ -148,13 +164,28 @@ public final class BattleHud {
     public void update(float delta) {
         if(noticeSeconds<=0) return;
         noticeSeconds=Math.max(0,noticeSeconds-Math.max(0,delta));
-        if(noticeSeconds==0) notice.detachAllChildren();
+        if(noticeSeconds==0 && hoverNotice.isEmpty()) notice.detachAllChildren();
     }
     private void redrawNotice() {
-        notice.detachAllChildren(); if(phase!=GamePhase.BATTLE || noticeSeconds<=0 || !introText.isEmpty()) return;
+        notice.detachAllChildren(); if(phase!=GamePhase.BATTLE || noticeSeconds<=0 && hoverNotice.isEmpty() || !introText.isEmpty()) return;
+        String shownText=hoverNotice.isEmpty()?noticeText:hoverNotice;
         var draw=new NavalHudSkin(assets,notice,40);
         draw.taperedRule("Turn notice underline",w*.30f,h-91,w*.40f,3,0xFFFFFF,.35f);
-        draw.text(noticeText,30,w*.24f,h-83,w*.52f,45,WHITE);
+        var label=draw.text(shownText,30,w*.24f,h-83,w*.52f,45,WHITE);
+        label.setBox(null); label.setText(shownText);
+        while(label.getLineWidth()>w*.52f-12 && label.getSize()>20) label.setSize(label.getSize()-1);
+        com.battleship.frontend.ui.UiTypography.centerIn(label,w*.24f,h-83,w*.52f,45);
+    }
+    public void showNotice(String text, float seconds) {
+        noticeText = text.replace('\n',' ').toUpperCase(java.util.Locale.ROOT);
+        noticeSeconds = seconds;
+        redrawNotice();
+    }
+    public void setHoverNotice(String text) {
+        String next=text.toUpperCase(java.util.Locale.ROOT);
+        if(hoverNotice.equals(next)) return;
+        hoverNotice=next;
+        redrawNotice();
     }
     private void redrawFeedback() {
         feedback.detachAllChildren(); if(shotResult.isBlank()) return;
@@ -198,9 +229,10 @@ public final class BattleHud {
     public void setOpponentName(String name) { if(!name.equals(opponentName)){opponentName=name;rebuild();} }
     public void setGameStatus(String title,String detail) {
         if(title.equals(statusTitle)&&detail.equals(this.detail)) return;
-        if(!title.equals(statusTitle)) {
+        if(!title.equals(statusTitle) || title.equals("Skill") && !detail.equals(this.detail)) {
             noticeText=(title.startsWith("Your turn")||title.startsWith("Radiant turn")?"YOUR TURN / CHOOSE A TARGET"
-                    :title.startsWith("Opponent turn")||title.startsWith("Abyssal turn")?"OPPONENT'S TURN":title.toUpperCase(java.util.Locale.ROOT));
+                    :title.startsWith("Opponent turn")||title.startsWith("Abyssal turn")?"OPPONENT'S TURN"
+                    :title.equals("Skill")?detail.toUpperCase(java.util.Locale.ROOT):title.toUpperCase(java.util.Locale.ROOT));
             noticeSeconds=3.2f;
         }
         boolean waitingChanged=statusTitle.equals("Fleet confirmed")!=title.equals("Fleet confirmed");

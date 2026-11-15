@@ -34,6 +34,18 @@ public final class NavalHudSkin {
         Geometry g = rect(x, y, FastMath.sqrt(dx*dx+dy*dy), thickness, color, 1);
         g.rotate(0,0,FastMath.atan2(dy,dx)); g.move(0,0,2.2f);
     }
+    public Geometry polygon(String name, float[] points, int color, float alpha) {
+        int count = points.length / 2;
+        float[] vertices = new float[count * 3];
+        int[] indices = new int[(count - 2) * 3];
+        for (int i = 0; i < count; i++) { vertices[i * 3] = points[i * 2]; vertices[i * 3 + 1] = points[i * 2 + 1]; }
+        for (int i = 0; i < count - 2; i++) { indices[i * 3] = 0; indices[i * 3 + 1] = i + 1; indices[i * 3 + 2] = i + 2; }
+        Mesh mesh = new Mesh(); mesh.setBuffer(VertexBuffer.Type.Position, 3, vertices);
+        mesh.setBuffer(VertexBuffer.Type.Index, 3, indices); mesh.updateBound();
+        ColorRGBA tint = Materials.linear(color); tint.a = alpha;
+        Geometry geometry = new Geometry(name, mesh); geometry.setMaterial(materials.flat(tint));
+        geometry.setLocalTranslation(0, 0, z); return attach(geometry);
+    }
     public void taperedRule(String name,float x,float y,float width,float thickness,int color,float alpha) {
         Mesh mesh=new Mesh();
         mesh.setBuffer(VertexBuffer.Type.Position,3,new float[]{0,0,0,width/2,-thickness/2,0,width,0,0,width/2,thickness/2,0});
@@ -41,9 +53,10 @@ public final class NavalHudSkin {
         ColorRGBA tint=Materials.rgb(color); tint.a=alpha;
         Geometry g=new Geometry(name,mesh); g.setMaterial(materials.flat(tint)); g.setLocalTranslation(x,y,z); attach(g);
     }
-    public void panel(float x, float y, float w, float h, int color) {
-        rect(x,y,w,h,color,.91f);
+    public Geometry panel(float x, float y, float w, float h, int color) {
+        Geometry background = rect(x,y,w,h,color,.91f);
         UiShapes.frame(parent,x,y,w,h,5,1.6f,materials.flat(Materials.linear(GOLD)),z+2.2f);
+        return background;
     }
     public void hazePennant(float x,float bottom,float width,float shoulder,float peak,float alpha) {
         ColorRGBA tint=new ColorRGBA(1,1,1,alpha);
@@ -100,8 +113,8 @@ public final class NavalHudSkin {
         Mesh mesh=new Mesh(); mesh.setBuffer(VertexBuffer.Type.Position,3,BufferUtils.createFloatBuffer(points.toArray(Vector3f[]::new)));
         mesh.setBuffer(VertexBuffer.Type.Index,3,indices.stream().mapToInt(Integer::intValue).toArray()); mesh.updateBound(); return mesh;
     }
-    public void gear(float cx,float cy,float radius) {
-        arc("Settings medallion",cx,cy,radius/2,radius,0,FastMath.TWO_PI,BLUE);
+    public Geometry gear(float cx,float cy,float radius) {
+        Geometry background = arc("Settings medallion",cx,cy,radius/2,radius,0,FastMath.TWO_PI,BLUE);
         arc("Settings rim",cx,cy,radius,2,0,FastMath.TWO_PI,GOLD);
         arc("Gear center",cx,cy,radius*.4f,3,0,FastMath.TWO_PI,WHITE);
         for(int i=0;i<8;i++) {
@@ -109,6 +122,7 @@ public final class NavalHudSkin {
             line(cx+FastMath.cos(a)*radius*.4f,cy+FastMath.sin(a)*radius*.4f,
                  cx+FastMath.cos(a)*radius*.62f,cy+FastMath.sin(a)*radius*.62f,WHITE,5);
         }
+        return background;
     }
     public void moveArrows(float cx,float cy) {
         for(int i=0;i<4;i++) {

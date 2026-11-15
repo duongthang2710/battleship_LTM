@@ -85,7 +85,7 @@ public final class AudioChecks {
                 System.out.println("PASS native Java Sound: actual output line play, mute, software gain and unmute.");
             } else System.out.println("SKIP native output: no supported audio device; non-blocking silent fallback loaded.");
         }
-        System.out.println("PASS: 29 licensed effect WAVs and five seamless stereo backgrounds; PCM decode, gain, native streaming, scene switch and mute.");
+        System.out.println("PASS: "+GameAudio.Cue.values().length+" effect WAVs and five stereo backgrounds; PCM decode, gain, native streaming, scene switch and mute.");
     }
     private static void await(java.util.function.BooleanSupplier condition,String reason) throws Exception {
         long until=System.nanoTime()+TimeUnit.SECONDS.toNanos(8);

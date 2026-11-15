@@ -23,3 +23,10 @@ tasks.register('aiChecks', JavaExec) {
     maxHeapSize = '512m'
 }
 tasks.named('check') { dependsOn 'aiChecks' }
+
+tasks.register('skillChecks', JavaExec) {
+    dependsOn testClasses
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'com.battleship.shared.game.SkillChecks'
+}
+tasks.named('check') { dependsOn 'skillChecks' }

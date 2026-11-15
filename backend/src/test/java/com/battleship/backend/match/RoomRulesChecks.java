@@ -7,12 +7,12 @@ import java.util.*;
 import java.util.concurrent.atomic.AtomicLong;
 import static com.battleship.backend.match.DesignerMatchChecks.PLAYERS;
 
-/** Checks all 12 room configurations against the real authoritative match service. */
+/** Checks every Basic/Designer x 3-5 ships x turn rule x Classic/Skill combat room configuration against the real authoritative match service. */
 public final class RoomRulesChecks {
     public static void main(String[] args) {
         for (GameMode mode : GameMode.values()) for (int count = 3; count <= 5; count++) for (TurnRule turn : TurnRule.values())
-                for (boolean hideSunkInfo : new boolean[] {false, true}) {
-            GameRules rules = new GameRules(mode, count, turn);
+                for (CombatMode combat : CombatMode.values()) for (boolean hideSunkInfo : new boolean[] {false, true}) {
+            GameRules rules = new GameRules(mode, count, turn, combat);
             GameEngine placement = new GameEngine("Placement", new Random(17)); placement.setRules(rules);
             placement.randomPlacement();
             require(placement.canReady() && placement.state().player().board().ships().size() == count, "Configured random fleet and Ready");
@@ -34,6 +34,7 @@ public final class RoomRulesChecks {
                     && match.snapshot("b").enemyBoard().ships().isEmpty(), "Configured fleet waits privately");
             match.submit("b", fleet);
             require(match.timer().remainingMillis() == 60_000 && match.snapshot("a").currentPlayerId().equals("a"), "Player 1 opens with 60s");
+            require((match.snapshot("a").skills() != null) == rules.skills(), "Skill state is sent only in Skill battle");
             now.addAndGet(10_000_000_000L);
             require(match.attack("a", new Coordinate(-1, 0)).type() == AttackResultType.INVALID_COORDINATE
                     && match.timer().remainingMillis() == 53_000, "Invalid shot keeps deadline");
@@ -81,7 +82,7 @@ public final class RoomRulesChecks {
                 "Legacy room preferences map to hidden sinking information");
         require(!gson.toJson(new RoomOptions(true)).contains("shuffleFleet"), "Removed setting is absent from outgoing options");
         for (int invalid : new int[] {0, 2, 6}) expectRejected(() -> new GameRules(GameMode.CLASSIC, invalid, TurnRule.ALTERNATING));
-        System.out.println("PASS: 24 room configurations with normal/hidden sinking, private attack and board snapshots, final fleet reveal, timers and legacy options.");
+        System.out.println("PASS: 48 room configurations (incl. Classic/Skill combat) with normal/hidden sinking, private attack and board snapshots, final fleet reveal, timers and legacy options.");
     }
 
     static void checkHiddenSnapshot(MatchSnapshot snapshot) {

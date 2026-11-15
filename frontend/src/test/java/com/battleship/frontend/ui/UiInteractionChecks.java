@@ -126,11 +126,27 @@ public final class UiInteractionChecks extends SimpleApplication {
         chatInput.beginInput(); chatInput.onMouseMotionEvent(wheel); chatInput.endInput();
         require(chat.firstVisibleLine() == 3 && wheel.isConsumed(), "Wheel scrolls chat without orbit/zoom");
         chat.latest(); require(chat.atBottom(), "Latest reaches bottom");
-        chat.setMode(ChatPanel.Mode.BATTLE); if(chat.collapsed()) chat.toggle();
+        chat.setMode(ChatPanel.Mode.BATTLE);
+        require(chat.collapsed(),"Battle starts with compact chat input");
+        chat.append(new ChatMessage(contextId,100,sender,"Incoming while compact",Instant.now().toString()));
+        require(chat.collapsed(),"Incoming messages do not expand history over skills");
+        var enter=new KeyInputEvent(com.jme3.input.KeyInput.KEY_RETURN,'\n',true,false);
+        chatInput.onKeyEvent(enter);
+        require(enter.isConsumed() && chat.focused() && !chat.collapsed(),"Enter focuses input and expands history");
         require(chat.atBottom(), "Battle layout keeps bottom");
         thumb = chat.scrollThumbCenter(); require(chat.beginScrollDrag(thumb), "Battle scrollbar starts drag");
         chat.dragScroll(new Vector2f(thumb.x, thumb.y + height)); chat.endScrollDrag();
         require(chat.firstVisibleLine() == 0, "Battle scrollbar scrolls to oldest");
+        var escape=new KeyInputEvent(com.jme3.input.KeyInput.KEY_ESCAPE,(char)27,true,false);
+        chatInput.onKeyEvent(escape);
+        require(chat.collapsed() && !chat.focused(),"Escape restores compact chat");
+        chat.click(chat.inputCenter());
+        require(chat.focused() && !chat.collapsed() && chat.firstVisibleLine()==0,"Input click reopens history at preserved scroll position");
+        chat.blur();
+        chat.setContext(new ChatContext(contextId,"UITEST",ChatScope.MATCH,false));
+        chatInput.onKeyEvent(new KeyInputEvent(com.jme3.input.KeyInput.KEY_RETURN,'\n',true,false));
+        require(chat.focused() && !chat.collapsed() && !chat.writable(),"Finished match history can still be opened with Enter");
+        chat.setContext(new ChatContext(contextId,"UITEST",ChatScope.MATCH,true));
         chat.setMode(ChatPanel.Mode.WAITING); chat.latest();
     }
     private Vector2f renderedLabelCenter(Node node, String caption) {

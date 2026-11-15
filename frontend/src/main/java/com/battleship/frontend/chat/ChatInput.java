@@ -50,7 +50,7 @@ public final class ChatInput extends RawInputListenerAdapter implements AutoClos
             if (scrollbar) panel.dragScroll(new Vector2f(event.getX(), event.getY()));
             event.setConsumed();
         }
-        if (panel.contains(new Vector2f(event.getX(), event.getY())) && event.getDeltaWheel() != 0) {
+        if (!panel.collapsed() && panel.contains(new Vector2f(event.getX(), event.getY())) && event.getDeltaWheel() != 0) {
             panel.scroll(event.getDeltaWheel() > 0 ? -3 : 3); event.setConsumed();
         }
     }
@@ -58,11 +58,11 @@ public final class ChatInput extends RawInputListenerAdapter implements AutoClos
         if (!event.isPressed() && !event.isRepeating()) { if (capturedKeys.remove(event.getKeyCode())) event.setConsumed(); return; }
         if (!panel.visible()) return;
         boolean enter = event.getKeyCode() == KeyInput.KEY_RETURN || event.getKeyCode() == KeyInput.KEY_NUMPADENTER;
-        if (!panel.focused() && !(enter && panel.writable())) return;
+        if (!panel.focused() && !(enter && (panel.writable() || panel.mode() == ChatPanel.Mode.BATTLE))) return;
         capturedKeys.add(event.getKeyCode()); event.setConsumed();
         if (!panel.focused()) { if (!event.isRepeating()) panel.focus(); return; }
         switch (event.getKeyCode()) {
-            case KeyInput.KEY_RETURN, KeyInput.KEY_NUMPADENTER -> { if (!event.isRepeating()) { if(!panel.draft().isBlank()) action.accept(ChatPanel.Action.SEND); if(panel.mode()==ChatPanel.Mode.BATTLE) panel.blur(); } }
+            case KeyInput.KEY_RETURN, KeyInput.KEY_NUMPADENTER -> { if (!event.isRepeating()) { if(panel.writable()&&!panel.draft().isBlank()) action.accept(ChatPanel.Action.SEND); if(panel.mode()==ChatPanel.Mode.BATTLE) panel.blur(); } }
             case KeyInput.KEY_ESCAPE -> panel.blur();
             case KeyInput.KEY_BACK -> panel.backspace();
             case KeyInput.KEY_PGUP -> panel.scroll(-6);

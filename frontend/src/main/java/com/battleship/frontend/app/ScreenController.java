@@ -43,6 +43,7 @@ import com.jme3.scene.Spatial.CullHint;
 
 /** Owns screen navigation and input lifetimes; game rules remain in GameEngine. */
 public final class ScreenController implements AutoCloseable {
+    private static final Vector2f OUTSIDE_BUTTONS = new Vector2f(-1, -1);
     private enum Screen { MAIN_MENU, ACCOUNT, LEADERBOARD, FRIENDS, SETTINGS, PVP, PVP_PLACEMENT, AI_SETUP, AI_GAME }
     private final com.battleship.frontend.ai.AiSetupPanel aiSetup;
     private PointerInput aiSetupInput;
@@ -144,6 +145,7 @@ public final class ScreenController implements AutoCloseable {
         game.onLeave(this::confirmLeaveRoom);
         game.onSettings(() -> pendingAction = MainMenu.Action.SETTINGS);
         game.onSound(audio::play);
+        game.onShake(orbit::shake);
         pvp = new PvpController(roomPanel, player, room -> {
             placementRequested = room;
             roomRequested = false;
@@ -251,6 +253,7 @@ public final class ScreenController implements AutoCloseable {
                 game.restartLocalMatch();
                 showAccount();
             }
+            updateButtonHover(cursor);
             return;
         }
         if (screen == Screen.ACCOUNT && loginRequired) {
@@ -301,19 +304,38 @@ public final class ScreenController implements AutoCloseable {
         boolean battleChat = screen == Screen.PVP_PLACEMENT && (game.state().phase() == com.battleship.shared.game.GamePhase.BATTLE
                 || game.state().phase() == com.battleship.shared.game.GamePhase.GAME_OVER);
         chatPanel.setMode(waitingChat ? ChatPanel.Mode.WAITING : battleChat ? ChatPanel.Mode.BATTLE : ChatPanel.Mode.HIDDEN);
+        placementHud.setChatExpanded(battleChat && !chatPanel.collapsed());
+        if (screen == Screen.SETTINGS && (settingsOrigin == Screen.PVP_PLACEMENT || settingsOrigin == Screen.AI_GAME)) {
+            game.update(delta, OUTSIDE_BUTTONS); setGameHudVisible(false);
+        } else if (screen == Screen.PVP_PLACEMENT || screen == Screen.AI_GAME) game.update(delta, cursor);
+        updateButtonHover(cursor);
+        updateAudioScene();
+    }
+
+    private void updateButtonHover(Vector2f cursor) {
+        leaveConfirmation.updateHover(cursor);
+        boolean leaving = leaveConfirmation.visible();
+        connectionNotice.updateHover(leaving ? OUTSIDE_BUTTONS : cursor);
+        boolean modal = leaving || connectionNotice.visible();
+        gameInvitePanel.updateHover(modal ? OUTSIDE_BUTTONS : cursor);
+        Vector2f screenCursor = modal || gameInvitePanel.contains(cursor) ? OUTSIDE_BUTTONS : cursor;
+        chatPanel.updateHover(screenCursor);
+        Vector2f behindChat = chatPanel.contains(screenCursor) ? OUTSIDE_BUTTONS : screenCursor;
+        gameOver.updateHover(behindChat);
         if (screen == Screen.MAIN_MENU) {
-            menu.update(cursor);
-            MainMenu.Action nextHover = menu.actionAt(cursor).orElse(null);
+            menu.update(screenCursor);
+            MainMenu.Action nextHover = menu.actionAt(screenCursor).orElse(null);
             if (nextHover != null && hoveredMenu != nextHover) audio.play(com.battleship.frontend.audio.GameAudio.Cue.HOVER);
             hoveredMenu = nextHover;
         }
-        else if (screen == Screen.PVP) roomPanel.update(cursor);
-        else if (screen == Screen.FRIENDS) friendsPanel.update(cursor);
-        else if (screen == Screen.LEADERBOARD) leaderboardPanel.update(cursor);
-        else if (screen == Screen.SETTINGS && (settingsOrigin == Screen.PVP_PLACEMENT || settingsOrigin == Screen.AI_GAME)) {
-            game.update(delta, new Vector2f(-1,-1)); setGameHudVisible(false);
-        } else if (screen == Screen.PVP_PLACEMENT || screen == Screen.AI_GAME) game.update(delta, cursor);
-        updateAudioScene();
+        else if (screen == Screen.PVP) roomPanel.update(behindChat);
+        else if (screen == Screen.FRIENDS) friendsPanel.update(screenCursor);
+        else if (screen == Screen.LEADERBOARD) leaderboardPanel.update(screenCursor);
+        else if (screen == Screen.ACCOUNT) accountPanel.updateHover(screenCursor);
+        else if (screen == Screen.AI_SETUP) aiSetup.updateHover(screenCursor);
+        else if (screen == Screen.SETTINGS) settingsPanel.updateHover(screenCursor);
+        else if (screen == Screen.PVP_PLACEMENT || screen == Screen.AI_GAME)
+            placementHud.updateHover(gameOver.contains(behindChat) ? OUTSIDE_BUTTONS : behindChat, game.inputBusy());
     }
 
     private void updateAudioScene() {

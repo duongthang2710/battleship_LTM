@@ -1,0 +1,14 @@
+[Unit]
+Description=Battleship TCP Server
+Requires=docker.service
+After=docker.service
+
+[Service]
+User=ubuntu
+WorkingDirectory=/home/ubuntu/battleship
+ExecStart=/bin/sh /home/ubuntu/battleship/backend/bin/backend 2210 127.0.0.1
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
