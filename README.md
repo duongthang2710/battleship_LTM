@@ -60,6 +60,25 @@ Bot được truyền `AiKnowledge` chỉ gồm lịch sử bắn công khai và
 điều phối engine, timer và trì hoãn bắn; không có callback nền tồn tại sau khi rời trận.
 PvAI chưa lưu lịch sử database và không tính vào Leaderboard PvP. Fleet Designer/tùy chọn phòng hiện chỉ áp dụng PvP.
 
+## Dữ liệu demo
+
+Khi PostgreSQL đang chạy và `.env` trỏ tới database demo/local, có thể tạo sáu tài khoản tên tự nhiên
+và 30 trận PvP hoàn chỉnh bằng chính giao thức TCP của ứng dụng:
+
+```powershell
+.\gradlew.bat :backend:seedDemoData
+```
+
+Tác vụ có thể chạy lại để bổ sung lịch sử. Dùng `-PdemoSets=2` để tạo 60 trận trong một lần.
+Các ván đều đi qua đăng ký/đăng nhập, phòng chờ, xác thực đội tàu, lượt bắn và lưu kết quả;
+không chèn trực tiếp dữ liệu giả vào PostgreSQL.
+
+Để sinh dữ liệu trên server đã deploy qua TLS, truyền đúng endpoint của bản phát hành:
+
+```powershell
+.\gradlew.bat :backend:seedDemoData '-PdemoHost=game.example.com' '-PdemoPort=2209' '-PdemoTls=true'
+```
+
 Kiểm tra thuật toán, timer và render (lệnh cuối cần OpenGL; không cần server):
 
 ```powershell
