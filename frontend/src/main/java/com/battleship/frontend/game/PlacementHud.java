@@ -1,6 +1,7 @@
 package com.battleship.frontend.game;
 
 import com.battleship.frontend.graphics.Materials;
+import com.battleship.frontend.ui.ButtonHover;
 import com.battleship.frontend.ui.UiTypography;
 import com.battleship.frontend.ui.UiShapes;
 import com.battleship.frontend.ui.NavalHudSkin;
@@ -42,6 +43,7 @@ public final class PlacementHud {
     private final BitmapFont body;
     private final BitmapFont hudFont;
     private final List<Button> buttons = new ArrayList<>();
+    private final ButtonHover<Button> buttonHover = new ButtonHover<>();
     private GameState state;
     private ShipType selected;
     private ShipOrientation orientation;
@@ -155,26 +157,35 @@ public final class PlacementHud {
     }
 
     public Optional<Action> actionAt(Vector2f screen) {
+        return Optional.ofNullable(buttonAt(screen)).map(Button::action);
+    }
+
+    public void updateHover(Vector2f cursor, boolean busy) {
+        Button button = buttonAt(cursor);
+        buttonHover.update(busy && button != null && button.action != Action.SETTINGS ? null : button);
+    }
+
+    private Button buttonAt(Vector2f screen) {
         float x = screen.x / scale, y = screen.y / scale;
         for (Button button : buttons) {
             if (button.enabled && x >= button.x && x <= button.x + button.width
                     && y >= button.y && y <= button.y + button.height) {
                 if (button.action.name().startsWith("SKILL_")
                         && Math.abs(x-button.x-button.width/2)+Math.abs(y-button.y-button.height/2)>button.width/2) continue;
-                return Optional.of(button.action);
+                return button;
             }
         }
-        return Optional.empty();
+        return null;
     }
 
     private void rebuild() {
-        layout.detachAllChildren(); buttons.clear(); regions.clear();
+        layout.detachAllChildren(); buttons.clear(); regions.clear(); buttonHover.clear();
         if (state == null) return;
         var draw = new NavalHudSkin(assets, layout, 30);
         float w = logicalWidth, h = logicalHeight;
-        draw.gear(w - 48, h - 44, 27);
+        var settingsFill = draw.gear(w - 48, h - 44, 27);
         regions.add(new Region(w - 78, h - 74, 60, 60));
-        buttons.add(new Button(w - 78, h - 74, 60, 60, Action.SETTINGS, true));
+        addButton(new Button(w - 78, h - 74, 60, 60, Action.SETTINGS, true), settingsFill.getMaterial(), null);
         if (state.phase() != GamePhase.PLACEMENT) {
             more = false;
             draw.panel(w/2-180,22,360,54,0x082D46);
@@ -204,10 +215,10 @@ public final class PlacementHud {
         if(designer) button(tipsX+10,tipsY+24,92,36,drawing?"Draw [G]":"Move [G]",Action.TOGGLE_DRAW,!networkLocked,drawing);
         else draw.text("Click a cell\nto place",14,tipsX+8,tipsY+19,96,48,IVORY);
         float cy=tipsY-63, cx=tipsX+56;
-        draw.arc("Random medallion",cx,cy,15,30,0,FastMath.TWO_PI,0x12557C);
-        draw.arc("Random rim",cx,cy,30,2,0,FastMath.TWO_PI,GOLD);
+        var randomFill = draw.arc("Random medallion",cx,cy,15,30,0,FastMath.TWO_PI,0x12557C);
+        var randomRim = draw.arc("Random rim",cx,cy,30,2,0,FastMath.TWO_PI,GOLD);
         draw.refreshIcon(cx,cy);
-        buttons.add(new Button(cx-31,cy-31,62,62,Action.RANDOM,!networkLocked));
+        addButton(new Button(cx-31,cy-31,62,62,Action.RANDOM,!networkLocked), randomFill.getMaterial(), randomRim.getMaterial());
         regions.add(new Region(cx-31,cy-31,62,62));
         draw.text("RANDOM [F]",12,cx-48,cy-55,96,20,IVORY);
         String hint=networkLocked?"Fleet locked. Waiting for opponent.":draft?draftCount+" / "+selected.length()+" cells | Enter to confirm":message;
@@ -237,7 +248,8 @@ public final class PlacementHud {
                     selected ? 0xF8D675 : enabled ? GOLD : 0x78818A, 1);
             rim.setUserData("skillType", skill.name());
             rim.setUserData("used", spent);
-            draw.polygon("Skill diamond inset", new float[] {x,y-35,x+35,y,x,y+35,x-35,y}, selected ? 0x176386 : 0x132B3D, .98f).move(0,0,.2f);
+            var inset = draw.polygon("Skill diamond inset", new float[] {x,y-35,x+35,y,x,y+35,x-35,y}, selected ? 0x176386 : 0x132B3D, .98f);
+            inset.move(0,0,.2f);
             var icon = new NavalHudSkin(assets, layout, 34);
             com.battleship.frontend.ui.SkillIcons.draw(icon, skill, x, y, enabled ? IVORY : 0x829099);
             icon.text(Integer.toString(i+1), 10, x-9,y+19,18,16,enabled?GOLD:0x829099);
@@ -247,7 +259,7 @@ public final class PlacementHud {
                 com.battleship.frontend.ui.SkillIcons.bolt(icon, x-7,y-45,.55f,IVORY);
                 icon.text(Integer.toString(skill.cost()),17,x-1,y-58,23,25,IVORY);
             }
-            buttons.add(new Button(x-radius,y-radius,radius*2,radius*2,skillAction(skill),enabled));
+            addButton(new Button(x-radius,y-radius,radius*2,radius*2,skillAction(skill),enabled), inset.getMaterial(), rim.getMaterial());
             regions.add(new Region(x-radius,y-62,radius*2,radius+62));
         }
     }
@@ -275,16 +287,28 @@ public final class PlacementHud {
                         Action action, boolean enabled, boolean selected) {
         ColorRGBA fill = selected ? Materials.linear(0x175D85)
                 : new ColorRGBA(0.009f, 0.022f, 0.044f, enabled ? 0.9f : 0.55f);
-        if(action==Action.LEAVE_ROOM) fill=new ColorRGBA(.28f,.025f,.04f,.98f);
-        panel(x, y, width, height, fill).setMesh(UiShapes.chamfered(width, height, 7));
-        frame(x, y, width, height, enabled ? (selected ? GOLD : 0x617D94) : 0x394659);
-        UiTypography.centerIn(text(action == Action.READY ? hudFont : body, label, action == Action.READY ? 25 : 12, x, y, enabled ? IVORY : 0x6E7989),
+        if (action == Action.READY) {
+            fill = enabled ? new ColorRGBA(.036f, .15f, .24f, 1) : new ColorRGBA(.018f, .059f, .091f, 1);
+        } else if (action == Action.LEAVE_ROOM) fill = new ColorRGBA(.28f, .025f, .04f, .98f);
+        Geometry background = panel(x, y, width, height, fill);
+        background.setMesh(UiShapes.chamfered(width, height, 7));
+        background.move(0, 0, .5f);
+        Material rim = frame(x, y, width, height, enabled ? (selected ? GOLD : 0x617D94) : 0x394659);
+        int textColor = enabled ? IVORY : action == Action.READY ? 0xA9BECD : 0x6E7989;
+        UiTypography.centerIn(text(action == Action.READY ? hudFont : body, label, action == Action.READY ? 25 : 12, x, y, textColor),
                 x, y, width, height);
-        buttons.add(new Button(x, y, width, height, action, enabled));
+        addButton(new Button(x, y, width, height, action, enabled), background.getMaterial(), rim);
     }
 
-    private void frame(float x, float y, float width, float height, int color) {
-        com.battleship.frontend.ui.UiShapes.frame(layout,x,y,width,height,7,1.8f,materials.flat(Materials.rgb(color)),31);
+    private void addButton(Button button, Material fill, Material rim) {
+        buttons.add(button);
+        if (button.enabled) buttonHover.add(button, fill, rim);
+    }
+
+    private Material frame(float x, float y, float width, float height, int color) {
+        Material rim = materials.flat(Materials.rgb(color));
+        UiShapes.frame(layout, x, y, width, height, 7, 1.8f, rim, 31);
+        return rim;
     }
 
     private void line(float x, float y, float endX, float endY, int color) {

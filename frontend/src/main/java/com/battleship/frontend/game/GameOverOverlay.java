@@ -1,6 +1,7 @@
 package com.battleship.frontend.game;
 
 import com.battleship.frontend.graphics.Materials;
+import com.battleship.frontend.ui.ButtonHover;
 import com.battleship.frontend.ui.UiTypography;
 import com.battleship.frontend.ui.UiShapes;
 import com.battleship.shared.game.GameState;
@@ -33,6 +34,8 @@ public final class GameOverOverlay {
     private final Materials materials;
     private final BitmapFont display;
     private final BitmapFont body;
+    private enum Action { PLAY_AGAIN, MAIN_MENU }
+    private final ButtonHover<Action> hover = new ButtonHover<>();
     private BitmapText title;
     private BitmapText winner;
     private BitmapText resultReason;
@@ -128,6 +131,11 @@ public final class GameOverOverlay {
         return visible && inside(screen, MENU_BUTTON_X, BUTTON_Y, BUTTON_WIDTH, BUTTON_HEIGHT);
     }
 
+    public void updateHover(Vector2f cursor) {
+        hover.update(restartAt(cursor) ? Action.PLAY_AGAIN : mainMenuAt(cursor) ? Action.MAIN_MENU : null);
+        declineLabel.setColor(Materials.rgb(declineAt(cursor) ? IVORY : GOLD));
+    }
+
     public Vector2f buttonCenter(boolean playAgain) {
         return new Vector2f(left + ((playAgain ? BUTTON_X : MENU_BUTTON_X) + BUTTON_WIDTH / 2) * scale,
                 bottom + (BUTTON_Y + BUTTON_HEIGHT / 2) * scale);
@@ -149,14 +157,10 @@ public final class GameOverOverlay {
         title = text(display, "VICTORY", 46, HEIGHT - 42, GOLD);
         resultReason = text(body, "WINNER", 10, 163, GOLD);
         winner = text(display, "", 25, 138, IVORY);
-        panel(BUTTON_X, BUTTON_Y, BUTTON_WIDTH, BUTTON_HEIGHT,
-                new ColorRGBA(0.025f, 0.055f, 0.095f, 1), 40).setMesh(UiShapes.chamfered(BUTTON_WIDTH, BUTTON_HEIGHT, 10));
-        frame(BUTTON_X, BUTTON_Y, BUTTON_WIDTH, BUTTON_HEIGHT);
+        button(Action.PLAY_AGAIN, BUTTON_X);
         restartLabel = text(body, "Restart", 13, BUTTON_Y + 24, IVORY);
         setNetworkMode(false);
-        panel(MENU_BUTTON_X, BUTTON_Y, BUTTON_WIDTH, BUTTON_HEIGHT,
-                new ColorRGBA(0.025f, 0.055f, 0.095f, 1), 40).setMesh(UiShapes.chamfered(BUTTON_WIDTH, BUTTON_HEIGHT, 10));
-        frame(MENU_BUTTON_X, BUTTON_Y, BUTTON_WIDTH, BUTTON_HEIGHT);
+        button(Action.MAIN_MENU, MENU_BUTTON_X);
         BitmapText menu = text(body, "MAIN MENU", 13, BUTTON_Y + 24, IVORY);
         UiTypography.centerIn(menu, MENU_BUTTON_X, BUTTON_Y, BUTTON_WIDTH, BUTTON_HEIGHT);
         rematchStatus = text(body, "", 10, 86, IVORY);
@@ -165,8 +169,16 @@ public final class GameOverOverlay {
         declineLabel.setCullHint(CullHint.Always);
     }
 
-    private void frame(float x, float y, float width, float height) {
-        com.battleship.frontend.ui.UiShapes.frame(layout,x,y,width,height,10,2,materials.flat(Materials.rgb(GOLD)),41);
+    private void button(Action action, float x) {
+        var fill = panel(x, BUTTON_Y, BUTTON_WIDTH, BUTTON_HEIGHT, new ColorRGBA(.025f, .055f, .095f, 1), 40.1f);
+        fill.setMesh(UiShapes.chamfered(BUTTON_WIDTH, BUTTON_HEIGHT, 10));
+        hover.add(action, fill.getMaterial(), frame(x, BUTTON_Y, BUTTON_WIDTH, BUTTON_HEIGHT));
+    }
+
+    private Material frame(float x, float y, float width, float height) {
+        var rim = materials.flat(Materials.rgb(GOLD));
+        UiShapes.frame(layout,x,y,width,height,10,2,rim,41);
+        return rim;
     }
 
     private void line(float x, float y, float endX, float endY, int color) {

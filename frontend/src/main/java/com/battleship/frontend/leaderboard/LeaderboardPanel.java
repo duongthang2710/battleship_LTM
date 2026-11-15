@@ -145,8 +145,11 @@ public final class LeaderboardPanel {
     private void refreshButtons() {
         for (Button b : buttons) {
             boolean selected = b.action.name().equals(sort.name());
-            b.fill.setColor("Color", new ColorRGBA(.025f, .055f, .095f, !enabled(b.action) ? .45f : b.action == hovered || selected ? 1 : .7f));
-            b.label.setColor(Materials.rgb(!enabled(b.action) ? 0x69788D : selected || b.action == hovered ? GOLD : IVORY));
+            boolean active = enabled(b.action);
+            boolean underCursor = active && b.action == hovered;
+            b.fill.setColor("Color", underCursor ? new ColorRGBA(.055f, .098f, .137f, .98f)
+                    : new ColorRGBA(.025f, .055f, .095f, !active ? .45f : selected ? 1 : .7f));
+            b.label.setColor(Materials.rgb(!active ? 0x69788D : selected || underCursor ? GOLD : IVORY));
         }
     }
     private void frame(float x, float y, float w, float h, int color) {

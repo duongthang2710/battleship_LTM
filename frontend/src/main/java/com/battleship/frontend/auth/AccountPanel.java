@@ -1,6 +1,7 @@
 package com.battleship.frontend.auth;
 
 import com.battleship.frontend.graphics.Materials;
+import com.battleship.frontend.ui.ButtonHover;
 import com.battleship.frontend.ui.UiTypography;
 import com.battleship.shared.auth.AccountProfile;
 import com.jme3.asset.AssetManager;
@@ -30,6 +31,8 @@ public final class AccountPanel {
     private final Materials materials;
     private final BitmapFont display, body;
     private final List<Button> buttons = new ArrayList<>();
+    private final ButtonHover<Action> buttonHover = new ButtonHover<>();
+    private BitmapText serverLink;
     private final String[] values = {"", "", ""};
     private final String[] serverValues = {System.getProperty("battleship.host", "localhost"),
             Integer.toString(Integer.getInteger("battleship.port", 2209))};
@@ -117,6 +120,17 @@ public final class AccountPanel {
                 focused = i; blinkTime = 0; refreshFields(); return Optional.empty();
             }
         }
+        return buttonAt(x, y);
+    }
+    public void updateHover(Vector2f cursor) {
+        float x = (cursor.x - left) / scale, y = (cursor.y - bottom) / scale;
+        buttonHover.update(visible ? buttonAt(x, y).orElse(null) : null);
+        if (serverLink != null) {
+            boolean hover = visible && enabled(Action.SERVER) && x >= 274 && x <= 410 && y >= 566 && y <= 592;
+            serverLink.setColor(Materials.rgb(hover ? GOLD : 0xAFBBD0));
+        }
+    }
+    private Optional<Action> buttonAt(float x, float y) {
         for (Button button : buttons) if (enabled(button.action()) && x >= 30 && x <= 410
                 && y >= button.y() && y <= button.y() + 42) return Optional.of(button.action());
         return Optional.empty();
@@ -176,7 +190,8 @@ public final class AccountPanel {
         update(0);
     }
     private void rebuild() {
-        card.detachAllChildren(); buttons.clear(); java.util.Arrays.fill(fields, null);
+        card.detachAllChildren(); buttons.clear(); buttonHover.clear(); serverLink = null;
+        java.util.Arrays.fill(fields, null);
         rect(0, 0, 440, 620, new ColorRGBA(.003f, .007f, .021f, .96f), 80);
         outline(0, 0, 440, 620, GOLD);
         outline(8, 8, 424, 604, 0x655638);
@@ -207,7 +222,7 @@ public final class AccountPanel {
         }
         statusLabel = text(body, wrap(status), 11, 32, 108, CYAN);
         if (account == null && !editingServer) {
-            BitmapText serverLink = text(body, "CONNECTION", 10, 274, 566, 0xAFBBD0);
+            serverLink = text(body, "CONNECTION", 10, 274, 566, 0xAFBBD0);
             UiTypography.centerIn(serverLink, 274, 566, 136, 26);
         }
         button(22, account == null ? "EXIT" : "MAIN MENU", account == null ? Action.EXIT : Action.BACK);
@@ -221,14 +236,17 @@ public final class AccountPanel {
     }
     private void button(float y, String caption, Action action) {
         boolean enabled = enabled(action);
-        rect(30, y, 380, 42, new ColorRGBA(.02f, .05f, .085f, 1), 81);
-        outline(30, y, 380, 42, enabled ? GOLD : 0x334050);
+        var fill = rect(30, y, 380, 42, new ColorRGBA(.02f, .05f, .085f, 1), 81).getMaterial();
+        var rim = outline(30, y, 380, 42, enabled ? GOLD : 0x334050);
         BitmapText label = text(body, caption, 11, 0, y + 26, enabled ? IVORY : 0x69788D);
         UiTypography.centerIn(label, 30, y, 380, 42);
         buttons.add(new Button(y, action));
+        buttonHover.add(action, fill, rim);
     }
-    private void outline(float x, float y, float w, float h, int color) {
-        com.battleship.frontend.ui.UiShapes.frame(card,x,y,w,h,5,1.6f,materials.flat(Materials.rgb(color)),82);
+    private Material outline(float x, float y, float w, float h, int color) {
+        Material rim = materials.flat(Materials.rgb(color));
+        com.battleship.frontend.ui.UiShapes.frame(card, x, y, w, h, 5, 1.6f, rim, 82);
+        return rim;
     }
     private Geometry rect(float x, float y, float w, float h, ColorRGBA color, float z) {
         Geometry geometry = new Geometry("Account panel detail", new Quad(w, h));

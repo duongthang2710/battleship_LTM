@@ -1,5 +1,6 @@
 package com.battleship.frontend.ai;
 
+import com.battleship.frontend.ui.ButtonHover;
 import com.battleship.frontend.ui.NavalHudSkin;
 import com.battleship.frontend.ui.UiTypography;
 import com.battleship.shared.ai.AiDifficulty;
@@ -14,6 +15,7 @@ public final class AiSetupPanel {
     public enum Action { EASY, MEDIUM, HARD, START, BACK }
     private final Node root = new Node("AI setup"), layout = new Node("AI setup card");
     private final AssetManager assets;
+    private final ButtonHover<Action> hover = new ButtonHover<>();
     private AiDifficulty difficulty = AiDifficulty.MEDIUM;
     private float scale = 1, left, bottom;
     private boolean visible;
@@ -49,8 +51,11 @@ public final class AiSetupPanel {
         }
         return Optional.empty();
     }
+    public void updateHover(Vector2f cursor) { hover.update(actionAt(cursor).orElse(null)); }
+
     private void rebuild() {
         layout.detachAllChildren();
+        hover.clear();
         var draw = new NavalHudSkin(assets, layout, 60);
         draw.panel(0,0,540,430,0x031020);
         draw.text("AI BATTLE",30,20,365,500,46,0xF4EAD1);
@@ -58,11 +63,14 @@ public final class AiSetupPanel {
         for (AiDifficulty level : AiDifficulty.values()) {
             float y = 272 - level.ordinal()*72;
             boolean selected = difficulty == level;
-            draw.panel(32,y,476,60,selected?0x12557C:0x082D46);
+            var fill = draw.panel(32,y,476,60,selected?0x12557C:0x082D46);
+            hover.add(Action.valueOf(level.name()), fill.getMaterial(), null);
             draw.text(level.label().toUpperCase(),22,32,y,476,60,selected?0xDEB663:0xF4EAD1);
         }
         draw.text("Classic fleet / 5 ships / 60 seconds per turn",12,20,86,500,24,0x91CEFF);
-        draw.panel(32,30,222,40,0x082D46); draw.text("MAIN MENU",14,32,30,222,40,0xF4EAD1);
-        draw.panel(286,30,222,40,0x12557C); draw.text("START",16,286,30,222,40,0xDEB663);
+        hover.add(Action.BACK, draw.panel(32,30,222,40,0x082D46).getMaterial(), null);
+        draw.text("MAIN MENU",14,32,30,222,40,0xF4EAD1);
+        hover.add(Action.START, draw.panel(286,30,222,40,0x12557C).getMaterial(), null);
+        draw.text("START",16,286,30,222,40,0xDEB663);
     }
 }

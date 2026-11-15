@@ -1,6 +1,7 @@
 package com.battleship.frontend.chat;
 
 import com.battleship.frontend.graphics.Materials;
+import com.battleship.frontend.ui.ButtonHover;
 import com.battleship.frontend.ui.BattleSidebarLayout;
 import com.battleship.frontend.ui.UiTypography;
 import com.battleship.frontend.ui.UiTextField;
@@ -22,6 +23,7 @@ public final class ChatPanel {
         Line(String text,int color) { this(text,color,"",0); }
     }
     private record Button(Action action, float x, float y, float width, float height) {}
+    private final ButtonHover<Action> hover = new ButtonHover<>();
     private static final int GOLD = 0xDEB663, IVORY = 0xF4EAD1, CYAN = 0x91CEFF, MUTED = 0xA3AEC2;
     private static final DateTimeFormatter TIME = DateTimeFormatter.ofPattern("HH:mm:ss").withZone(ZoneId.systemDefault());
     private final Node root = new Node("Room and battle chat");
@@ -170,7 +172,17 @@ public final class ChatPanel {
         if (!contains(point)) return Optional.empty();
         float x = (point.x - left) / scale, y = (point.y - bottom) / scale;
         if ((!collapsed||mode==Mode.BATTLE) && x >= 12 && x <= width - (mode==Mode.BATTLE?12:84) && y >= (mode==Mode.BATTLE?8:14) && y <= (mode==Mode.BATTLE?42:48)) { focus(); return Optional.empty(); }
-        return buttons.stream().filter(b -> x >= b.x && x <= b.x + b.width && y >= b.y && y <= b.y + b.height).map(Button::action).findFirst();
+        return buttonAt(x, y);
+    }
+    public void updateHover(Vector2f point) {
+        Action action = contains(point) ? buttonAt((point.x - left) / scale, (point.y - bottom) / scale).orElse(null) : null;
+        hover.update(action == Action.SEND && (!writable() || busy) ? null : action);
+    }
+    private Optional<Action> buttonAt(float x, float y) {
+        for (Button b : buttons) {
+            if (x >= b.x && x <= b.x + b.width && y >= b.y && y <= b.y + b.height) return Optional.of(b.action);
+        }
+        return Optional.empty();
     }
     public Vector2f inputCenter() { return new Vector2f(left + 80 * scale, bottom + 30 * scale); }
     public Vector2f listCenter() { return new Vector2f(left + width / 2 * scale, bottom + height / 2 * scale); }
@@ -226,7 +238,7 @@ public final class ChatPanel {
     }
     private void rebuild() {
         root.setCullHint(visible() ? Spatial.CullHint.Never : Spatial.CullHint.Always);
-        card.detachAllChildren(); buttons.clear();
+        card.detachAllChildren(); buttons.clear(); hover.clear();
         if(mode==Mode.BATTLE) { rebuildBattle(); return; }
         float h = collapsed ? 34 : height;
         rect(0, 0, width, h, new ColorRGBA(.003f, .009f, .025f, .96f)); frame(0, 0, width, h, GOLD);
@@ -278,15 +290,21 @@ public final class ChatPanel {
         else if(unread>0&&!atBottom()) button(Action.LATEST,width-90,45,76,20,"NEW "+unread);
     }
     private void button(Action action, float x, float y, float w, float h, String value) {
-        buttons.add(new Button(action, x, y, w, h)); rect(x, y, w, h, new ColorRGBA(.025f, .055f, .095f, 1)); frame(x, y, w, h, 0x516275);
+        buttons.add(new Button(action, x, y, w, h));
+        var fill = rect(x, y, w, h, new ColorRGBA(.025f, .055f, .095f, 1));
+        var rim = frame(x, y, w, h, 0x516275);
+        hover.add(action, fill, rim);
         UiTypography.centerIn(text(body, value, h < 25 ? 8 : 10, x, y, action == Action.SEND && (!writable() || busy) ? MUTED : IVORY), x, y, w, h);
     }
-    private void frame(float x, float y, float w, float h, int color) {
-        com.battleship.frontend.ui.UiShapes.frame(card,x,y,w,h,4,1.4f,materials.flat(Materials.rgb(color)),111);
+    private com.jme3.material.Material frame(float x, float y, float w, float h, int color) {
+        var rim = materials.flat(Materials.rgb(color));
+        com.battleship.frontend.ui.UiShapes.frame(card,x,y,w,h,4,1.4f,rim,111);
+        return rim;
     }
-    private void rect(float x, float y, float w, float h, ColorRGBA color) {
+    private com.jme3.material.Material rect(float x, float y, float w, float h, ColorRGBA color) {
         var material = materials.flat(color); material.getAdditionalRenderState().setBlendMode(BlendMode.Alpha);
         var geometry = new Geometry("Chat detail", new Quad(w, h)); geometry.setMaterial(material); geometry.setLocalTranslation(x, y, 110 + card.getQuantity() * .001f); card.attachChild(geometry);
+        return material;
     }
     private BitmapText text(BitmapFont font, String value, float size, float x, float y, int color) {
         var label = new BitmapText(font); label.setText(UiTypography.normalize(value)); label.setSize(font == body ? UiTypography.bodySize(size) : size); label.setColor(Materials.rgb(color)); label.setLocalTranslation(x, y, 115); card.attachChild(label); return label;

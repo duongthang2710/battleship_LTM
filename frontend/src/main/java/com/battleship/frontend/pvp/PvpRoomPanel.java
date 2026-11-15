@@ -386,9 +386,19 @@ public final class PvpRoomPanel {
                 button.border.setColor("Color", Materials.rgb(active ? button.action == hovered ? IVORY : CYAN : 0x69788D));
                 continue;
             }
-            boolean highlight = active && (button.primary || button.action == hovered);
-            button.fill.setColor("Color", button.action==Action.LEAVE_ROOM&&active?new ColorRGBA(.25f,.025f,.035f,.98f): highlight ? new ColorRGBA(0.035f, 0.075f, 0.117f, 0.98f)
-                    : new ColorRGBA(0.009f, 0.022f, 0.044f, 0.94f));
+            boolean underCursor = active && button.action == hovered;
+            boolean highlight = active && (button.primary || underCursor);
+            ColorRGBA fill;
+            if (button.action == Action.LEAVE_ROOM && active) {
+                fill = underCursor ? new ColorRGBA(.33f, .06f, .075f, .98f) : new ColorRGBA(.25f, .025f, .035f, .98f);
+            } else if (underCursor) {
+                fill = new ColorRGBA(.055f, .098f, .137f, .98f);
+            } else if (highlight) {
+                fill = new ColorRGBA(.035f, .075f, .117f, .98f);
+            } else {
+                fill = new ColorRGBA(.009f, .022f, .044f, .94f);
+            }
+            button.fill.setColor("Color", fill);
             button.border.setColor("Color", Materials.rgb(!active ? 0x334050 : highlight ? GOLD : 0x516275));
             button.label.setColor(Materials.rgb(!active ? 0x69788D : highlight ? IVORY : 0xCFD5E1));
         }

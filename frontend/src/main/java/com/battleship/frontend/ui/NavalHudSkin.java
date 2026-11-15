@@ -53,9 +53,10 @@ public final class NavalHudSkin {
         ColorRGBA tint=Materials.rgb(color); tint.a=alpha;
         Geometry g=new Geometry(name,mesh); g.setMaterial(materials.flat(tint)); g.setLocalTranslation(x,y,z); attach(g);
     }
-    public void panel(float x, float y, float w, float h, int color) {
-        rect(x,y,w,h,color,.91f);
+    public Geometry panel(float x, float y, float w, float h, int color) {
+        Geometry background = rect(x,y,w,h,color,.91f);
         UiShapes.frame(parent,x,y,w,h,5,1.6f,materials.flat(Materials.linear(GOLD)),z+2.2f);
+        return background;
     }
     public void hazePennant(float x,float bottom,float width,float shoulder,float peak,float alpha) {
         ColorRGBA tint=new ColorRGBA(1,1,1,alpha);
@@ -112,8 +113,8 @@ public final class NavalHudSkin {
         Mesh mesh=new Mesh(); mesh.setBuffer(VertexBuffer.Type.Position,3,BufferUtils.createFloatBuffer(points.toArray(Vector3f[]::new)));
         mesh.setBuffer(VertexBuffer.Type.Index,3,indices.stream().mapToInt(Integer::intValue).toArray()); mesh.updateBound(); return mesh;
     }
-    public void gear(float cx,float cy,float radius) {
-        arc("Settings medallion",cx,cy,radius/2,radius,0,FastMath.TWO_PI,BLUE);
+    public Geometry gear(float cx,float cy,float radius) {
+        Geometry background = arc("Settings medallion",cx,cy,radius/2,radius,0,FastMath.TWO_PI,BLUE);
         arc("Settings rim",cx,cy,radius,2,0,FastMath.TWO_PI,GOLD);
         arc("Gear center",cx,cy,radius*.4f,3,0,FastMath.TWO_PI,WHITE);
         for(int i=0;i<8;i++) {
@@ -121,6 +122,7 @@ public final class NavalHudSkin {
             line(cx+FastMath.cos(a)*radius*.4f,cy+FastMath.sin(a)*radius*.4f,
                  cx+FastMath.cos(a)*radius*.62f,cy+FastMath.sin(a)*radius*.62f,WHITE,5);
         }
+        return background;
     }
     public void moveArrows(float cx,float cy) {
         for(int i=0;i<4;i++) {
